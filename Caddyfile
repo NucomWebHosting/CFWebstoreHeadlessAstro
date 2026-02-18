@@ -1,0 +1,35 @@
+# Caddyfile — frontend.nucomwebhosting.com
+# Cloudflare handles SSL termination; Caddy serves HTTP on port 80.
+# Set Cloudflare SSL/TLS mode to "Full" (not Strict) for this setup.
+
+{
+    # Disable Caddy's automatic HTTPS — Cloudflare provides the SSL certificate.
+    auto_https off
+}
+
+:80 {
+    root * /srv/frontend.nucomwebhosting.com
+
+    # Serve static files built by Astro
+    file_server
+
+    # Gzip/zstd compression
+    encode gzip zstd
+
+    # Return proper 404 for missing files (Astro static build)
+    handle_errors {
+        respond "{err.status_code} {err.status_text}" {err.status_code}
+    }
+
+    # Security headers — Cloudflare will forward these to the browser
+    header {
+        X-Content-Type-Options        "nosniff"
+        X-Frame-Options               "SAMEORIGIN"
+        Referrer-Policy               "strict-origin-when-cross-origin"
+    }
+
+    # Log access
+    log {
+        output file /var/log/caddy/frontend.nucomwebhosting.com.log
+    }
+}
