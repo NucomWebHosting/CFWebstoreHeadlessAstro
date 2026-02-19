@@ -8,7 +8,7 @@
 }
 
 :80 {
-    root * /srv/frontend.nucomwebhosting.com
+    root * /var/www/frontend.nucomwebhosting.com/dist
 
     # Serve static files built by Astro
     file_server
@@ -31,5 +31,6 @@
     # Log access
     log {
         output file /var/log/caddy/frontend.nucomwebhosting.com.log
+
     }
 }
