@@ -1,4 +1,4 @@
-name: CI / Deploy
+name: CI
 
 on:
   push:
@@ -7,15 +7,15 @@ on:
     branches: [main]
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v4.4.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -25,23 +25,3 @@ jobs:
 
       - name: Build site
         run: npm run build
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
-          retention-days: 7
-
-      # Deploy only on push to main (not on pull requests)
-      - name: Deploy to server via rsync
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: burnett01/rsync-deployments@7.0.1
-        with:
-          switches: -avzr --delete --checksum
-          path: dist/
-          remote_path: /srv/frontend.nucomwebhosting.com/
-          remote_host: ${{ secrets.SSH_HOST }}
-          remote_user: ${{ secrets.SSH_USER }}
-          remote_key: ${{ secrets.SSH_KEY }}
-          remote_port: ${{ secrets.SSH_PORT }}
