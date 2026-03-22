@@ -1,0 +1,42 @@
+  Add these secrets to your repo (Settings → Secrets → Actions):                                                                                     
+  ┌─────────────────┬──────────────────────────────────┐                                                                                             
+  │     Secret      │              Value               │                                                                                             
+  ├─────────────────┼──────────────────────────────────┤                                                                                             
+  │ SSH_PRIVATE_KEY │ The private key I showed earlier │                                                                                             
+  ├─────────────────┼──────────────────────────────────┤                                                                                             
+  │ SSH_HOST        │ 163.245.217.33                   │                                                                                             
+  ├─────────────────┼──────────────────────────────────┤                                                                                             
+  │ SSH_USER        │ deploy                           │                                                                                             
+  └─────────────────┴──────────────────────────────────┘                                                                                             
+  Then create .github/workflows/deploy.yml:                                                                                                          
+                                                                                                                                                     
+  name: Deploy                                                                                                                                       
+                                                                                                                                                     
+  on:                                                                                                                                                
+    push:                                                                                                                                            
+      branches: [main]                                                                                                                               
+                                                                                                                                                     
+  jobs:                                                                                                                                              
+    deploy:                                                                                                                                          
+      runs-on: ubuntu-latest                                                                                                                         
+      steps:                                                                                                                                         
+        - uses: appleboy/ssh-action@v1.0.3                                                                                                           
+          with:                                                                                                                                      
+            host: ${{ secrets.SSH_HOST }}                                                                                                            
+            username: ${{ secrets.SSH_USER }}                                                                                                        
+            key: ${{ secrets.SSH_PRIVATE_KEY }}                                                                                                      
+            script: |                                                                                                                                
+              cd /var/www/frontend.nucomwebhosting.com                                                                                               
+              git pull origin main                                                                                                                   
+              npm ci                                                                                                                                 
+              npm run build                 
+
+
+-----BEGIN OPENSSH PRIVATE KEY-----                                                                                                                
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW                                                                             
+QyNTUxOQAAACCHccDKwmRKtLLXrquRvPJBpbrXiRmmYcP4xhPW4KHURAAAAKiJQW6OiUFu                                                                             
+jgAAAAtzc2gtZWQyNTUxOQAAACCHccDKwmRKtLLXrquRvPJBpbrXiRmmYcP4xhPW4KHURA                                                                             
+AAAEBK/jRSja/fSSXE1Xbv9Lp99QpTcZNpEX1DjGlTTJWlsodxwMrCZEq0steuq5G88kGl                                                                             
+uteJGaZhw/jGE9bgodREAAAAIHJvb3RAdnBzMzI5NDkzMi50cm91YmxlLWZyZWUubmV0AQ                                                                             
+IDBAU=                                                                                                                                             
+-----END OPENSSH PRIVATE KEY----- 

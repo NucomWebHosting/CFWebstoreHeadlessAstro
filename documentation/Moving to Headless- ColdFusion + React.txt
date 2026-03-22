@@ -1,0 +1,191 @@
+# Moving to Headless: ColdFusion + React
+
+## 1. The Architecture: How They Talk
+In a headless setup, ColdFusion becomes your **Data Provider** and React becomes your **Data Consumer**.
+
+* **ColdFusion (The Backend):** Responsible for talking to the database, handling authentication, and serving JSON.
+* **React (The Frontend):** Responsible for the UI, routing, and state management.
+
+### The Request Flow
+1.  **React Request:** React sends an HTTP request (GET, POST, etc.) to a specific URL.
+2.  **CF Processing:** ColdFusion identifies the request, runs the corresponding CFC method, and queries the database.
+3.  **JSON Response:** ColdFusion packages the data into a JSON string and sends it back.
+4.  **UI Update:** React receives the JSON, updates its state, and re-renders the component.
+
+---
+
+## 2. ColdFusion Configuration (Application.cfc)
+To enable REST, you must register your API directory so ColdFusion knows where to look for endpoints.
+
+```cfc
+component {
+    this.name = "MyHeadlessApp";
+
+    public boolean function onApplicationStart() {
+        // Point to the folder containing your CFCs
+        var apiPath = getDirectoryFromPath(getCurrentTemplatePath()) & "api/";
+        
+        // Initialize the REST service with the alias "v1"
+        restInitApplication(apiPath, "v1");
+        
+        return true;
+    }
+
+    public boolean function onRequestStart(string targetPage) {
+        // Handy for development: visit your site with ?reinit=1 to refresh the API
+        if (structKeyExists(url, "reinit")) {
+            onApplicationStart();
+            writeOutput("REST Service Re-initialized!");
+        }
+        return true;
+    }
+}
+
+
+
+1. The Initialization Code
+In your Application.cfc, you will use restInitApplication. This points CF to the physical path of your API folder and gives it a "service alias."
+
+
+component {
+    this.name = "MyHeadlessApp";
+
+    public boolean function onApplicationStart() {
+        // Get the absolute path to your API folder
+        var apiPath = getDirectoryFromPath(getCurrentTemplatePath()) & "api/";
+        
+        // Initialize the REST service
+        // The second argument "v1" is the mapping name in the URL
+        restInitApplication(apiPath, "v1");
+        
+        return true;
+    }
+}
+
+What this does to your URLs:
+Once this is set, your endpoint URLs will follow this structure: https://yourdomain.com/rest/v1/{restpath_from_cfc}
+
+2. A "Pro-Tip" for Development: Auto-Refresh
+When you are building your API, you will be adding new functions to your CFCs constantly. By default, ColdFusion might not "see" new functions until you re-run restInitApplication.
+
+During development, you can add a simple URL check to refresh the API on demand:
+
+Code snippet
+public boolean function onRequestStart(string targetPage) {
+    // If you visit your site with ?reinit=1, it refreshes the REST mapping
+    if (structKeyExists(url, "reinit")) {
+        var apiPath = getDirectoryFromPath(getCurrentTemplatePath()) & "api/";
+        restInitApplication(apiPath, "v1");
+        writeOutput("REST Service Re-initialized!");
+    }
+    return true;
+}
+
+3. Handling the "JSON Shape"
+As mentioned before, React developers usually hate the default CF query format. You can use a helper function to ensure your API returns a clean array of objects.
+
+Add this helper function to your CFC or a base component:
+
+Code snippet
+private array function queryToArray(required query qry) {
+    var result = [];
+    var columns = qry.getColumnNames();
+    
+    for (var row in qry) {
+        var item = {};
+        for (var col in columns) {
+            item[col] = qry[col][qry.currentRow];
+        }
+        arrayAppend(result, item);
+    }
+    return result;
+}
+4. Testing Your First Endpoint
+Once you've added the code above:
+
+Create a folder named api.
+
+Drop a Test.cfc in there with a simple remote function.
+
+Hit your site with ?reinit=1.
+
+Navigate to https://yourdomain.com/rest/v1/test in your browser.
+
+If you see JSON on the screen, your React app is ready to start fetching!
+
+Now that the backend is configured, would you like to see how to handle a POST request from React (like submitting a form) or how to set up the CORS headers so React doesn't get blocked?
+
+
+
+
+
+
+
+
+3. Creating a REST Endpoint (CFC)
+Every query you want to share with React should be inside a CFC method marked as remote.
+
+Code snippet
+// api/NewsService.cfc
+component rest="true" restpath="news" {
+
+    remote array function getLatestArticles() 
+        httppublish="true" 
+        restpath="latest" 
+        httpMethod="GET" 
+        produces="application/json" {
+        
+        var qry = queryExecute("SELECT title, content, author FROM articles ORDER BY date DESC");
+        
+        // Convert the query to a standard array of objects for React
+        return queryToArray(qry); 
+    }
+
+    private array function queryToArray(required query qry) {
+        var result = [];
+        var columns = qry.getColumnNames();
+        for (var row in qry) {
+            var item = {};
+            for (var col in columns) {
+                item[col] = qry[col][qry.currentRow];
+            }
+            arrayAppend(result, item);
+        }
+        return result;
+    }
+}
+4. How React Fetches Data
+In your React component, you use the useEffect hook to call your ColdFusion API.
+
+JavaScript
+import React, { useState, useEffect } from 'react';
+
+function NewsList() {
+  const [articles, setArticles] = useState([]);
+
+  useEffect(() => {
+    fetch('[https://yourdomain.com/rest/v1/news/latest](https://yourdomain.com/rest/v1/news/latest)')
+      .then(response => response.json())
+      .then(data => setArticles(data))
+      .catch(err => console.error("Error fetching data:", err));
+  }, []);
+
+  return (
+    <div>
+      {articles.map((article, index) => (
+        <div key={index}>
+          <h3>{article.TITLE}</h3>
+          <p>By: {article.AUTHOR}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default NewsList;
+5. Security & Connectivity Checklist
+CORS: Ensure your server allows requests from your React domain.
+
+Authentication: Use JSON Web Tokens (JWT) instead of standard CF sessions.
+
+JSON Shape: Always return arrays of objects rather than raw CF Query objects.

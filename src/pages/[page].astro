@@ -1,0 +1,41 @@
+---
+export const prerender = false;
+import BaseLayout from "../components/layout/BaseLayout.astro";
+import RichText from "../components/ui/RichText";
+import { getPageByPermalink, getPageByUrl } from "../lib/queries/pages";
+import { getSettings } from "../lib/queries/settings";
+
+const { page: slug } = Astro.params;
+
+if (!slug) {
+  return new Response(null, { status: 404 });
+}
+
+// Try Permalink first, fall back to Page_URL
+const [pageData, settings] = await Promise.all([
+  getPageByPermalink(slug).then((p) => p ?? getPageByUrl(slug)),
+  getSettings(),
+]);
+
+if (!pageData) {
+  return new Response(null, { status: 404 });
+}
+---
+
+<BaseLayout
+  title={pageData.Page_Title ?? pageData.Page_Name}
+  description={pageData.Metadescription ?? ""}
+  settings={settings}
+>
+  <div class="container mx-auto px-4 py-10">
+    {pageData.Sm_Image && (
+      <img
+        src={pageData.Sm_Image}
+        alt={pageData.Page_Name}
+        class="w-full max-h-96 object-cover rounded-xl mb-8"
+      />
+    )}
+    <h1 class="text-4xl font-bold mb-6">{pageData.Page_Title ?? pageData.Page_Name}</h1>
+    {pageData.PageText && <RichText html={pageData.PageText} />}
+  </div>
+</BaseLayout>

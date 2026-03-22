@@ -1,0 +1,54 @@
+---
+import type { SettingsRow } from "../../lib/types";
+
+interface Props {
+  settings: SettingsRow | null;
+}
+
+const { settings } = Astro.props;
+const siteName = settings?.SiteName ?? "CFW Store";
+const year = new Date().getFullYear();
+---
+
+<footer class="bg-gray-900 text-gray-300 mt-16">
+  <div class="container mx-auto px-4 py-10">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <!-- Brand -->
+      <div>
+        <p class="text-white font-semibold text-lg mb-2">{siteName}</p>
+        {settings?.Address1 && <p class="text-sm">{settings.Address1}</p>}
+        {settings?.Address2 && <p class="text-sm">{settings.Address2}</p>}
+        {(settings?.City || settings?.State || settings?.Postalcode) && (
+          <p class="text-sm">
+            {[settings.City, settings.State, settings.Postalcode].filter(Boolean).join(", ")}
+          </p>
+        )}
+      </div>
+
+      <!-- Contact -->
+      <div>
+        <p class="text-white font-semibold mb-2">Contact</p>
+        {settings?.Phone && (
+          <a href={`tel:${settings.Phone}`} class="text-sm hover:text-white block">{settings.Phone}</a>
+        )}
+        {settings?.Email && (
+          <a href={`mailto:${settings.Email}`} class="text-sm hover:text-white block">{settings.Email}</a>
+        )}
+      </div>
+
+      <!-- Quick links -->
+      <div>
+        <p class="text-white font-semibold mb-2">Information</p>
+        <nav class="space-y-1">
+          <a href="/about" class="text-sm hover:text-white block">About Us</a>
+          <a href="/contact" class="text-sm hover:text-white block">Contact Us</a>
+          <a href="/privacy" class="text-sm hover:text-white block">Privacy Policy</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="border-t border-gray-800 mt-8 pt-6 text-center text-xs text-gray-500">
+      &copy; {year} {siteName}. All rights reserved.
+    </div>
+  </div>
+</footer>

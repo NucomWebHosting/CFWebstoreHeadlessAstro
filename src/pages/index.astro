@@ -1,18 +1,34 @@
 ---
-import Hello from "../components/Hello";
+export const prerender = false;
+import BaseLayout from "../components/layout/BaseLayout.astro";
+import RichText from "../components/ui/RichText";
+import { getPageById } from "../lib/queries/pages";
+import { getSettings } from "../lib/queries/settings";
+
+const [page, settings] = await Promise.all([
+  getPageById(28),
+  getSettings(),
+]);
+
+if (!page) {
+  return Astro.redirect("/404");
+}
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width" />
-    <meta name="generator" content={Astro.generator} />
-    <title>CFW Headless Frontend</title>
-  </head>
-  <body>
-    <h1>Astro + React</h1>
-    <Hello client:load />
-    <p>Built by Claude</p>
-  </body>
-</html>
+<BaseLayout
+  title={page.Page_Title ?? page.Page_Name}
+  description={page.Metadescription ?? ""}
+  settings={settings}
+>
+  <div class="container mx-auto px-4 py-10">
+    {page.Sm_Image && (
+      <img
+        src={page.Sm_Image}
+        alt={page.Page_Name}
+        class="w-full max-h-96 object-cover rounded-xl mb-8"
+      />
+    )}
+    <h1 class="text-4xl font-bold mb-6">{page.Page_Title ?? page.Page_Name}</h1>
+    {page.PageText && <RichText html={page.PageText} />}
+  </div>
+</BaseLayout>

@@ -1,0 +1,32 @@
+---
+import Header from "./Header.astro";
+import Footer from "./Footer.astro";
+import type { SettingsRow } from "../../lib/types";
+
+interface Props {
+  title: string;
+  description?: string;
+  settings: SettingsRow | null;
+}
+
+const { title, description, settings } = Astro.props;
+const siteName = settings?.SiteName ?? "CFW Store";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title} | {siteName}</title>
+    {description && <meta name="description" content={description} />}
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body class="min-h-screen flex flex-col bg-white text-gray-900 antialiased">
+    <Header settings={settings} />
+    <main class="flex-1">
+      <slot />
+    </main>
+    <Footer settings={settings} />
+  </body>
+</html>

@@ -1,0 +1,60 @@
+---
+import { getNavTree } from "../../lib/queries/menu";
+import type { SettingsRow } from "../../lib/types";
+
+interface Props {
+  settings: SettingsRow | null;
+}
+
+const { settings } = Astro.props;
+const nav = await getNavTree();
+const siteName = settings?.SiteName ?? "CFW Store";
+---
+
+<header class="bg-white border-b border-gray-200 shadow-sm">
+  <div class="container mx-auto px-4">
+    <div class="flex items-center justify-between h-16">
+      <!-- Logo / Site name -->
+      <a href="/" class="flex items-center gap-2">
+        {settings?.Logo_desktop ? (
+          <img src={settings.Logo_desktop} alt={siteName} class="h-10 w-auto" />
+        ) : (
+          <span class="text-xl font-bold text-gray-900">{siteName}</span>
+        )}
+      </a>
+
+      <!-- Primary navigation -->
+      <nav class="hidden md:flex items-center gap-6">
+        {nav.map((item) => (
+          <div class="relative group">
+            <a
+              href={item.href}
+              class="text-sm font-medium text-gray-700 hover:text-blue-600 transition-colors py-2"
+            >
+              {item.name}
+            </a>
+            {item.children.length > 0 && (
+              <div class="absolute top-full left-0 hidden group-hover:block bg-white border border-gray-200 rounded-lg shadow-lg min-w-48 z-50">
+                {item.children.map((child) => (
+                  <a
+                    href={child.href}
+                    class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-600 first:rounded-t-lg last:rounded-b-lg"
+                  >
+                    {child.name}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </nav>
+
+      <!-- Phone number -->
+      {settings?.Phone && (
+        <a href={`tel:${settings.Phone}`} class="hidden md:flex items-center gap-1 text-sm text-gray-600 hover:text-blue-600">
+          <span>{settings.Phone}</span>
+        </a>
+      )}
+    </div>
+  </div>
+</header>
