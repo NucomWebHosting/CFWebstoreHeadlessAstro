@@ -1,6 +1,6 @@
 ---
 import { getNavTree } from "../../lib/queries/menu";
-import type { SettingsRow } from "../../lib/types";
+import { getImageBaseUrl, type SettingsRow } from "../../lib/types";
 
 interface Props {
   settings: SettingsRow | null;
@@ -9,6 +9,13 @@ interface Props {
 const { settings } = Astro.props;
 const nav = await getNavTree();
 const siteName = settings?.SiteName ?? "CFW Store";
+
+function resolveImage(filename: string | null | undefined): string | null {
+  if (!filename) return null;
+  if (filename.startsWith("http")) return filename;
+  const base = getImageBaseUrl(settings).replace(/\/$/, "");
+  return `${base}/${filename.replace(/^\//, "")}`;
+}
 ---
 
 <header class="bg-white border-b border-gray-200 shadow-sm">
@@ -16,8 +23,8 @@ const siteName = settings?.SiteName ?? "CFW Store";
     <div class="flex items-center justify-between h-16">
       <!-- Logo / Site name -->
       <a href="/" class="flex items-center gap-2">
-        {settings?.Logo_desktop ? (
-          <img src={settings.Logo_desktop} alt={siteName} class="h-10 w-auto" />
+        {resolveImage(settings?.Logo_desktop) ? (
+          <img src={resolveImage(settings?.Logo_desktop)!} alt={siteName} class="h-10 w-auto" />
         ) : (
           <span class="text-xl font-bold text-gray-900">{siteName}</span>
         )}
