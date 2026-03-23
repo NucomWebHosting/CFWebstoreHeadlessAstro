@@ -28,6 +28,12 @@ export interface CategoryRow {
   Long_Desc: string | null;
   Sm_Image: string | null;
   Lg_image: string | null;
+  Lg_Title: string | null;          // title image (overrides text title when set)
+  Lg_image_position: number;        // 0=left, 1=right, 2=top
+  ShowCatHeader: boolean;           // show/hide the header section
+  ShowSubCats: boolean;             // show/hide subcategory grid
+  ProdFirst: boolean;               // true = products above subcats, false = subcats first
+  ShowProdLeftColumn: boolean;      // sidebar filter column
   Page_URL: string | null;
   Display: boolean;
   Display_Menu: boolean;
