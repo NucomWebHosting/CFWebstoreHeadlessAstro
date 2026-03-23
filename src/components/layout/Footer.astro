@@ -1,5 +1,6 @@
 ---
 import type { SettingsRow } from "../../lib/types";
+import { getFooterPages } from "../../lib/queries/pages";
 
 interface Props {
   settings: SettingsRow | null;
@@ -8,6 +9,7 @@ interface Props {
 const { settings } = Astro.props;
 const siteName = settings?.SiteName ?? "CFW Store";
 const year = new Date().getFullYear();
+const pages = await getFooterPages();
 ---
 
 <footer class="bg-gray-900 text-gray-300 mt-16">
@@ -36,13 +38,18 @@ const year = new Date().getFullYear();
         )}
       </div>
 
-      <!-- Quick links -->
+      <!-- Pages from DB -->
       <div>
         <p class="text-white font-semibold mb-2">Information</p>
         <nav class="space-y-1">
-          <a href="/about" class="text-sm hover:text-white block">About Us</a>
-          <a href="/contact" class="text-sm hover:text-white block">Contact Us</a>
-          <a href="/privacy" class="text-sm hover:text-white block">Privacy Policy</a>
+          {pages.map((page) => (
+            <a
+              href={page.Permalink ? `/${page.Permalink}` : `/page/${page.Page_ID}`}
+              class="text-sm hover:text-white block"
+            >
+              {page.Page_Name}
+            </a>
+          ))}
         </nav>
       </div>
     </div>

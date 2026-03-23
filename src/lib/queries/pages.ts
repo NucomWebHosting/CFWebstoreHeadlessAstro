@@ -11,10 +11,16 @@ export async function getPageById(pageId: number): Promise<PageRow | null> {
 
 export async function getPageByPermalink(permalink: string): Promise<PageRow | null> {
   const rows = await query<PageRow>(
-    "SELECT * FROM Pages WHERE Permalink = @permalink AND Display = 1",
-    { permalink }
+    "SELECT * FROM Pages WHERE (Permalink = @permalink OR Permalink = @permalink_trail) AND Display = 1",
+    { permalink, permalink_trail: permalink.replace(/\/$/, "") + "/" }
   );
   return rows[0] ?? null;
+}
+
+export async function getFooterPages(): Promise<PageRow[]> {
+  return query<PageRow>(
+    "SELECT Page_ID, Page_Name, Permalink FROM Pages WHERE Parent_ID = 36 AND Display = 1 ORDER BY Priority ASC"
+  );
 }
 
 export async function getPageByUrl(pageUrl: string): Promise<PageRow | null> {
