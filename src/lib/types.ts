@@ -114,13 +114,15 @@ export interface SettingsRow {
 // Mirrors CF's: Request.ImagePath = request.domainname & AppSettings.defaultimages & "/"
 // Falls back to IMAGE_BASE_URL env var when the DB fields aren't populated yet.
 export function getImageBaseUrl(settings: SettingsRow | null): string {
-  // import.meta.env is baked in by Vite at build time from the .env file
-  const envFallback = (import.meta.env.IMAGE_BASE_URL as string | undefined) ?? "";
-  if (!settings) return envFallback;
+  // IMAGE_BASE_URL env var takes priority — used as a temporary override
+  // while images are hosted on a different domain than Settings.DomainName.
+  const envOverride = (import.meta.env.IMAGE_BASE_URL as string | undefined) ?? "";
+  if (envOverride) return envOverride.replace(/\/$/, "");
+  if (!settings) return "";
   const domain = settings.DomainName?.replace(/\/$/, "") ?? "";
-  const folder = settings.DefaultImages?.replace(/\/$/, "") ?? "";
-  const fromDb = `${domain}${folder}`;
-  return fromDb || envFallback;
+  const folder = settings.DefaultImages?.replace(/^\//, "").replace(/\/$/, "") ?? "";
+  if (!domain) return "";
+  return folder ? `${domain}/${folder}` : domain;
 }
 
 export interface NavItem {
