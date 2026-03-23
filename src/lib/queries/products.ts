@@ -77,8 +77,8 @@ export async function getProductById(id: number): Promise<ProductRow | null> {
 
 export async function getProductByPermalink(permalink: string): Promise<ProductRow | null> {
   const rows = await query<ProductRow>(
-    "SELECT * FROM Products WHERE Permalink = @permalink AND Display = 1",
-    { permalink }
+    "SELECT * FROM Products WHERE (Permalink = @permalink OR Permalink = @permalink_trail) AND Display = 1",
+    { permalink, permalink_trail: permalink.replace(/\/$/, "") + "/" }
   );
   return rows[0] ?? null;
 }
