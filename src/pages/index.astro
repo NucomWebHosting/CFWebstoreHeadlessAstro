@@ -1,34 +1,106 @@
 ---
 export const prerender = false;
 import BaseLayout from "../components/layout/BaseLayout.astro";
-import RichText from "../components/ui/RichText";
-import { getPageById } from "../lib/queries/pages";
+import HeroWidget from "../components/homepage/HeroWidget";
+import AlertWidget from "../components/homepage/AlertWidget";
+import CustomTextWidget from "../components/homepage/CustomTextWidget";
+import TopCatsWidget from "../components/homepage/TopCatsWidget";
+import ProductCarouselWidget from "../components/homepage/ProductCarouselWidget";
+import TestimonialsWidget from "../components/homepage/TestimonialsWidget";
+import { getHomepage, getTestimonials } from "../lib/queries/homepage";
+import { getCategoriesByIds, getTopLevelCategories } from "../lib/queries/categories";
+import { getFeaturedProducts, parsePassParam } from "../lib/queries/products";
 import { getSettings } from "../lib/queries/settings";
+import { getImageBaseUrl } from "../lib/types";
 
-const [page, settings] = await Promise.all([
-  getPageById(28),
-  getSettings(),
+const [hp, settings] = await Promise.all([getHomepage(), getSettings()]);
+const imageBaseUrl = getImageBaseUrl(settings);
+
+// Parse which categories to show in topcats
+const catIds =
+  hp?.Topcats_categories
+    ? hp.Topcats_categories.split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n) && n > 0)
+    : [];
+
+// Fetch all conditional widget data in parallel
+const [topcats, featuredProducts, testimonials] = await Promise.all([
+  hp?.Topcats_Display
+    ? hp.Topcats_Allcats
+      ? getTopLevelCategories()
+      : catIds.length
+        ? getCategoriesByIds(catIds)
+        : Promise.resolve([])
+    : Promise.resolve([]),
+  hp?.Product_display
+    ? getFeaturedProducts(parsePassParam(hp.Product_passparam))
+    : Promise.resolve([]),
+  hp?.Testimonial_display
+    ? getTestimonials()
+    : Promise.resolve([]),
 ]);
 
-if (!page) {
-  return Astro.redirect("/404");
-}
+// Build a priority-ordered list of which widgets to show
+type WidgetKey = "alert" | "hero" | "custom1" | "custom2" | "custom3" | "topcats" | "products" | "testimonials";
+
+const widgets: { type: WidgetKey; priority: number }[] = !hp
+  ? []
+  : [
+      { type: "alert",        priority: hp.Alert_priority },
+      { type: "hero",         priority: hp.Hero_priority },
+      { type: "custom1",      priority: hp.Custom_text_1_priority },
+      { type: "custom2",      priority: hp.Custom_text_2_priority },
+      { type: "custom3",      priority: hp.Custom_text_3_priority },
+      { type: "topcats",      priority: hp.Topcats_priority },
+      { type: "products",     priority: hp.Product_priority },
+      { type: "testimonials", priority: hp.Testimonial_priority },
+    ]
+    .filter((w) => w.priority > 0)
+    .sort((a, b) => a.priority - b.priority);
+
+const pageTitle = settings?.SiteName ?? "Home";
+const pageDesc  = settings?.SiteName ?? "";
 ---
 
-<BaseLayout
-  title={page.Page_Title ?? page.Page_Name}
-  description={page.Metadescription ?? ""}
-  settings={settings}
->
-  <div class="container mx-auto px-4 py-10">
-    {page.Sm_Image && (
-      <img
-        src={page.Sm_Image}
-        alt={page.Page_Name}
-        class="w-full max-h-96 object-cover rounded-xl mb-8"
-      />
-    )}
-    <h1 class="text-4xl font-bold mb-6">{page.Page_Title ?? page.Page_Name}</h1>
-    {page.PageText && <RichText html={page.PageText} />}
-  </div>
+<BaseLayout title={pageTitle} description={pageDesc} settings={settings}>
+  {hp && widgets.map(({ type }) => {
+
+    if (type === "alert" && hp.Alert_display && hp.Alert_text)
+      return <AlertWidget html={hp.Alert_text} />;
+
+    if (type === "hero" && hp.Hero_display)
+      return <HeroWidget hp={hp} imageBaseUrl={imageBaseUrl} />;
+
+    if (type === "custom1" && hp.Custom_text_1_display && (hp.Custom_text_1?.length ?? 0) > 10)
+      return <CustomTextWidget html={hp.Custom_text_1!} fullWidth={hp.Custom_text_1_fullwidth} />;
+
+    if (type === "custom2" && hp.Custom_text_2_display && (hp.Custom_text_2?.length ?? 0) > 10)
+      return <CustomTextWidget html={hp.Custom_text_2!} fullWidth={hp.Custom_text_2_fullwidth} />;
+
+    if (type === "custom3" && hp.Custom_text_3_display && (hp.Custom_text_3?.length ?? 0) > 10)
+      return <CustomTextWidget html={hp.Custom_text_3!} fullWidth={hp.Custom_text_3_fullwidth} />;
+
+    if (type === "topcats" && hp.Topcats_Display)
+      return (
+        <TopCatsWidget
+          categories={topcats}
+          title={hp.Topcats_title}
+          cols={hp.Topcats_cols}
+          imageBaseUrl={imageBaseUrl}
+        />
+      );
+
+    if (type === "products" && hp.Product_display)
+      return (
+        <ProductCarouselWidget
+          products={featuredProducts}
+          title={hp.Product_title}
+          imageBaseUrl={imageBaseUrl}
+        />
+      );
+
+    if (type === "testimonials" && hp.Testimonial_display)
+      return <TestimonialsWidget testimonials={testimonials} />;
+
+    return null;
+  })}
 </BaseLayout>

@@ -43,6 +43,19 @@ export async function getSubcategories(parentId: number): Promise<CategoryRow[]>
   );
 }
 
+// Fetch a specific set of categories by ID (used by homepage topcats widget)
+export async function getCategoriesByIds(ids: number[]): Promise<CategoryRow[]> {
+  if (!ids.length) return [];
+  const placeholders = ids.map((_, i) => `@id${i}`).join(", ");
+  const params = Object.fromEntries(ids.map((id, i) => [`id${i}`, id]));
+  return query<CategoryRow>(
+    `SELECT C.* FROM Categories C
+     WHERE C.Category_ID IN (${placeholders}) AND C.Display = 1
+     ORDER BY C.Priority ASC, C.Name ASC`,
+    params
+  );
+}
+
 export async function getMenuCategories(): Promise<CategoryRow[]> {
   return query<CategoryRow>(
     `SELECT C.*

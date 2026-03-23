@@ -124,3 +124,110 @@ export interface NavItem {
   href: string;
   children: NavItem[];
 }
+
+// Homepage table — one row per site (keyed by ID, matched to Settings.SettingID)
+export interface HomepageRow {
+  ID: number;
+
+  // Alert banner
+  Alert_display: boolean;
+  Alert_text: string | null;
+  Alert_priority: number;
+
+  // Hero image section
+  Hero_display: boolean;
+  Hero_image: string | null;
+  Hero_text: string | null;      // free-form HTML overlay
+  Hero_text1: string | null;     // preset animation line 1
+  Hero_text2: string | null;
+  Hero_text3: string | null;
+  Hero_text4: string | null;
+  Hero_button: string | null;    // CTA button label
+  Hero_button_color: string | null;
+  Hero_link: string | null;
+  Hero_height: number | null;    // px; 0 = 80vh
+  Hero_text_position: number;    // 0=left, 1=center, 2=right
+  Hero_priority: number;
+  Hero_over_menu: boolean;
+
+  // Slider / Gallery (Bootstrap carousel driven by Gallery table)
+  Gallery_display: boolean;
+  Gallery_id: number | null;
+  Gallery_title: string | null;
+  Gallery_max: number | null;
+  Gallery_fullwidth: boolean;
+  Gallery_height: number | null;
+  Gallery_priority: number;
+  Carousel_altImage1: string | null;
+  Carousel_altImage1_link: string | null;
+  Carousel_altImage1_altText: string | null;
+  Carousel_altImage1_button: string | null;
+  Carousel_altImage2: string | null;
+  Carousel_altImage2_link: string | null;
+  Carousel_altImage2_altText: string | null;
+  Carousel_altImage2_button: string | null;
+
+  // Gallery 2
+  Gallery2_display: boolean;
+  Gallery2_id: number | null;
+  Gallery2_priority: number;
+
+  // Custom HTML text blocks (1–3)
+  Custom_text_1_display: boolean;
+  Custom_text_1: string | null;
+  Custom_text_1_fullwidth: boolean;
+  Custom_text_1_priority: number;
+
+  Custom_text_2_display: boolean;
+  Custom_text_2: string | null;
+  Custom_text_2_fullwidth: boolean;
+  Custom_text_2_priority: number;
+
+  Custom_text_3_display: boolean;
+  Custom_text_3: string | null;
+  Custom_text_3_fullwidth: boolean;
+  Custom_text_3_priority: number;
+
+  // Top Categories grid
+  Topcats_Display: boolean;
+  Topcats_Allcats: boolean;       // true = all top-level cats; false = use Topcats_categories
+  Topcats_cols: number | null;
+  Topcats_categories: string | null; // comma-separated Category_IDs
+  Topcats_catstyle: number | null;
+  Topcats_title: string | null;
+  Topcats_priority: number;
+
+  // Product carousel / featured products
+  Product_display: boolean;
+  Product_priority: number;
+  Product_style: number | null;   // 1=carousel, 2=masonry, 3=single, 4=quick table, 5=team table
+  Product_title: string | null;
+  Product_passparam: string | null; // comma-separated key=value pairs
+  Product_fullwidth: boolean;
+
+  // Testimonials
+  Testimonial_display: boolean;
+  Testimonial_priority: number;
+  Testimonial_fullwidth: boolean;
+  Testimonial_product_id: number | null;
+  Testimonial_list_id: number | null;
+
+  // Contact form
+  Contact_display: boolean;
+  Contact_priority: number;
+
+  // Custom code block
+  Custom_code_1_display: boolean;
+  Custom_code_1_priority: number;
+}
+
+// Testimonials table
+export interface TestimonialRow {
+  ReviewID: number;
+  Title: string | null;
+  Comment: string | null;
+  Anon_name: string | null;
+  Rating: number | null;
+  Posted: Date | null;
+  Display: boolean;
+}
