@@ -5,6 +5,7 @@ import RichText from "../../components/ui/RichText";
 import Breadcrumb from "../../components/ui/Breadcrumb";
 import { getProductById, getProductImages } from "../../lib/queries/products";
 import { getSettings } from "../../lib/queries/settings";
+import { getImageBaseUrl } from "../../lib/types";
 
 const { id } = Astro.params;
 const productId = Number(id);
@@ -21,6 +22,14 @@ const [product, images, settings] = await Promise.all([
 
 if (!product) {
   return new Response(null, { status: 404 });
+}
+
+const imageBaseUrl = getImageBaseUrl(settings);
+
+function resolveImg(filename: string | null | undefined): string | null {
+  if (!filename) return null;
+  if (filename.startsWith("http")) return filename;
+  return `${imageBaseUrl.replace(/\/$/, "")}/${filename}`;
 }
 
 const primaryImage = images[0];
@@ -54,9 +63,9 @@ const onSale = product.Sale && product.Retail_Price && product.Retail_Price > pr
       <!-- Images -->
       <div>
         <div class="aspect-square bg-gray-100 rounded-xl overflow-hidden mb-3">
-          {primaryImage?.Lg_image ?? primaryImage?.Md_image ? (
+          {resolveImg(primaryImage?.Lg_image ?? primaryImage?.Md_image) ? (
             <img
-              src={primaryImage.Lg_image ?? primaryImage.Md_image ?? ""}
+              src={resolveImg(primaryImage.Lg_image ?? primaryImage.Md_image)!}
               alt={product.Name}
               class="w-full h-full object-contain"
             />
@@ -74,7 +83,7 @@ const onSale = product.Sale && product.Retail_Price && product.Retail_Price > pr
             {additionalImages.map((img) => (
               <div class="aspect-square bg-gray-100 rounded-lg overflow-hidden">
                 <img
-                  src={img.Sm_image ?? img.Th_image ?? ""}
+                  src={resolveImg(img.Sm_image ?? img.Th_image) ?? ""}
                   alt={product.Name}
                   class="w-full h-full object-cover"
                   loading="lazy"

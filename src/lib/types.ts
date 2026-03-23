@@ -106,6 +106,16 @@ export interface SettingsRow {
   State: string | null;
   Postalcode: string | null;
   Email: string | null;
+  DefaultImages: string | null;  // e.g. "/images" — prepended to image filenames
+}
+
+// Build the image base URL from Settings: DomainName + DefaultImages
+// Mirrors CF's: Request.ImagePath = request.domainname & AppSettings.defaultimages & "/"
+export function getImageBaseUrl(settings: SettingsRow | null): string {
+  if (!settings) return "";
+  const domain = settings.DomainName?.replace(/\/$/, "") ?? "";
+  const folder = settings.DefaultImages?.replace(/\/$/, "") ?? "";
+  return `${domain}${folder}`;
 }
 
 export interface NavItem {

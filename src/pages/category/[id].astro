@@ -3,11 +3,12 @@ export const prerender = false;
 import BaseLayout from "../../components/layout/BaseLayout.astro";
 import ProductGrid from "../../components/ui/ProductGrid";
 import CategoryCard from "../../components/ui/CategoryCard";
+import CategoryHeader from "../../components/ui/CategoryHeader";
 import Breadcrumb from "../../components/ui/Breadcrumb";
-import RichText from "../../components/ui/RichText";
 import { getCategoryById, getSubcategories } from "../../lib/queries/categories";
 import { getProductsByCategory } from "../../lib/queries/products";
 import { getSettings } from "../../lib/queries/settings";
+import { getImageBaseUrl } from "../../lib/types";
 import type { ProductListOptions } from "../../lib/queries/products";
 
 const { id } = Astro.params;
@@ -32,6 +33,8 @@ if (!category) {
   return new Response(null, { status: 404 });
 }
 
+const imageBaseUrl = getImageBaseUrl(settings);
+
 // Build breadcrumb from ParentNames/ParentIDs stored in the DB
 const breadcrumbItems = [{ label: "Home", href: "/" }];
 if (category.ParentNames && category.ParentIDs) {
@@ -54,60 +57,74 @@ breadcrumbItems.push({ label: category.Name });
   <div class="container mx-auto px-4 py-8">
     <Breadcrumb items={breadcrumbItems} />
 
-    <h1 class="text-3xl font-bold mt-4 mb-2">{category.Name}</h1>
+    <div class="mt-4">
+      <CategoryHeader category={category} imageBaseUrl={imageBaseUrl} />
+    </div>
 
-    {category.Short_Desc && (
-      <p class="text-gray-600 mb-6">{category.Short_Desc}</p>
-    )}
-
-    <!-- Subcategories -->
-    {subcategories.length > 0 && (
+    <!-- Subcategories BEFORE products (ProdFirst = false) -->
+    {subcategories.length > 0 && !category.ProdFirst && (
       <section class="mb-10">
-        <h2 class="text-lg font-semibold mb-4 text-gray-700">Browse by subcategory</h2>
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           {subcategories.map((sub) => (
-            <CategoryCard category={sub} />
+            <CategoryCard category={sub} imageBaseUrl={imageBaseUrl} />
           ))}
         </div>
       </section>
     )}
 
-    <!-- Search / sort bar -->
-    <div class="flex flex-wrap gap-3 mb-6 items-center justify-between">
-      <form method="get" class="flex gap-2">
-        <input
-          type="text"
-          name="q"
-          value={search ?? ""}
-          placeholder="Search products..."
-          class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700">
-          Search
-        </button>
-      </form>
+    <!-- Products -->
+    {products.length > 0 && (
+      <section class="mb-10">
+        <div class="flex flex-wrap gap-3 mb-4 items-center justify-between">
+          <form method="get" class="flex gap-2">
+            <input
+              type="text"
+              name="q"
+              value={search ?? ""}
+              placeholder="Search products..."
+              class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700">
+              Search
+            </button>
+          </form>
 
-      <select
-        onchange="window.location.search = '?sort=' + this.value"
-        class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none"
-      >
-        <option value="" selected={!sort}>Sort: Default</option>
-        <option value="price_asc" selected={sort === "price_asc"}>Price: Low to High</option>
-        <option value="price_desc" selected={sort === "price_desc"}>Price: High to Low</option>
-        <option value="name_asc" selected={sort === "name_asc"}>Name A–Z</option>
-        <option value="newest" selected={sort === "newest"}>Newest</option>
-        <option value="popular" selected={sort === "popular"}>Most Popular</option>
-      </select>
-    </div>
+          <div class="flex items-center gap-3">
+            <span class="text-sm text-gray-500">
+              {products.length} product{products.length !== 1 ? "s" : ""}
+            </span>
+            <select
+              onchange="window.location.search = '?sort=' + this.value"
+              class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none"
+            >
+              <option value="" selected={!sort}>Sort: Default</option>
+              <option value="price_asc" selected={sort === "price_asc"}>Price: Low → High</option>
+              <option value="price_desc" selected={sort === "price_desc"}>Price: High → Low</option>
+              <option value="name_asc" selected={sort === "name_asc"}>Name A–Z</option>
+              <option value="newest" selected={sort === "newest"}>Newest</option>
+              <option value="popular" selected={sort === "popular"}>Most Popular</option>
+            </select>
+          </div>
+        </div>
 
-    <!-- Product grid -->
-    <p class="text-sm text-gray-500 mb-4">{products.length} product{products.length !== 1 ? "s" : ""}</p>
-    <ProductGrid products={products} />
+        <ProductGrid products={products} imageBaseUrl={imageBaseUrl} />
+      </section>
+    )}
 
-    {category.Long_Desc && (
-      <div class="mt-12 border-t border-gray-200 pt-8">
-        <RichText html={category.Long_Desc} />
-      </div>
+    {products.length === 0 && subcategories.length === 0 && (
+      <p class="text-gray-400 py-12 text-center">No products found in this category.</p>
+    )}
+
+    <!-- Subcategories AFTER products (ProdFirst = true) -->
+    {subcategories.length > 0 && category.ProdFirst && (
+      <section class="mt-10">
+        <h2 class="text-lg font-semibold mb-4 text-gray-700">Browse subcategories</h2>
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+          {subcategories.map((sub) => (
+            <CategoryCard category={sub} imageBaseUrl={imageBaseUrl} />
+          ))}
+        </div>
+      </section>
     )}
   </div>
 </BaseLayout>

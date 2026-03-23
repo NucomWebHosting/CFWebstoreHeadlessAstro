@@ -10,6 +10,7 @@ import { getCategoryByPermalink, getSubcategories } from "../lib/queries/categor
 import { getProductsByCategory } from "../lib/queries/products";
 import { getPageByPermalink, getPageByUrl } from "../lib/queries/pages";
 import { getSettings } from "../lib/queries/settings";
+import { getImageBaseUrl } from "../lib/types";
 import type { ProductListOptions } from "../lib/queries/products";
 
 const { slug } = Astro.params;
@@ -24,9 +25,8 @@ const [settings, category] = await Promise.all([
   getCategoryByPermalink(slug),
 ]);
 
-// Base URL for images — stored as filenames in DB, served from the CF/image server.
-// Set IMAGE_BASE_URL in your .env to point at the image host.
-const imageBaseUrl = import.meta.env.IMAGE_BASE_URL ?? "";
+// Build image base URL from Settings (DomainName + DefaultImages), same as CF's Request.ImagePath
+const imageBaseUrl = getImageBaseUrl(settings);
 
 // ── Category path ─────────────────────────────────────────────────────────────
 let subcategories: Awaited<ReturnType<typeof getSubcategories>> = [];
