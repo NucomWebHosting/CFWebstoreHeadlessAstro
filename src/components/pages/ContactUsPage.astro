@@ -1,0 +1,154 @@
+---
+import type { SettingsRow } from "../../lib/types";
+import ContactForm from "./ContactForm";
+
+interface Props {
+  settings: SettingsRow | null;
+}
+
+const { settings } = Astro.props;
+
+function formatPhone(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
+  if (digits.length === 11 && digits[0] === "1") return `+1 (${digits.slice(1,4)}) ${digits.slice(4,7)}-${digits.slice(7)}`;
+  return raw;
+}
+
+const address = [settings?.Address1, settings?.Address2].filter(Boolean).join(", ");
+const cityStateZip = [settings?.City, settings?.State, settings?.Postalcode].filter(Boolean).join(", ");
+const phone = formatPhone(settings?.Phone);
+const phone2 = formatPhone(settings?.Phone2);
+const phone3 = formatPhone(settings?.Phone3);
+const phone4 = formatPhone(settings?.Phone4);
+---
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+
+  {/* Left: Contact info + form */}
+  <div>
+    <h2 class="text-2xl font-bold text-gray-900 mb-6">Contact Us</h2>
+
+    <table class="w-full text-sm mb-8">
+      <tbody class="divide-y divide-gray-100">
+        {address && (
+          <tr>
+            <td class="py-3 pr-4 text-gray-500 w-8">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </td>
+            <td class="py-3 text-gray-700">
+              <div>{address}</div>
+              {cityStateZip && <div>{cityStateZip}</div>}
+            </td>
+          </tr>
+        )}
+        <tr>
+          <td class="py-3 pr-4 text-gray-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </td>
+          <td class="py-3 text-gray-700">
+            <div class="font-medium">Store Hours</div>
+            <div>Tuesday – Friday, 10:00 AM – 5:00 PM Pacific Time</div>
+          </td>
+        </tr>
+        {phone && (
+          <tr>
+            <td class="py-3 pr-4 text-gray-500">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+              </svg>
+            </td>
+            <td class="py-3 text-gray-700">
+              <div class="font-medium">Phone Order Desk</div>
+              <a href={`tel:${settings?.Phone}`} class="text-blue-600 hover:underline">{phone}</a>
+            </td>
+          </tr>
+        )}
+        {phone2 && (
+          <tr>
+            <td class="py-3 pr-4 text-gray-500">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+              </svg>
+            </td>
+            <td class="py-3 text-gray-700">
+              <div class="font-medium">International Orders</div>
+              <a href={`tel:${settings?.Phone2}`} class="text-blue-600 hover:underline">{phone2}</a>
+            </td>
+          </tr>
+        )}
+        {phone3 && (
+          <tr>
+            <td class="py-3 pr-4 text-gray-500">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+              </svg>
+            </td>
+            <td class="py-3 text-gray-700">
+              <div class="font-medium">Fax</div>
+              <span>{phone3}</span>
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+
+    {/* Google Map */}
+    {settings?.GoogleMapEmbed && (
+      <div class="rounded-xl overflow-hidden mb-8 border border-gray-200" set:html={settings.GoogleMapEmbed} />
+    )}
+
+    {/* Contact form */}
+    <div>
+      <h3 class="text-lg font-semibold text-gray-900 mb-4">Send Us a Message</h3>
+      <ContactForm client:load />
+    </div>
+  </div>
+
+  {/* Right: Tech support */}
+  <div>
+    <h2 class="text-2xl font-bold text-gray-900 mb-6">Tech Support</h2>
+
+    <table class="w-full text-sm mb-6">
+      <tbody class="divide-y divide-gray-100">
+        {phone4 && (
+          <tr>
+            <td class="py-3 pr-4 text-gray-500 w-8">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+              </svg>
+            </td>
+            <td class="py-3 text-gray-700">
+              <div class="font-medium">Catalina Technical Support</div>
+              <a href={`tel:${settings?.Phone4}`} class="text-blue-600 hover:underline">{phone4}</a>
+            </td>
+          </tr>
+        )}
+        <tr>
+          <td class="py-3 pr-4 text-gray-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </td>
+          <td class="py-3 text-gray-700">
+            <div class="font-medium">Tech Support Desk Hours</div>
+            <div>Tuesday – Friday, 10:00 AM – 5:00 PM Pacific Time</div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="bg-amber-50 border border-amber-200 rounded-lg p-5 text-sm text-amber-900 space-y-3">
+      <p class="font-semibold">Before You Call Tech Support</p>
+      <p>Please have your boat model, hull number, and a description of the issue ready. This helps us assist you as quickly as possible.</p>
+      <p class="font-medium text-amber-800">Do not email technical questions — please call us directly for the fastest response.</p>
+    </div>
+  </div>
+
+</div>

@@ -9,6 +9,7 @@ import ProductTabs from "../components/ui/ProductTabs";
 import CategoryCard from "../components/ui/CategoryCard";
 import CategoryHeader from "../components/ui/CategoryHeader";
 import Breadcrumb from "../components/ui/Breadcrumb";
+import ContactUsPage from "../components/pages/ContactUsPage.astro";
 import { getCategoryByPermalink, getSubcategories } from "../lib/queries/categories";
 import {
   getProductByPermalink,
@@ -332,8 +333,12 @@ const bullets = product
           class="w-full max-h-96 object-cover rounded-xl mb-8"
         />
       )}
-      <h1 class="text-4xl font-bold mb-6">{pageData.Page_Title ?? pageData.Page_Name}</h1>
-      {pageData.PageText && <RichText html={pageData.PageText} />}
+      <h1 class="text-4xl font-bold mb-8">{pageData.Page_Title ?? pageData.Page_Name}</h1>
+      {pageData.Custom_include === "contact-us" ? (
+        <ContactUsPage settings={settings} />
+      ) : (
+        pageData.PageText && <RichText html={pageData.PageText} />
+      )}
     </div>
   )}
 </BaseLayout>

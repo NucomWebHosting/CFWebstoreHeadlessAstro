@@ -18,6 +18,7 @@ export interface PageRow {
   TitleTag: string | null;
   Permalink: string | null;
   CatCore_ID: number | null;
+  Custom_include: string | null;
 }
 
 export interface CategoryRow {
@@ -99,6 +100,9 @@ export interface SettingsRow {
   SiteNameAB: string | null;
   DomainName: string | null;
   Phone: string | null;
+  Phone2: string | null;
+  Phone3: string | null;
+  Phone4: string | null;
   Logo_desktop: string | null;
   Logo_mobile: string | null;
   Address1: string | null;
@@ -107,7 +111,9 @@ export interface SettingsRow {
   State: string | null;
   Postalcode: string | null;
   Email: string | null;
+  MerchantEmail: string | null;
   DefaultImages: string | null;  // e.g. "/images" — prepended to image filenames
+  GoogleMapEmbed: string | null;
 }
 
 // Build the image base URL from Settings: DomainName + DefaultImages
