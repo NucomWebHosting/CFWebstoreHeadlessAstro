@@ -53,9 +53,14 @@ export async function getProductsByCategory(
   const orderBy = buildOrderBy(opts.sort);
 
   return query<ProductRow>(
-    `SELECT P.*
+    `SELECT P.*, img.Sm_image
      FROM Products P
      INNER JOIN Product_Category PC ON P.Product_ID = PC.Product_ID
+     OUTER APPLY (
+       SELECT TOP 1 Sm_image FROM Product_Images
+       WHERE Product_ID = P.Product_ID
+       ORDER BY Product_Image_ID ASC
+     ) img
      WHERE ${where}
      ORDER BY ${orderBy}`,
     params
@@ -120,8 +125,13 @@ export async function getFeaturedProducts(opts: FeaturedProductOptions = {}): Pr
   const where = conditions.join(" AND ");
 
   return query<ProductRow>(
-    `SELECT TOP ${limit} P.*
+    `SELECT TOP ${limit} P.*, img.Sm_image
      FROM Products P
+     OUTER APPLY (
+       SELECT TOP 1 Sm_image FROM Product_Images
+       WHERE Product_ID = P.Product_ID
+       ORDER BY Product_Image_ID ASC
+     ) img
      WHERE ${where}
      ORDER BY P.Priority ASC, P.Popularity DESC`,
     params

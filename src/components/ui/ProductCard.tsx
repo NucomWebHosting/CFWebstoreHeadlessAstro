@@ -16,8 +16,7 @@ export default function ProductCard({ product, imageBaseUrl = "" }: Props) {
     ? `/${product.Permalink}`
     : `/product/${product.Product_ID}`;
 
-  // Products may have a Sm_image column directly on the row (denormalized)
-  const image = resolveImage((product as any).Sm_image ?? null, imageBaseUrl);
+  const image = resolveImage(product.Sm_image ?? null, imageBaseUrl);
 
   return (
     <a

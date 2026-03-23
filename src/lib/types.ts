@@ -81,6 +81,7 @@ export interface ProductRow {
   Keywords: string | null;
   TitleTag: string | null;
   Availability: string | null;
+  Sm_image?: string | null;  // joined from Product_Images (first image thumbnail)
 }
 
 export interface ProductImageRow {
@@ -113,7 +114,8 @@ export interface SettingsRow {
 // Mirrors CF's: Request.ImagePath = request.domainname & AppSettings.defaultimages & "/"
 // Falls back to IMAGE_BASE_URL env var when the DB fields aren't populated yet.
 export function getImageBaseUrl(settings: SettingsRow | null): string {
-  const envFallback = process.env.IMAGE_BASE_URL ?? "";
+  // import.meta.env is baked in by Vite at build time from the .env file
+  const envFallback = (import.meta.env.IMAGE_BASE_URL as string | undefined) ?? "";
   if (!settings) return envFallback;
   const domain = settings.DomainName?.replace(/\/$/, "") ?? "";
   const folder = settings.DefaultImages?.replace(/\/$/, "") ?? "";
