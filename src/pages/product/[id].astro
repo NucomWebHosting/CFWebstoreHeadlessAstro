@@ -3,7 +3,10 @@ export const prerender = false;
 import BaseLayout from "../../components/layout/BaseLayout.astro";
 import RichText from "../../components/ui/RichText";
 import Breadcrumb from "../../components/ui/Breadcrumb";
-import { getProductById, getProductImages } from "../../lib/queries/products";
+import ProductGallery from "../../components/ui/ProductGallery";
+import ProductTabs from "../../components/ui/ProductTabs";
+import ProductCard from "../../components/ui/ProductCard";
+import { getProductById, getProductImages, getRelatedProducts } from "../../lib/queries/products";
 import { getSettings } from "../../lib/queries/settings";
 import { getImageBaseUrl } from "../../lib/types";
 
@@ -14,10 +17,11 @@ if (isNaN(productId)) {
   return new Response(null, { status: 404 });
 }
 
-const [product, images, settings] = await Promise.all([
+const [product, images, settings, related] = await Promise.all([
   getProductById(productId),
   getProductImages(productId),
   getSettings(),
+  getRelatedProducts(productId),
 ]);
 
 if (!product) {
@@ -32,9 +36,6 @@ function resolveImg(filename: string | null | undefined): string | null {
   return `${imageBaseUrl.replace(/\/$/, "")}/${filename}`;
 }
 
-const primaryImage = images[0];
-const additionalImages = images.slice(1);
-
 const bullets = [
   product.Bullet_point1,
   product.Bullet_point2,
@@ -44,14 +45,49 @@ const bullets = [
 ].filter(Boolean) as string[];
 
 const onSale = product.Sale && product.Retail_Price && product.Retail_Price > product.Base_Price;
+
+// Build content tabs for Long_Desc2/3/4
+const tabs: { label: string; html: string }[] = [];
+if (product.Long_Desc2?.trim()) tabs.push({ label: "Details", html: product.Long_Desc2 });
+if (product.Long_Desc3?.trim()) tabs.push({ label: "Specifications", html: product.Long_Desc3 });
+if (product.Long_Desc4?.trim()) tabs.push({ label: "Additional Info", html: product.Long_Desc4 });
+
+// Schema.org JSON-LD
+const firstImage = images[0];
+const schemaImage = resolveImg(firstImage?.Lg_image ?? firstImage?.Md_image ?? firstImage?.Sm_image);
+const permalink = product.Permalink ? `/${product.Permalink}` : `/product/${product.Product_ID}`;
+const canonical = `${settings?.DomainName?.replace(/\/$/, "") ?? ""}${permalink}`;
+
+const schema = {
+  "@context": "https://schema.org/",
+  "@type": "Product",
+  name: product.Name,
+  ...(schemaImage ? { image: schemaImage } : {}),
+  ...(product.Long_Desc ? { description: product.Long_Desc.replace(/<[^>]*>/g, " ").trim() } : {}),
+  ...(product.Base_Price > 0
+    ? {
+        offers: {
+          "@type": "AggregateOffer",
+          url: canonical,
+          lowPrice: product.Base_Price,
+          priceCurrency: "USD",
+        },
+      }
+    : {}),
+};
 ---
 
 <BaseLayout
-  title={product.Name}
+  title={product.TitleTag ?? product.Name}
   description={product.Metadescription ?? ""}
   settings={settings}
+  canonical={canonical}
 >
-  <div class="container mx-auto px-4 py-8">
+  <Fragment slot="head">
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(schema)} />
+  </Fragment>
+
+  <div class="container mx-auto px-4 py-8 max-w-7xl">
     <Breadcrumb
       items={[
         { label: "Home", href: "/" },
@@ -59,91 +95,103 @@ const onSale = product.Sale && product.Retail_Price && product.Retail_Price > pr
       ]}
     />
 
+    {/* 2-column layout: gallery + info */}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-10 mt-6">
-      <!-- Images -->
-      <div>
-        <div class="aspect-square bg-gray-100 rounded-xl overflow-hidden mb-3">
-          {resolveImg(primaryImage?.Lg_image ?? primaryImage?.Md_image) ? (
-            <img
-              src={resolveImg(primaryImage.Lg_image ?? primaryImage.Md_image)!}
-              alt={product.Name}
-              class="w-full h-full object-contain"
-            />
-          ) : (
-            <div class="w-full h-full flex items-center justify-center text-gray-300">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-24 h-24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-          )}
-        </div>
 
-        {additionalImages.length > 0 && (
-          <div class="grid grid-cols-4 gap-2">
-            {additionalImages.map((img) => (
-              <div class="aspect-square bg-gray-100 rounded-lg overflow-hidden">
-                <img
-                  src={resolveImg(img.Sm_image ?? img.Th_image) ?? ""}
-                  alt={product.Name}
-                  class="w-full h-full object-cover"
-                  loading="lazy"
-                />
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Left: Image gallery */}
+      <div>
+        <ProductGallery
+          images={images}
+          productName={product.Name}
+          imageBaseUrl={imageBaseUrl}
+          client:load
+        />
       </div>
 
-      <!-- Details -->
+      {/* Right: Product info */}
       <div>
-        <h1 class="text-3xl font-bold text-gray-900 mb-2">{product.Name}</h1>
+        <h1 class="text-3xl font-bold text-gray-900 mb-2 leading-tight">{product.Name}</h1>
 
-        {product.SKU && <p class="text-sm text-gray-400 mb-4">SKU: {product.SKU}</p>}
+        {product.SKU && (
+          <p class="text-sm text-gray-400 mb-4">SKU: {product.SKU}</p>
+        )}
 
-        <!-- Price -->
+        {/* Badges */}
+        {(product.Sale || product.Hot) && (
+          <div class="flex gap-2 mb-4">
+            {product.Sale && (
+              <span class="text-xs bg-red-100 text-red-700 px-2.5 py-1 rounded-full font-semibold uppercase tracking-wide">Sale</span>
+            )}
+            {product.Hot && (
+              <span class="text-xs bg-orange-100 text-orange-700 px-2.5 py-1 rounded-full font-semibold uppercase tracking-wide">Hot</span>
+            )}
+          </div>
+        )}
+
+        {/* Price */}
         <div class="flex items-baseline gap-3 mb-5">
           <span class="text-3xl font-bold text-gray-900">${product.Base_Price.toFixed(2)}</span>
           {onSale && (
             <span class="text-lg text-gray-400 line-through">${product.Retail_Price!.toFixed(2)}</span>
           )}
-          {product.Sale && (
-            <span class="text-sm bg-red-100 text-red-700 px-2 py-0.5 rounded font-medium">Sale</span>
-          )}
         </div>
 
-        <!-- Stock -->
-        {product.NumInStock > 0 ? (
-          <p class="text-sm text-green-600 font-medium mb-4">In Stock</p>
+        {/* Availability / stock */}
+        {product.Availability ? (
+          <p class="text-sm text-blue-600 font-medium mb-4">{product.Availability}</p>
+        ) : product.NumInStock > 0 ? (
+          <p class="text-sm text-green-600 font-medium mb-4">&#10003; In Stock</p>
         ) : (
-          <p class="text-sm text-red-500 font-medium mb-4">Out of Stock</p>
+          <div class="bg-red-700 text-white text-center font-bold text-2xl rounded-lg px-6 py-5 mb-6">
+            Out of Stock
+          </div>
         )}
 
-        <!-- Bullet points -->
+        {/* Bullet points */}
         {bullets.length > 0 && (
-          <ul class="space-y-1.5 mb-6">
+          <ul class="space-y-2 mb-6">
             {bullets.map((b) => (
               <li class="flex items-start gap-2 text-sm text-gray-700">
-                <span class="text-blue-500 mt-0.5">&#10003;</span>
+                <span class="text-blue-500 mt-0.5 flex-shrink-0">&#10003;</span>
                 {b}
               </li>
             ))}
           </ul>
         )}
 
-        <!-- Short description -->
+        {/* Short description */}
         {product.Short_Desc && (
-          <div class="text-sm text-gray-600 mb-6 border-t border-gray-100 pt-4">
+          <div class="text-sm text-gray-600 border-t border-gray-100 pt-4 mt-4">
             <RichText html={product.Short_Desc} />
           </div>
         )}
       </div>
     </div>
 
-    <!-- Long description -->
+    {/* Long description — full width below 2-col */}
     {product.Long_Desc && (
       <div class="mt-12 border-t border-gray-200 pt-8">
-        <h2 class="text-xl font-semibold mb-4">Product Details</h2>
-        <RichText html={product.Long_Desc} />
+        <h2 class="text-xl font-semibold mb-4 text-gray-900">Product Details</h2>
+        <div class="prose max-w-none text-gray-700">
+          <RichText html={product.Long_Desc} />
+        </div>
+      </div>
+    )}
+
+    {/* Tabbed additional content */}
+    {tabs.length > 0 && (
+      <ProductTabs tabs={tabs} client:load />
+    )}
+
+    {/* Related products */}
+    {related.length > 0 && (
+      <div class="mt-16 border-t border-gray-200 pt-10">
+        <h2 class="text-xl font-semibold mb-6 text-gray-900">You May Also Like</h2>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {related.map((p) => (
+            <ProductCard product={p} imageBaseUrl={imageBaseUrl} />
+          ))}
+        </div>
       </div>
     )}
   </div>

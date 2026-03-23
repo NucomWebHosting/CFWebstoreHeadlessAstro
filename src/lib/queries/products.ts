@@ -144,3 +144,23 @@ export async function getProductImages(productId: number): Promise<ProductImageR
     { product_id: productId }
   );
 }
+
+export async function getRelatedProducts(productId: number): Promise<ProductRow[]> {
+  return query<ProductRow>(
+    `SELECT TOP 8 P.*, img.Sm_image
+     FROM Products P
+     INNER JOIN Product_Category PC ON P.Product_ID = PC.Product_ID
+     OUTER APPLY (
+       SELECT TOP 1 Sm_image FROM Product_Images
+       WHERE Product_ID = P.Product_ID
+       ORDER BY Product_Image_ID ASC
+     ) img
+     WHERE PC.Category_ID IN (
+       SELECT TOP 1 Category_ID FROM Product_Category WHERE Product_ID = @product_id
+     )
+     AND P.Product_ID != @product_id
+     AND P.Display = 1
+     ORDER BY P.Priority ASC, P.Popularity DESC`,
+    { product_id: productId }
+  );
+}

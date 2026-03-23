@@ -23,6 +23,7 @@ const siteName = settings?.SiteName ?? "CFW Store";
     {description && <meta name="description" content={description} />}
     {canonical && <link rel="canonical" href={canonical} />}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <slot name="head" />
   </head>
   <body class="min-h-screen flex flex-col bg-white text-gray-900 antialiased">
     <Header settings={settings} />

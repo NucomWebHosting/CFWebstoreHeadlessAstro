@@ -3,11 +3,19 @@ export const prerender = false;
 import BaseLayout from "../components/layout/BaseLayout.astro";
 import RichText from "../components/ui/RichText";
 import ProductGrid from "../components/ui/ProductGrid";
+import ProductCard from "../components/ui/ProductCard";
+import ProductGallery from "../components/ui/ProductGallery";
+import ProductTabs from "../components/ui/ProductTabs";
 import CategoryCard from "../components/ui/CategoryCard";
 import CategoryHeader from "../components/ui/CategoryHeader";
 import Breadcrumb from "../components/ui/Breadcrumb";
 import { getCategoryByPermalink, getSubcategories } from "../lib/queries/categories";
-import { getProductsByCategory } from "../lib/queries/products";
+import {
+  getProductByPermalink,
+  getProductImages,
+  getProductsByCategory,
+  getRelatedProducts,
+} from "../lib/queries/products";
 import { getPageByPermalink, getPageByUrl } from "../lib/queries/pages";
 import { getSettings } from "../lib/queries/settings";
 import { getImageBaseUrl } from "../lib/types";
@@ -20,21 +28,28 @@ const sort     = Astro.url.searchParams.get("sort") as ProductListOptions["sort"
 const search   = Astro.url.searchParams.get("q") ?? undefined;
 const saleOnly = Astro.url.searchParams.get("sale") === "1";
 
-const [settings, category] = await Promise.all([
+// Run all three primary lookups in parallel — we'll use whichever returns a result
+const [settings, category, product] = await Promise.all([
   getSettings(),
   getCategoryByPermalink(slug),
+  getProductByPermalink(slug),
 ]);
 
-// Build image base URL from Settings (DomainName + DefaultImages), same as CF's Request.ImagePath
 const imageBaseUrl = getImageBaseUrl(settings);
+
+function resolveImg(filename: string | null | undefined): string | null {
+  if (!filename) return null;
+  if (filename.startsWith("http")) return filename;
+  return `${imageBaseUrl.replace(/\/$/, "")}/${filename}`;
+}
 
 // ── Category path ─────────────────────────────────────────────────────────────
 let subcategories: Awaited<ReturnType<typeof getSubcategories>> = [];
-let products: Awaited<ReturnType<typeof getProductsByCategory>> = [];
+let categoryProducts: Awaited<ReturnType<typeof getProductsByCategory>> = [];
 let breadcrumbItems: { label: string; href?: string }[] = [];
 
 if (category) {
-  [subcategories, products] = await Promise.all([
+  [subcategories, categoryProducts] = await Promise.all([
     category.ShowSubCats ? getSubcategories(category.Category_ID) : Promise.resolve([]),
     getProductsByCategory(category.Category_ID, { sort, search, saleOnly }),
   ]);
@@ -52,30 +67,105 @@ if (category) {
   breadcrumbItems.push({ label: category.Name });
 }
 
+// ── Product path ──────────────────────────────────────────────────────────────
+let productImages: Awaited<ReturnType<typeof getProductImages>> = [];
+let relatedProducts: Awaited<ReturnType<typeof getRelatedProducts>> = [];
+
+if (!category && product) {
+  [productImages, relatedProducts] = await Promise.all([
+    getProductImages(product.Product_ID),
+    getRelatedProducts(product.Product_ID),
+  ]);
+}
+
 // ── CMS page path ─────────────────────────────────────────────────────────────
-const pageData = category
-  ? null
-  : await getPageByPermalink(slug).then((p) => p ?? getPageByUrl(slug));
+const pageData = (!category && !product)
+  ? await getPageByPermalink(slug).then((p) => p ?? getPageByUrl(slug))
+  : null;
 
-if (!category && !pageData) return new Response(null, { status: 404 });
+if (!category && !product && !pageData) return new Response(null, { status: 404 });
 
-const title       = category ? (category.TitleTag ?? category.Name) : (pageData!.TitleTag ?? pageData!.Page_Title ?? pageData!.Page_Name);
-const description = category ? (category.Metadescription ?? "") : (pageData!.Metadescription ?? "");
-const canonical   = category?.Permalink ? `https://${settings?.DomainName ?? ""}/${category.Permalink}` : undefined;
+// ── Meta ──────────────────────────────────────────────────────────────────────
+const title = category
+  ? (category.TitleTag ?? category.Name)
+  : product
+  ? (product.TitleTag ?? product.Name)
+  : (pageData!.TitleTag ?? pageData!.Page_Title ?? pageData!.Page_Name);
+
+const description = category
+  ? (category.Metadescription ?? "")
+  : product
+  ? (product.Metadescription ?? "")
+  : (pageData!.Metadescription ?? "");
+
+const canonical = category?.Permalink
+  ? `${settings?.DomainName?.replace(/\/$/, "") ?? ""}/${category.Permalink}`
+  : product?.Permalink
+  ? `${settings?.DomainName?.replace(/\/$/, "") ?? ""}/${product.Permalink}`
+  : undefined;
+
+// ── Product Schema.org ────────────────────────────────────────────────────────
+const firstImg = productImages[0];
+const schemaImg = resolveImg(firstImg?.Lg_image ?? firstImg?.Md_image ?? firstImg?.Sm_image);
+
+const productSchema = product
+  ? JSON.stringify({
+      "@context": "https://schema.org/",
+      "@type": "Product",
+      name: product.Name,
+      ...(schemaImg ? { image: schemaImg } : {}),
+      ...(product.Long_Desc
+        ? { description: product.Long_Desc.replace(/<[^>]*>/g, " ").trim() }
+        : {}),
+      ...(product.Base_Price > 0
+        ? {
+            offers: {
+              "@type": "AggregateOffer",
+              url: canonical ?? "",
+              lowPrice: product.Base_Price,
+              priceCurrency: "USD",
+            },
+          }
+        : {}),
+    })
+  : null;
+
+// Product content tabs
+const productTabs: { label: string; html: string }[] = [];
+if (product) {
+  if (product.Long_Desc2?.trim()) productTabs.push({ label: "Details", html: product.Long_Desc2 });
+  if (product.Long_Desc3?.trim()) productTabs.push({ label: "Specifications", html: product.Long_Desc3 });
+  if (product.Long_Desc4?.trim()) productTabs.push({ label: "Additional Info", html: product.Long_Desc4 });
+}
+
+const onSale = product?.Sale && product.Retail_Price && product.Retail_Price > product.Base_Price;
+const bullets = product
+  ? [
+      product.Bullet_point1,
+      product.Bullet_point2,
+      product.Bullet_point3,
+      product.Bullet_point4,
+      product.Bullet_point5,
+    ].filter(Boolean) as string[]
+  : [];
 ---
 
 <BaseLayout title={title} description={description} settings={settings} canonical={canonical}>
-  {category ? (
-    <div class="container mx-auto px-4 py-8">
+  {productSchema && (
+    <Fragment slot="head">
+      <script type="application/ld+json" is:inline set:html={productSchema} />
+    </Fragment>
+  )}
 
+  {/* ── Category page ── */}
+  {category && (
+    <div class="container mx-auto px-4 py-8">
       <Breadcrumb items={breadcrumbItems} />
 
-      <!-- Category header: image positioning + title + long description -->
       <div class="mt-4">
         <CategoryHeader category={category} imageBaseUrl={imageBaseUrl} />
       </div>
 
-      <!-- Subcategories BEFORE products (ProdFirst = false) -->
       {subcategories.length > 0 && !category.ProdFirst && (
         <section class="mb-10">
           <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
@@ -86,10 +176,8 @@ const canonical   = category?.Permalink ? `https://${settings?.DomainName ?? ""}
         </section>
       )}
 
-      <!-- Products -->
-      {products.length > 0 && (
+      {categoryProducts.length > 0 && (
         <section class="mb-10">
-          <!-- Sort / search controls -->
           <div class="flex flex-wrap gap-3 mb-4 items-center justify-between">
             <form method="get" class="flex gap-2">
               <input
@@ -101,10 +189,9 @@ const canonical   = category?.Permalink ? `https://${settings?.DomainName ?? ""}
                 Search
               </button>
             </form>
-
             <div class="flex items-center gap-3">
               <span class="text-sm text-gray-500">
-                {products.length} product{products.length !== 1 ? "s" : ""}
+                {categoryProducts.length} product{categoryProducts.length !== 1 ? "s" : ""}
               </span>
               <select
                 onchange="window.location.search = '?sort=' + this.value"
@@ -119,16 +206,14 @@ const canonical   = category?.Permalink ? `https://${settings?.DomainName ?? ""}
               </select>
             </div>
           </div>
-
-          <ProductGrid products={products} imageBaseUrl={imageBaseUrl} />
+          <ProductGrid products={categoryProducts} imageBaseUrl={imageBaseUrl} />
         </section>
       )}
 
-      {products.length === 0 && subcategories.length === 0 && (
+      {categoryProducts.length === 0 && subcategories.length === 0 && (
         <p class="text-gray-400 py-12 text-center">No products found in this category.</p>
       )}
 
-      <!-- Subcategories AFTER products (ProdFirst = true) -->
       {subcategories.length > 0 && category.ProdFirst && (
         <section class="mt-10">
           <h2 class="text-lg font-semibold mb-4 text-gray-700">Browse subcategories</h2>
@@ -139,20 +224,116 @@ const canonical   = category?.Permalink ? `https://${settings?.DomainName ?? ""}
           </div>
         </section>
       )}
-
     </div>
-  ) : (
-    <!-- CMS page layout -->
+  )}
+
+  {/* ── Product page ── */}
+  {!category && product && (
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: product.Name }]} />
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-10 mt-6">
+        <div>
+          <ProductGallery
+            images={productImages}
+            productName={product.Name}
+            imageBaseUrl={imageBaseUrl}
+            client:load
+          />
+        </div>
+
+        <div>
+          <h1 class="text-3xl font-bold text-gray-900 mb-2 leading-tight">{product.Name}</h1>
+
+          {product.SKU && (
+            <p class="text-sm text-gray-400 mb-4">SKU: {product.SKU}</p>
+          )}
+
+          {(product.Sale || product.Hot) && (
+            <div class="flex gap-2 mb-4">
+              {product.Sale && (
+                <span class="text-xs bg-red-100 text-red-700 px-2.5 py-1 rounded-full font-semibold uppercase tracking-wide">Sale</span>
+              )}
+              {product.Hot && (
+                <span class="text-xs bg-orange-100 text-orange-700 px-2.5 py-1 rounded-full font-semibold uppercase tracking-wide">Hot</span>
+              )}
+            </div>
+          )}
+
+          <div class="flex items-baseline gap-3 mb-5">
+            <span class="text-3xl font-bold text-gray-900">${product.Base_Price.toFixed(2)}</span>
+            {onSale && (
+              <span class="text-lg text-gray-400 line-through">${product.Retail_Price!.toFixed(2)}</span>
+            )}
+          </div>
+
+          {product.Availability ? (
+            <p class="text-sm text-blue-600 font-medium mb-4">{product.Availability}</p>
+          ) : product.NumInStock > 0 ? (
+            <p class="text-sm text-green-600 font-medium mb-4">&#10003; In Stock</p>
+          ) : (
+            <div class="bg-red-700 text-white text-center font-bold text-2xl rounded-lg px-6 py-5 mb-6">
+              Out of Stock
+            </div>
+          )}
+
+          {bullets.length > 0 && (
+            <ul class="space-y-2 mb-6">
+              {bullets.map((b) => (
+                <li class="flex items-start gap-2 text-sm text-gray-700">
+                  <span class="text-blue-500 mt-0.5 flex-shrink-0">&#10003;</span>
+                  {b}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {product.Short_Desc && (
+            <div class="text-sm text-gray-600 border-t border-gray-100 pt-4 mt-4">
+              <RichText html={product.Short_Desc} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {product.Long_Desc && (
+        <div class="mt-12 border-t border-gray-200 pt-8">
+          <h2 class="text-xl font-semibold mb-4 text-gray-900">Product Details</h2>
+          <div class="prose max-w-none text-gray-700">
+            <RichText html={product.Long_Desc} />
+          </div>
+        </div>
+      )}
+
+      {productTabs.length > 0 && (
+        <ProductTabs tabs={productTabs} client:load />
+      )}
+
+      {relatedProducts.length > 0 && (
+        <div class="mt-16 border-t border-gray-200 pt-10">
+          <h2 class="text-xl font-semibold mb-6 text-gray-900">You May Also Like</h2>
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            {relatedProducts.map((p) => (
+              <ProductCard product={p} imageBaseUrl={imageBaseUrl} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )}
+
+  {/* ── CMS page ── */}
+  {!category && !product && pageData && (
     <div class="container mx-auto px-4 py-10">
-      {pageData!.Sm_Image && (
+      {pageData.Sm_Image && (
         <img
-          src={pageData!.Sm_Image}
-          alt={pageData!.Page_Name}
+          src={pageData.Sm_Image}
+          alt={pageData.Page_Name}
           class="w-full max-h-96 object-cover rounded-xl mb-8"
         />
       )}
-      <h1 class="text-4xl font-bold mb-6">{pageData!.Page_Title ?? pageData!.Page_Name}</h1>
-      {pageData!.PageText && <RichText html={pageData!.PageText} />}
+      <h1 class="text-4xl font-bold mb-6">{pageData.Page_Title ?? pageData.Page_Name}</h1>
+      {pageData.PageText && <RichText html={pageData.PageText} />}
     </div>
   )}
 </BaseLayout>
