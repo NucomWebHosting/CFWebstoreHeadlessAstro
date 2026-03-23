@@ -1,0 +1,52 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getPagesAdmin } from "../../../lib/queries/admin";
+
+const pages = await getPagesAdmin();
+const saved = Astro.url.searchParams.get("saved") === "1";
+---
+<AdminLayout title="Pages">
+  {saved && <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved successfully.</div>}
+
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div class="px-5 py-3 border-b border-gray-100 text-xs text-gray-500">{pages.length} pages</div>
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+        <tr>
+          <th class="px-5 py-3 text-left">Page Name</th>
+          <th class="px-5 py-3 text-left">Title</th>
+          <th class="px-5 py-3 text-left">Custom Include</th>
+          <th class="px-5 py-3 text-center">Active</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {pages.length === 0 && (
+          <tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">No pages found.</td></tr>
+        )}
+        {pages.map((p) => (
+          <tr class="hover:bg-gray-50">
+            <td class="px-5 py-3 font-medium text-gray-800">
+              <a href={`/admin/pages/${p.Page_ID}`} class="hover:text-blue-600">{p.Page_Name}</a>
+            </td>
+            <td class="px-5 py-3 text-gray-500">{p.Page_Title ?? "—"}</td>
+            <td class="px-5 py-3">
+              {p.Custom_include
+                ? <span class="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">{p.Custom_include}</span>
+                : <span class="text-gray-300">—</span>}
+            </td>
+            <td class="px-5 py-3 text-center">
+              {p.Display
+                ? <span class="text-green-600 font-bold">✓</span>
+                : <span class="text-gray-300">—</span>}
+            </td>
+            <td class="px-5 py-3 text-right">
+              <a href={`/admin/pages/${p.Page_ID}`} class="text-blue-600 hover:underline text-xs">Edit</a>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</AdminLayout>

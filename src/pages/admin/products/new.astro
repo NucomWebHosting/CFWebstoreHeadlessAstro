@@ -1,0 +1,24 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import ProductForm from "../../../components/admin/ProductForm.astro";
+import { createProduct } from "../../../lib/queries/admin";
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const data = await Astro.request.formData();
+  try {
+    const id = await createProduct(data);
+    return Astro.redirect(`/admin/products/${id}?saved=1`);
+  } catch (e) {
+    error = e instanceof Error ? e.message : "Failed to create product.";
+  }
+}
+---
+<AdminLayout title="New Product">
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+  <ProductForm action="/admin/products/new" cancelHref="/admin/products" />
+</AdminLayout>

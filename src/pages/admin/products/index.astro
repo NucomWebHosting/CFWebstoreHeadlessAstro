@@ -1,0 +1,98 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getProductsAdmin } from "../../../lib/queries/admin";
+
+const page   = Number(Astro.url.searchParams.get("page") ?? "1") || 1;
+const search = Astro.url.searchParams.get("q") ?? "";
+const { rows, total } = await getProductsAdmin(page, search);
+const totalPages = Math.ceil(total / 50);
+
+const saved   = Astro.url.searchParams.get("saved")   === "1";
+const deleted = Astro.url.searchParams.get("deleted") === "1";
+---
+<AdminLayout title="Products">
+  {saved   && <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved successfully.</div>}
+  {deleted && <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Product deleted.</div>}
+
+  <div class="flex items-center justify-between mb-4">
+    <form method="get" class="flex gap-2">
+      <input
+        type="text" name="q" value={search}
+        placeholder="Search name or SKU…"
+        class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
+      />
+      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700">Search</button>
+      {search && <a href="/admin/products" class="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-800">Clear</a>}
+    </form>
+    <a href="/admin/products/new" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700">
+      + New Product
+    </a>
+  </div>
+
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div class="px-5 py-3 border-b border-gray-100 text-xs text-gray-500">
+      {total} product{total !== 1 ? "s" : ""}{search ? ` matching "${search}"` : ""}
+    </div>
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+        <tr>
+          <th class="px-5 py-3 text-left">Name</th>
+          <th class="px-5 py-3 text-left">SKU</th>
+          <th class="px-5 py-3 text-right">Price</th>
+          <th class="px-5 py-3 text-right">Stock</th>
+          <th class="px-5 py-3 text-center">Active</th>
+          <th class="px-5 py-3 text-center">Sale</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {rows.length === 0 && (
+          <tr><td colspan="7" class="px-5 py-10 text-center text-gray-400">No products found.</td></tr>
+        )}
+        {rows.map((p) => (
+          <tr class="hover:bg-gray-50">
+            <td class="px-5 py-3 font-medium text-gray-800 max-w-xs truncate">
+              <a href={`/admin/products/${p.Product_ID}`} class="hover:text-blue-600">{p.Name}</a>
+            </td>
+            <td class="px-5 py-3 text-gray-500">{p.SKU ?? "—"}</td>
+            <td class="px-5 py-3 text-right">${p.Base_Price.toFixed(2)}</td>
+            <td class="px-5 py-3 text-right">{p.NumInStock}</td>
+            <td class="px-5 py-3 text-center">
+              {p.Display
+                ? <span class="text-green-600 font-bold">✓</span>
+                : <span class="text-gray-300">—</span>}
+            </td>
+            <td class="px-5 py-3 text-center">
+              {p.Sale
+                ? <span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Sale</span>
+                : <span class="text-gray-300">—</span>}
+            </td>
+            <td class="px-5 py-3 text-right">
+              <a href={`/admin/products/${p.Product_ID}`} class="text-blue-600 hover:underline text-xs mr-3">Edit</a>
+              <form method="post" action={`/admin/products/${p.Product_ID}`} class="inline">
+                <input type="hidden" name="_action" value="delete" />
+                <button
+                  type="submit"
+                  class="text-red-500 hover:underline text-xs"
+                  onclick="return confirm('Delete this product?')"
+                >Delete</button>
+              </form>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  {totalPages > 1 && (
+    <div class="flex gap-2 mt-4 justify-center text-sm">
+      {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+        <a
+          href={`/admin/products?page=${p}${search ? `&q=${encodeURIComponent(search)}` : ""}`}
+          class={`px-3 py-1 rounded-lg ${p === page ? "bg-blue-600 text-white" : "bg-white border text-gray-600 hover:bg-gray-50"}`}
+        >{p}</a>
+      ))}
+    </div>
+  )}
+</AdminLayout>

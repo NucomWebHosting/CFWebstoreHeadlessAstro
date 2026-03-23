@@ -1,0 +1,326 @@
+---
+export const prerender = false;
+import AdminLayout from "../../components/layout/AdminLayout.astro";
+import { getHomepageAdmin, updateHomepage } from "../../lib/queries/admin";
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const data = await Astro.request.formData();
+  try {
+    await updateHomepage(data);
+    return Astro.redirect("/admin/homepage?saved=1");
+  } catch (e) {
+    error = e instanceof Error ? e.message : "Failed to save.";
+  }
+}
+
+const hp = await getHomepageAdmin();
+const saved = Astro.url.searchParams.get("saved") === "1";
+const v = (field: string) => (hp as Record<string, unknown>)?.[field] ?? "";
+const bv = (field: string) => !!(hp as Record<string, unknown>)?.[field];
+---
+<AdminLayout title="Homepage Editor">
+  {saved && <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved successfully.</div>}
+  {error && <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+  <form method="post" class="space-y-6">
+
+    <!-- Alert Banner -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+        <label class="flex items-center gap-2 text-sm font-semibold cursor-pointer">
+          <input type="checkbox" name="alert_display" checked={bv("Alert_display")} class="rounded" />
+          Alert Banner
+        </label>
+      </div>
+      <div class="p-6 grid grid-cols-2 gap-4">
+        <div class="col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Alert Text</label>
+          <input type="text" name="alert_text" value={String(v("Alert_text"))}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+          <input type="number" name="alert_priority" value={String(v("Alert_priority") || 1)}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+    </section>
+
+    <!-- Hero -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+        <label class="flex items-center gap-2 text-sm font-semibold cursor-pointer">
+          <input type="checkbox" name="hero_display" checked={bv("Hero_display")} class="rounded" />
+          Hero Section
+        </label>
+      </div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Hero Image (filename)</label>
+          <input type="text" name="hero_image" value={String(v("Hero_image"))}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Hero Link</label>
+          <input type="text" name="hero_link" value={String(v("Hero_link"))}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Button Label</label>
+          <input type="text" name="hero_button" value={String(v("Hero_button"))}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Button Color</label>
+          <input type="text" name="hero_button_color" value={String(v("Hero_button_color"))} placeholder="e.g. #2563eb"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Height (px, 0=80vh)</label>
+          <input type="number" name="hero_height" value={String(v("Hero_height") || "")}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Text Position</label>
+          <select name="hero_text_position"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="0" selected={v("Hero_text_position") === 0}>Left</option>
+            <option value="1" selected={v("Hero_text_position") === 1}>Center</option>
+            <option value="2" selected={v("Hero_text_position") === 2}>Right</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+          <input type="number" name="hero_priority" value={String(v("Hero_priority") || 1)}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div class="flex items-center gap-2 mt-6">
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="hero_over_menu" checked={bv("Hero_over_menu")} class="rounded" />
+            Overlay menu
+          </label>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Hero Animated Lines (line 1–4)</label>
+          <div class="grid grid-cols-2 gap-2">
+            {["hero_text1","hero_text2","hero_text3","hero_text4"].map((n, i) => (
+              <input type="text" name={n} value={String(v(`Hero_text${i+1}`))} placeholder={`Line ${i+1}`}
+                class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            ))}
+          </div>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Hero HTML Overlay (free-form)</label>
+          <textarea name="hero_text" rows="4"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >{String(v("Hero_text"))}</textarea>
+        </div>
+      </div>
+    </section>
+
+    <!-- Custom Text Blocks -->
+    {([1, 2, 3] as const).map((n) => (
+      <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+        <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+          <label class="flex items-center gap-2 text-sm font-semibold cursor-pointer">
+            <input type="checkbox" name={`ct${n}_display`} checked={bv(`Custom_text_${n}_display`)} class="rounded" />
+            Custom Text Block {n}
+          </label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer ml-4">
+            <input type="checkbox" name={`ct${n}_fullwidth`} checked={bv(`Custom_text_${n}_fullwidth`)} class="rounded" />
+            Full width
+          </label>
+        </div>
+        <div class="p-6 space-y-3">
+          <textarea name={`ct${n}_text`} rows="6"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >{String(v(`Custom_text_${n}`))}</textarea>
+          <div class="w-24">
+            <label class="block text-xs text-gray-500 mb-1">Priority</label>
+            <input type="number" name={`ct${n}_priority`} value={String(v(`Custom_text_${n}_priority`) || n + 3)}
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+      </section>
+    ))}
+
+    <!-- Top Categories -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+        <label class="flex items-center gap-2 text-sm font-semibold cursor-pointer">
+          <input type="checkbox" name="topcats_display" checked={bv("Topcats_Display")} class="rounded" />
+          Top Categories
+        </label>
+      </div>
+      <div class="p-6 grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+          <input type="text" name="topcats_title" value={String(v("Topcats_title"))}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Columns</label>
+          <input type="number" name="topcats_cols" value={String(v("Topcats_cols") || "")}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+          <input type="number" name="topcats_priority" value={String(v("Topcats_priority") || 7)}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div class="col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Category IDs (comma-separated, blank = all)</label>
+          <input type="text" name="topcats_categories" value={String(v("Topcats_categories"))}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div class="flex items-center gap-2 mt-4">
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="topcats_allcats" checked={bv("Topcats_Allcats")} class="rounded" />
+            Show all top-level cats
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- Product Display -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+        <label class="flex items-center gap-2 text-sm font-semibold cursor-pointer">
+          <input type="checkbox" name="product_display" checked={bv("Product_display")} class="rounded" />
+          Featured Products
+        </label>
+        <label class="flex items-center gap-2 text-sm cursor-pointer ml-4">
+          <input type="checkbox" name="product_fullwidth" checked={bv("Product_fullwidth")} class="rounded" />
+          Full width
+        </label>
+      </div>
+      <div class="p-6 grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+          <input type="text" name="product_title" value={String(v("Product_title"))}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Style (1=carousel, 2=masonry…)</label>
+          <input type="number" name="product_style" value={String(v("Product_style") || "")}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+          <input type="number" name="product_priority" value={String(v("Product_priority") || 8)}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div class="col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Pass Params (key=value,…)</label>
+          <input type="text" name="product_passparam" value={String(v("Product_passparam"))}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+        <label class="flex items-center gap-2 text-sm font-semibold cursor-pointer">
+          <input type="checkbox" name="testimonial_display" checked={bv("Testimonial_display")} class="rounded" />
+          Testimonials
+        </label>
+        <label class="flex items-center gap-2 text-sm cursor-pointer ml-4">
+          <input type="checkbox" name="testimonial_fullwidth" checked={bv("Testimonial_fullwidth")} class="rounded" />
+          Full width
+        </label>
+      </div>
+      <div class="p-6">
+        <div class="w-24">
+          <label class="block text-xs text-gray-500 mb-1">Priority</label>
+          <input type="number" name="testimonial_priority" value={String(v("Testimonial_priority") || 9)}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+    </section>
+
+    <!-- Contact Form Display -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+        <label class="flex items-center gap-2 text-sm font-semibold cursor-pointer">
+          <input type="checkbox" name="contact_display" checked={bv("Contact_display")} class="rounded" />
+          Contact Form Section
+        </label>
+      </div>
+      <div class="p-6">
+        <div class="w-24">
+          <label class="block text-xs text-gray-500 mb-1">Priority</label>
+          <input type="number" name="contact_priority" value={String(v("Contact_priority") || 10)}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+    </section>
+
+    <!-- Gallery 1 -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+        <label class="flex items-center gap-2 text-sm font-semibold cursor-pointer">
+          <input type="checkbox" name="gallery_display" checked={bv("Gallery_display")} class="rounded" />
+          Gallery / Carousel
+        </label>
+        <label class="flex items-center gap-2 text-sm cursor-pointer ml-4">
+          <input type="checkbox" name="gallery_fullwidth" checked={bv("Gallery_fullwidth")} class="rounded" />
+          Full width
+        </label>
+      </div>
+      <div class="p-6 grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Gallery ID</label>
+          <input type="number" name="gallery_id" value={String(v("Gallery_id") || "")}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Max Images</label>
+          <input type="number" name="gallery_max" value={String(v("Gallery_max") || "")}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Height (px)</label>
+          <input type="number" name="gallery_height" value={String(v("Gallery_height") || "")}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+          <input type="text" name="gallery_title" value={String(v("Gallery_title"))}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+          <input type="number" name="gallery_priority" value={String(v("Gallery_priority") || 2)}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+    </section>
+
+    <!-- Custom Code Block -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+        <label class="flex items-center gap-2 text-sm font-semibold cursor-pointer">
+          <input type="checkbox" name="cc1_display" checked={bv("Custom_code_1_display")} class="rounded" />
+          Custom Code Block 1
+        </label>
+      </div>
+      <div class="p-6">
+        <div class="w-24">
+          <label class="block text-xs text-gray-500 mb-1">Priority</label>
+          <input type="number" name="cc1_priority" value={String(v("Custom_code_1_priority") || 11)}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+    </section>
+
+    <div class="flex gap-3">
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">
+        Save Homepage
+      </button>
+    </div>
+
+  </form>
+</AdminLayout>

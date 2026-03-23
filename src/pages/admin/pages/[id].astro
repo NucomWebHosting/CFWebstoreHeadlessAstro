@@ -1,0 +1,149 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getPageByIdAdmin, updatePage } from "../../../lib/queries/admin";
+
+const id = Number(Astro.params.id);
+if (!id) return new Response(null, { status: 404 });
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const data = await Astro.request.formData();
+  try {
+    await updatePage(id, data);
+    return Astro.redirect(`/admin/pages/${id}?saved=1`);
+  } catch (e) {
+    error = e instanceof Error ? e.message : "Failed to save page.";
+  }
+}
+
+const page = await getPageByIdAdmin(id);
+if (!page) return new Response(null, { status: 404 });
+
+const saved = Astro.url.searchParams.get("saved") === "1";
+const v = (field: keyof typeof page) => page[field] ?? "";
+
+const customIncludes = ["", "contact-us"];
+---
+<AdminLayout title={`Edit Page: ${page.Page_Name}`}>
+  <div class="flex items-center justify-between mb-4">
+    <a href="/admin/pages" class="text-sm text-blue-600 hover:underline">← Back to Pages</a>
+    {page.Permalink && (
+      <a href={`/${page.Permalink}`} target="_blank" rel="noopener" class="text-sm text-gray-500 hover:text-blue-600">
+        View on site →
+      </a>
+    )}
+  </div>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+      Saved successfully.
+    </div>
+  )}
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="space-y-6">
+
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Page Details</h2>
+      </div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Page Name <span class="text-red-500">*</span></label>
+          <input type="text" name="page_name" required value={v("Page_Name")}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Page Title (H1)</label>
+          <input type="text" name="page_title" value={v("Page_Title")}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Page URL</label>
+          <input type="text" name="page_url" value={v("Page_URL")}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Custom Include</label>
+          <select name="custom_include"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            {customIncludes.map((ci) => (
+              <option value={ci} selected={page.Custom_include === ci}>
+                {ci || "— None (use page content) —"}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Short Description</label>
+          <input type="text" name="short_desc" value={v("Short_desc")}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+      <div class="px-6 pb-5 flex gap-5">
+        <label class="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" name="display" checked={!!page.Display} class="rounded" />
+          <span>Display (active)</span>
+        </label>
+        <label class="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" name="display_menu" checked={!!page.Display_Menu} class="rounded" />
+          <span>Show in Menu</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Page Content (HTML)</h2>
+      </div>
+      <div class="p-6">
+        <textarea name="page_text" rows="20"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >{v("PageText")}</textarea>
+      </div>
+    </section>
+
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">SEO</h2>
+      </div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Permalink (slug)</label>
+          <input type="text" name="permalink" value={v("Permalink")}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Title Tag</label>
+          <input type="text" name="title_tag" value={v("TitleTag")}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Meta Description</label>
+          <textarea name="metadescription" rows="2"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >{v("Metadescription")}</textarea>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Keywords</label>
+          <input type="text" name="keywords" value={v("Keywords")}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+    </section>
+
+    <div class="flex gap-3">
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">
+        Save Page
+      </button>
+      <a href="/admin/pages" class="px-6 py-2 rounded-lg text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+        Cancel
+      </a>
+    </div>
+
+  </form>
+</AdminLayout>

@@ -40,3 +40,12 @@ AAAEBK/jRSja/fSSXE1Xbv9Lp99QpTcZNpEX1DjGlTTJWlsodxwMrCZEq0steuq5G88kGl
 uteJGaZhw/jGE9bgodREAAAAIHJvb3RAdnBzMzI5NDkzMi50cm91YmxlLWZyZWUubmV0AQ                                                                             
 IDBAU=                                                                                                                                             
 -----END OPENSSH PRIVATE KEY----- 
+
+
+  ssh-ed25519                                                                   
+  AAAAC3NzaC1lZDI1NTE5AAAAIKa/2V5FdrIU9ElxMHRaCJoqqqKFY545mnbTw4311SVf          
+  jonathansummerfieldmini@local                                                 
+                                                                                
+  Add this to /home/deploy/.ssh/authorized_keys on the server, then I can       
+  connect.                                                                      
+                   

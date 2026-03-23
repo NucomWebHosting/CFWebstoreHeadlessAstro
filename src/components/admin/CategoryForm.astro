@@ -1,0 +1,170 @@
+---
+import type { CategoryRow } from "../../lib/types";
+import type { CategoryListRow } from "../../lib/queries/admin";
+
+interface Props {
+  category?: CategoryRow | null;
+  allCategories: CategoryListRow[];
+  action: string;
+  cancelHref: string;
+}
+const { category: c, allCategories, action, cancelHref } = Astro.props;
+const v = (field: keyof CategoryRow) => c?.[field] ?? "";
+---
+<form method="post" action={action} class="space-y-6">
+
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Basic Information</h2>
+    </div>
+    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="md:col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Name <span class="text-red-500">*</span></label>
+        <input type="text" name="name" required value={v("Name")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Parent Category</label>
+        <select name="parent_id"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="0">— Top Level —</option>
+          {allCategories
+            .filter((cat) => cat.Category_ID !== c?.Category_ID)
+            .map((cat) => (
+              <option value={cat.Category_ID} selected={cat.Category_ID === c?.Parent_ID}>
+                {cat.Name}
+              </option>
+            ))
+          }
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Page URL</label>
+        <input type="text" name="page_url" value={v("Page_URL")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+        <input type="number" name="priority" min="0" value={v("Priority") || 50}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Image Position</label>
+        <select name="lg_image_position"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="0" selected={c?.Lg_image_position === 0}>Left</option>
+          <option value="1" selected={c?.Lg_image_position === 1}>Right</option>
+          <option value="2" selected={c?.Lg_image_position === 2}>Top</option>
+        </select>
+      </div>
+    </div>
+    <div class="px-6 pb-5 flex flex-wrap gap-5">
+      <label class="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" name="display" checked={!!c?.Display} class="rounded" />
+        <span>Display (active)</span>
+      </label>
+      <label class="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" name="display_menu" checked={!!c?.Display_Menu} class="rounded" />
+        <span>Show in Menu</span>
+      </label>
+      <label class="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" name="show_cat_header" checked={!!c?.ShowCatHeader} class="rounded" />
+        <span>Show Category Header</span>
+      </label>
+      <label class="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" name="show_sub_cats" checked={!!c?.ShowSubCats} class="rounded" />
+        <span>Show Subcategories</span>
+      </label>
+      <label class="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" name="prod_first" checked={!!c?.ProdFirst} class="rounded" />
+        <span>Products Before Subcats</span>
+      </label>
+      <label class="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" name="show_prod_left_col" checked={!!c?.ShowProdLeftColumn} class="rounded" />
+        <span>Show Filter Sidebar</span>
+      </label>
+    </div>
+  </section>
+
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Images</h2>
+    </div>
+    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Small Image (filename)</label>
+        <input type="text" name="sm_image" value={v("Sm_Image")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Large Image (filename)</label>
+        <input type="text" name="lg_image" value={v("Lg_image")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Large Image Title</label>
+        <input type="text" name="lg_title" value={v("Lg_Title")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Description</h2>
+    </div>
+    <div class="p-6 space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Short Description</label>
+        <textarea name="short_desc" rows="3"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >{v("Short_Desc")}</textarea>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Long Description (HTML)</label>
+        <textarea name="long_desc" rows="6"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >{v("Long_Desc")}</textarea>
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">SEO & URL</h2>
+    </div>
+    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="md:col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Permalink (slug)</label>
+        <input type="text" name="permalink" value={v("Permalink")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Title Tag</label>
+        <input type="text" name="title_tag" value={v("TitleTag")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Meta Description</label>
+        <textarea name="metadescription" rows="2"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >{v("Metadescription")}</textarea>
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Keywords</label>
+        <input type="text" name="keywords" value={v("Keywords")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+    </div>
+  </section>
+
+  <div class="flex gap-3">
+    <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">
+      Save Category
+    </button>
+    <a href={cancelHref} class="px-6 py-2 rounded-lg text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+      Cancel
+    </a>
+  </div>
+
+</form>

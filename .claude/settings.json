@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Applications/ColdFusion2025/cfusion/wwwroot/test-catalinadirect-com/**)",
+      "Bash(find /Applications/ColdFusion2025/cfusion/wwwroot/test-catalinadirect-com/shopping -type f -name *.cfm -o -name *.cfc)"
+    ]
+  }
+}

@@ -1,0 +1,71 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import CategoryForm from "../../../components/admin/CategoryForm.astro";
+import {
+  getCategoryByIdAdmin, getCategoriesAdmin,
+  updateCategory, deleteCategory,
+} from "../../../lib/queries/admin";
+
+const id = Number(Astro.params.id);
+if (!id) return new Response(null, { status: 404 });
+
+if (Astro.request.method === "POST") {
+  const data = await Astro.request.formData();
+  if (data.get("_action") === "delete") {
+    await deleteCategory(id);
+    return Astro.redirect("/admin/categories?deleted=1");
+  }
+  try {
+    await updateCategory(id, data);
+    return Astro.redirect(`/admin/categories/${id}?saved=1`);
+  } catch (e) {
+    // fall through
+  }
+}
+
+const [category, allCategories] = await Promise.all([
+  getCategoryByIdAdmin(id),
+  getCategoriesAdmin(),
+]);
+if (!category) return new Response(null, { status: 404 });
+
+const saved = Astro.url.searchParams.get("saved") === "1";
+---
+<AdminLayout title={`Edit: ${category.Name}`}>
+  <div class="flex items-center justify-between mb-4">
+    <a href="/admin/categories" class="text-sm text-blue-600 hover:underline">← Back to Categories</a>
+    {category.Permalink && (
+      <a href={`/${category.Permalink}`} target="_blank" rel="noopener" class="text-sm text-gray-500 hover:text-blue-600">
+        View on site →
+      </a>
+    )}
+  </div>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+      Saved successfully.
+    </div>
+  )}
+
+  <CategoryForm
+    category={category}
+    allCategories={allCategories}
+    action={`/admin/categories/${id}`}
+    cancelHref="/admin/categories"
+  />
+
+  <div class="mt-8 pt-6 border-t border-red-100">
+    <h3 class="text-sm font-semibold text-red-700 mb-2">Danger Zone</h3>
+    <form method="post" action={`/admin/categories/${id}`}>
+      <input type="hidden" name="_action" value="delete" />
+      <button
+        type="submit"
+        class="px-4 py-2 rounded-lg text-sm bg-red-600 text-white hover:bg-red-700"
+        onclick="return confirm('Permanently delete this category?')"
+      >
+        Delete Category
+      </button>
+    </form>
+  </div>
+</AdminLayout>

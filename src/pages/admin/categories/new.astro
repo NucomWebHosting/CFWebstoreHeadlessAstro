@@ -1,0 +1,28 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import CategoryForm from "../../../components/admin/CategoryForm.astro";
+import { getCategoriesAdmin, createCategory } from "../../../lib/queries/admin";
+
+const allCategories = await getCategoriesAdmin();
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const data = await Astro.request.formData();
+  try {
+    const id = await createCategory(data);
+    return Astro.redirect(`/admin/categories/${id}?saved=1`);
+  } catch (e) {
+    error = e instanceof Error ? e.message : "Failed to create category.";
+  }
+}
+---
+<AdminLayout title="New Category">
+  <div class="mb-4">
+    <a href="/admin/categories" class="text-sm text-blue-600 hover:underline">← Back to Categories</a>
+  </div>
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+  <CategoryForm allCategories={allCategories} action="/admin/categories/new" cancelHref="/admin/categories" />
+</AdminLayout>

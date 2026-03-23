@@ -1,0 +1,203 @@
+---
+import type { ProductRow } from "../../lib/types";
+
+interface Props {
+  product?: ProductRow | null;
+  action: string;
+  cancelHref: string;
+}
+const { product: p, action, cancelHref } = Astro.props;
+const v = (field: keyof ProductRow) => p?.[field] ?? "";
+---
+<form method="post" action={action} class="space-y-8">
+
+  <!-- Basic Info -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Basic Information</h2>
+    </div>
+    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="md:col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Name <span class="text-red-500">*</span></label>
+        <input type="text" name="name" required value={v("Name")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+        <input type="text" name="sku" value={v("SKU")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">UPC</label>
+        <input type="text" name="upc" value={v("UPC")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">ALU</label>
+        <input type="text" name="alu" value={v("ALU")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Availability</label>
+        <input type="text" name="availability" value={v("Availability")} placeholder="e.g. Usually ships in 2-3 days"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing & Inventory -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Pricing & Inventory</h2>
+    </div>
+    <div class="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Base Price <span class="text-red-500">*</span></label>
+        <input type="number" name="base_price" step="0.01" min="0" required value={v("Base_Price")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Retail Price</label>
+        <input type="number" name="retail_price" step="0.01" min="0" value={v("Retail_Price")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">MAP Price</label>
+        <input type="number" name="map_price" step="0.01" min="0" value={v("MAP_Price")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Wholesale</label>
+        <input type="number" name="wholesale" step="0.01" min="0" value={v("Wholesale")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Stock Qty</label>
+        <input type="number" name="num_in_stock" min="0" value={v("NumInStock")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Weight (lbs)</label>
+        <input type="number" name="weight" step="0.01" min="0" value={v("Weight")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+        <input type="number" name="priority" min="0" value={v("Priority") || 50}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+    </div>
+    <div class="px-6 pb-5 flex gap-6">
+      <label class="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" name="display" checked={!!p?.Display} class="rounded" />
+        <span>Display (active)</span>
+      </label>
+      <label class="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" name="sale" checked={!!p?.Sale} class="rounded" />
+        <span>On Sale</span>
+      </label>
+      <label class="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" name="hot" checked={!!p?.Hot} class="rounded" />
+        <span>Hot Item</span>
+      </label>
+    </div>
+  </section>
+
+  <!-- Description -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Description</h2>
+    </div>
+    <div class="p-6 space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Short Description</label>
+        <textarea name="short_desc" rows="3"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+        >{v("Short_Desc")}</textarea>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Long Description (HTML)</label>
+        <textarea name="long_desc" rows="8"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+        >{v("Long_Desc")}</textarea>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Details Tab (Long Desc 2)</label>
+          <textarea name="long_desc2" rows="4"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+          >{v("Long_Desc2")}</textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Specs Tab (Long Desc 3)</label>
+          <textarea name="long_desc3" rows="4"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+          >{v("Long_Desc3")}</textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Additional Tab (Long Desc 4)</label>
+          <textarea name="long_desc4" rows="4"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+          >{v("Long_Desc4")}</textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Bullet Points -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Bullet Points</h2>
+    </div>
+    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-3">
+      {([1,2,3,4,5] as const).map((n) => (
+        <input
+          type="text" name={`bullet${n}`}
+          value={p?.[`Bullet_point${n}` as keyof ProductRow] ?? ""}
+          placeholder={`Bullet point ${n}`}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      ))}
+    </div>
+  </section>
+
+  <!-- SEO -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">SEO & URL</h2>
+    </div>
+    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="md:col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Permalink (slug)</label>
+        <input type="text" name="permalink" value={v("Permalink")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Title Tag</label>
+        <input type="text" name="title_tag" value={v("TitleTag")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Meta Description</label>
+        <textarea name="metadescription" rows="2"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >{v("Metadescription")}</textarea>
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Keywords</label>
+        <input type="text" name="keywords" value={v("Keywords")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+    </div>
+  </section>
+
+  <div class="flex gap-3">
+    <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">
+      Save Product
+    </button>
+    <a href={cancelHref} class="px-6 py-2 rounded-lg text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+      Cancel
+    </a>
+  </div>
+
+</form>
