@@ -22,7 +22,7 @@ jobs:
             set -e
             cd /var/www/frontend.nucomwebhosting.com
             git pull origin main
-            npm ci --omit=dev
+            npm ci
             npm run build
             pm2 restart astro-app || pm2 start dist/server/entry.mjs --name astro-app
           ENDSSH
