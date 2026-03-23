@@ -1,6 +1,19 @@
 import { query } from "../db";
 import type { CategoryRow } from "../types";
 
+export async function getCategoryByPermalink(permalink: string): Promise<CategoryRow | null> {
+  // DB stores permalinks with a trailing slash; the URL may or may not have one.
+  // Try both variants so either form works.
+  const rows = await query<CategoryRow>(
+    `SELECT C.*
+     FROM Categories C
+     WHERE C.Display = 1
+       AND (C.Permalink = @slug OR C.Permalink = @slug_trail)`,
+    { slug: permalink, slug_trail: permalink.replace(/\/$/, "") + "/" }
+  );
+  return rows[0] ?? null;
+}
+
 export async function getCategoryById(id: number): Promise<CategoryRow | null> {
   const rows = await query<CategoryRow>(
     `SELECT C.*
