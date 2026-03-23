@@ -111,11 +111,14 @@ export interface SettingsRow {
 
 // Build the image base URL from Settings: DomainName + DefaultImages
 // Mirrors CF's: Request.ImagePath = request.domainname & AppSettings.defaultimages & "/"
+// Falls back to IMAGE_BASE_URL env var when the DB fields aren't populated yet.
 export function getImageBaseUrl(settings: SettingsRow | null): string {
-  if (!settings) return "";
+  const envFallback = process.env.IMAGE_BASE_URL ?? "";
+  if (!settings) return envFallback;
   const domain = settings.DomainName?.replace(/\/$/, "") ?? "";
   const folder = settings.DefaultImages?.replace(/\/$/, "") ?? "";
-  return `${domain}${folder}`;
+  const fromDb = `${domain}${folder}`;
+  return fromDb || envFallback;
 }
 
 export interface NavItem {
