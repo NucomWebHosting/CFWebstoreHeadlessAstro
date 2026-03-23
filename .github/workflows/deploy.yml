@@ -24,5 +24,7 @@ jobs:
             git pull origin main
             npm ci
             npm run build
-            pm2 restart astro-app || pm2 start dist/server/entry.mjs --name astro-app
+            pm2 delete astro-app 2>/dev/null || true
+            pm2 start dist/server/entry.mjs --name astro-app
+            pm2 save
           ENDSSH
