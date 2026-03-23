@@ -1,6 +1,7 @@
 export const prerender = false;
 import { query } from "../../lib/db";
 import { getSettings } from "../../lib/queries/settings";
+import { createTransporter } from "../../lib/email";
 
 export async function POST({ request }: { request: Request }) {
   let body: { name?: string; email?: string; phone?: string; message?: string };
@@ -36,6 +37,23 @@ export async function POST({ request }: { request: Request }) {
        (1, 'contact-us', '/Contact-Us/', @toEmail, @fromEmail, 'Contact Us Form Submission', @message, @firstName, @lastName, @phone, 'New', 0, GETDATE(), GETDATE())`,
     { toEmail, fromEmail: email, message: message.trim(), firstName, lastName, phone: phone.trim() }
   );
+
+  // Send email notification — failure is non-fatal (submission already saved to DB)
+  const transporter = createTransporter(settings);
+  if (transporter && toEmail) {
+    const phoneLine = phone.trim() ? `\nPhone: ${phone.trim()}` : "";
+    try {
+      await transporter.sendMail({
+        from: settings?.Email_User ?? toEmail,
+        to: toEmail,
+        replyTo: email,
+        subject: `Contact Us: ${name.trim()}`,
+        text: `Name: ${name.trim()}\nEmail: ${email}${phoneLine}\n\n${message.trim()}`,
+      });
+    } catch (err) {
+      console.error("[contact] Email send failed:", err);
+    }
+  }
 
   return new Response(JSON.stringify({ success: true }), {
     status: 200,

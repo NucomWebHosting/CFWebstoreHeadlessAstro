@@ -114,6 +114,12 @@ export interface SettingsRow {
   MerchantEmail: string | null;
   DefaultImages: string | null;  // e.g. "/images" — prepended to image filenames
   GoogleMapEmbed: string | null;
+  Email_Server: string | null;
+  Email_User: string | null;
+  Email_Pass: string | null;
+  Email_Port: number | null;
+  Email_useSSL: boolean | null;
+  Email_useTLS: boolean | null;
 }
 
 // Build the image base URL from Settings: DomainName + DefaultImages
