@@ -251,6 +251,18 @@ export async function getCatCores(): Promise<CatCoreRow[]> {
   return query<CatCoreRow>("SELECT CatCore_ID, Catcore_Name FROM CatCore ORDER BY Catcore_Name ASC");
 }
 
+export interface SubcatRow {
+  Category_ID: number;
+  Name: string;
+}
+
+export async function getSubcatsAdmin(parentId: number): Promise<SubcatRow[]> {
+  return query<SubcatRow>(
+    "SELECT Category_ID, Name FROM Categories WHERE Parent_ID = @parentId ORDER BY Priority ASC, Name ASC",
+    { parentId }
+  );
+}
+
 export async function getCategoriesAdmin(opts: {
   search?: string;
   display?: string;
