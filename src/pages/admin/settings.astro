@@ -188,11 +188,7 @@ function sectionHead(title: string) {
           <p class="text-xs text-gray-400 mt-1">Format: Abbrev^Name (e.g. US^United States)</p>
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Store Email</label>
-          <input type="email" name="email" value={String(v("Email"))} class={inp} />
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Merchant Email (receives orders)</label>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Store / Merchant Email</label>
           <input type="email" name="merchant_email" value={String(v("MerchantEmail"))} class={inp} />
         </div>
         <div>
