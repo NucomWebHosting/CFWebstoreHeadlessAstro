@@ -1,32 +1,293 @@
 ---
 import type { CategoryRow } from "../../lib/types";
-import type { CategoryListRow } from "../../lib/queries/admin";
+import type { CategoryListRow, CatCoreRow } from "../../lib/queries/admin";
 
 interface Props {
   category?: CategoryRow | null;
   allCategories: CategoryListRow[];
+  catCores: CatCoreRow[];
   action: string;
   cancelHref: string;
 }
-const { category: c, allCategories, action, cancelHref } = Astro.props;
+const { category: c, allCategories, catCores, action, cancelHref } = Astro.props;
 const v = (field: keyof CategoryRow) => c?.[field] ?? "";
+const chk = (field: keyof CategoryRow) => !!c?.[field];
+const num = (field: keyof CategoryRow) => Number(c?.[field] ?? 0);
+
+const inp = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+const inpNum = "w-32 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+const sel = inp;
+const chkLabel = "flex items-center gap-2 text-sm cursor-pointer";
+
+// Helper: select for product show fields (0=Default, 1=No, 2=Yes)
+const pshow = (field: keyof CategoryRow) => num(field);
 ---
 <form method="post" action={action} class="space-y-6">
 
+  <!-- SETTINGS -->
   <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
     <div class="px-6 py-4 border-b border-gray-100">
-      <h2 class="font-semibold text-gray-800">Basic Information</h2>
+      <h2 class="font-semibold text-gray-800">Settings</h2>
     </div>
     <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
       <div class="md:col-span-2">
         <label class="block text-sm font-medium text-gray-700 mb-1">Name <span class="text-red-500">*</span></label>
-        <input type="text" name="name" required value={v("Name")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <input type="text" name="name" required value={v("Name")} class={inp} />
       </div>
       <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Template <span class="text-red-500">*</span></label>
+        <select name="catcore_id" required class={sel}>
+          <option value=""></option>
+          {catCores.map((cc) => (
+            <option value={cc.CatCore_ID} selected={cc.CatCore_ID === c?.CatCore_ID}>{cc.Catcore_Name}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+        <input type="number" name="priority" min="0" value={v("Priority") || 50} class={inpNum} />
+        <span class="text-xs text-gray-400 ml-2">1 = highest, 0 = none</span>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Specialty Content</label>
+        <select name="specialty_content" class={sel}>
+          <option value="" selected={!v("Specialty_Content")}></option>
+          <option value="Onsale" selected={v("Specialty_Content") === "Onsale"}>SALE</option>
+          <option value="NEW" selected={v("Specialty_Content") === "NEW"}>NEW</option>
+          <option value="HOT" selected={v("Specialty_Content") === "HOT"}>HOT</option>
+        </select>
+        <p class="text-xs text-gray-400 mt-1">Use 'Products' template. Shows qualifying products from entire site.</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Custom Include</label>
+        <input type="text" name="custom_include" value={v("Custom_include")} class={inp} />
+        <p class="text-xs text-gray-400 mt-1">Path to custom code file from root directory.</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Parameters</label>
+        <input type="text" name="passparam" value={v("Passparam")} class={inp} />
+      </div>
+      <div class="md:col-span-2 flex flex-wrap gap-5 pt-2">
+        <label class={chkLabel}>
+          <input type="checkbox" name="highlight" checked={chk("Highlight")} class="rounded" />
+          <span>New (Highlight)</span>
+        </label>
+        <label class={chkLabel}>
+          <input type="checkbox" name="sale" checked={chk("Sale")} class="rounded" />
+          <span>Sale</span>
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <!-- DISPLAY -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Display</h2>
+    </div>
+    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="md:col-span-2 flex flex-wrap gap-5">
+        <label class={chkLabel}>
+          <input type="checkbox" name="display" checked={chk("Display")} class="rounded" />
+          <span>Display (active)</span>
+        </label>
+        <label class={chkLabel}>
+          <input type="checkbox" name="display_menu" checked={chk("Display_Menu")} class="rounded" />
+          <span>Show in Menu</span>
+        </label>
+        <label class={chkLabel}>
+          <input type="checkbox" name="display_mobile" checked={chk("Display_Mobile")} class="rounded" />
+          <span>Show in Mobile Menu</span>
+        </label>
+        <label class={chkLabel}>
+          <input type="checkbox" name="show_cat_header" checked={chk("ShowCatHeader")} class="rounded" />
+          <span>Show Category Header</span>
+        </label>
+        <label class={chkLabel}>
+          <input type="checkbox" name="prod_first" checked={chk("ProdFirst")} class="rounded" />
+          <span>Products Before Subcategories</span>
+        </label>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Long Description Position</label>
+        <select name="text_position" class={sel}>
+          <option value="0" selected={num("Text_position") === 0}>Top</option>
+          <option value="1" selected={num("Text_position") === 1}>Bottom (below products/features)</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Large Image Position</label>
+        <select name="lg_image_position" class={sel}>
+          <option value="0" selected={c?.Lg_image_position === 0}>Left</option>
+          <option value="1" selected={c?.Lg_image_position === 1}>Right</option>
+          <option value="2" selected={c?.Lg_image_position === 2}>Top</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Gallery Position</label>
+        <select name="gallery_position" class={sel}>
+          <option value="0" selected={num("Gallery_position") === 0}>Top</option>
+          <option value="1" selected={num("Gallery_position") === 1}>Bottom (below products/features)</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <!-- LAYOUT -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Layout</h2>
+    </div>
+    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="md:col-span-2">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Subcategories</p>
+        <div class="flex flex-wrap gap-5 mb-4">
+          <label class={chkLabel}>
+            <input type="checkbox" name="show_sub_cats" checked={chk("ShowSubCats")} class="rounded" />
+            <span>Show Subcategories</span>
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Subcat Columns</label>
+            <input type="number" name="ccolumns" min="0" max="6" value={v("CColumns") || ""} class={inpNum} placeholder="default" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Category Image Height (px)</label>
+            <input type="number" name="cat_image_height" min="0" value={v("Category_image_height") || ""} class={inpNum} placeholder="default" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Mobile Menu Label</label>
+            <input type="text" name="dropdownlabel" value={v("Dropdownlabel")} class={inp} />
+          </div>
+        </div>
+      </div>
+
+      <div class="md:col-span-2 border-t border-gray-100 pt-4">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Left Column</p>
+        <div class="flex flex-wrap gap-5 mb-4">
+          <label class={chkLabel}>
+            <input type="checkbox" name="show_prod_left_col" checked={chk("ShowProdLeftColumn")} class="rounded" />
+            <span>Show Filter Sidebar</span>
+          </label>
+          <label class={chkLabel}>
+            <input type="checkbox" name="show_brands" checked={chk("Showbrands")} class="rounded" />
+            <span>Show Brands</span>
+          </label>
+          <label class={chkLabel}>
+            <input type="checkbox" name="show_prod_filter" checked={chk("Showprodfilter")} class="rounded" />
+            <span>Show Product Filter</span>
+          </label>
+          <label class={chkLabel}>
+            <input type="checkbox" name="show_prod_type" checked={chk("Showprodtype")} class="rounded" />
+            <span>Show Product Type Header</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="md:col-span-2 border-t border-gray-100 pt-4">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Product Listing</p>
+        <div class="flex flex-wrap gap-5 mb-4">
+          <label class={chkLabel}>
+            <input type="checkbox" name="all_products" checked={chk("All_products")} class="rounded" />
+            <span>All Products (include subcats)</span>
+          </label>
+          <label class={chkLabel}>
+            <input type="checkbox" name="random" checked={chk("Random")} class="rounded" />
+            <span>Random Order</span>
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Product Columns</label>
+            <input type="number" name="pcolumns" min="0" max="6" value={v("PColumns") || ""} class={inpNum} placeholder="default" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Product Image Height (px)</label>
+            <input type="number" name="prod_image_height" min="0" value={v("Product_image_height") || ""} class={inpNum} placeholder="default" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRODUCT TEASER -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Product Teaser Display</h2>
+    </div>
+    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Always link to details</label>
+        <select name="prod_show_details" class={sel}>
+          <option value="0" selected={pshow("Product_show_Details") === 0}>No (default)</option>
+          <option value="1" selected={pshow("Product_show_Details") === 1}>Yes</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Short Description</label>
+        <select name="prod_show_short_desc" class={sel}>
+          <option value="0" selected={pshow("Product_show_shortDesc") === 0}>Default</option>
+          <option value="2" selected={pshow("Product_show_shortDesc") === 2}>Yes</option>
+          <option value="1" selected={pshow("Product_show_shortDesc") === 1}>No</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Order Box</label>
+        <select name="prod_show_order_box" class={sel}>
+          <option value="0" selected={pshow("Product_show_orderBox") === 0}>Default</option>
+          <option value="2" selected={pshow("Product_show_orderBox") === 2}>Yes</option>
+          <option value="1" selected={pshow("Product_show_orderBox") === 1}>No</option>
+          <option value="3" selected={pshow("Product_show_orderBox") === 3}>Price Only</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Ratings</label>
+        <select name="prod_show_ratings" class={sel}>
+          <option value="0" selected={pshow("Product_show_ratings") === 0}>Default</option>
+          <option value="2" selected={pshow("Product_show_ratings") === 2}>Yes</option>
+          <option value="1" selected={pshow("Product_show_ratings") === 1}>No</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Icons</label>
+        <select name="prod_show_icons" class={sel}>
+          <option value="0" selected={pshow("Product_show_Icons") === 0}>Default</option>
+          <option value="2" selected={pshow("Product_show_Icons") === 2}>Yes</option>
+          <option value="1" selected={pshow("Product_show_Icons") === 1}>No</option>
+          <option value="3" selected={pshow("Product_show_Icons") === 3}>Sale Only</option>
+          <option value="4" selected={pshow("Product_show_Icons") === 4}>New Only</option>
+          <option value="5" selected={pshow("Product_show_Icons") === 5}>Hot Only</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+        <select name="prod_show_sku" class={sel}>
+          <option value="0" selected={pshow("Product_show_sku") === 0}>Default</option>
+          <option value="2" selected={pshow("Product_show_sku") === 2}>Yes</option>
+          <option value="1" selected={pshow("Product_show_sku") === 1}>No</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Custom Fields</label>
+        <select name="prod_show_custom_fields" class={sel}>
+          <option value="0" selected={pshow("Product_show_customFields") === 0}>Default</option>
+          <option value="2" selected={pshow("Product_show_customFields") === 2}>Yes</option>
+          <option value="1" selected={pshow("Product_show_customFields") === 1}>No</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <!-- MENU -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Menu</h2>
+    </div>
+    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">Parent Category</label>
-        <select name="parent_id"
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <select name="parent_id" class={sel}>
           <option value="0">— Top Level —</option>
           {allCategories
             .filter((cat) => cat.Category_ID !== c?.Category_ID)
@@ -39,121 +300,70 @@ const v = (field: keyof CategoryRow) => c?.[field] ?? "";
         </select>
       </div>
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Page URL</label>
-        <input type="text" name="page_url" value={v("Page_URL")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-        <input type="number" name="priority" min="0" value={v("Priority") || 50}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Image Position</label>
-        <select name="lg_image_position"
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="0" selected={c?.Lg_image_position === 0}>Left</option>
-          <option value="1" selected={c?.Lg_image_position === 1}>Right</option>
-          <option value="2" selected={c?.Lg_image_position === 2}>Top</option>
-        </select>
-      </div>
-    </div>
-    <div class="px-6 pb-5 flex flex-wrap gap-5">
-      <label class="flex items-center gap-2 text-sm cursor-pointer">
-        <input type="checkbox" name="display" checked={!!c?.Display} class="rounded" />
-        <span>Display (active)</span>
-      </label>
-      <label class="flex items-center gap-2 text-sm cursor-pointer">
-        <input type="checkbox" name="display_menu" checked={!!c?.Display_Menu} class="rounded" />
-        <span>Show in Menu</span>
-      </label>
-      <label class="flex items-center gap-2 text-sm cursor-pointer">
-        <input type="checkbox" name="show_cat_header" checked={!!c?.ShowCatHeader} class="rounded" />
-        <span>Show Category Header</span>
-      </label>
-      <label class="flex items-center gap-2 text-sm cursor-pointer">
-        <input type="checkbox" name="show_sub_cats" checked={!!c?.ShowSubCats} class="rounded" />
-        <span>Show Subcategories</span>
-      </label>
-      <label class="flex items-center gap-2 text-sm cursor-pointer">
-        <input type="checkbox" name="prod_first" checked={!!c?.ProdFirst} class="rounded" />
-        <span>Products Before Subcats</span>
-      </label>
-      <label class="flex items-center gap-2 text-sm cursor-pointer">
-        <input type="checkbox" name="show_prod_left_col" checked={!!c?.ShowProdLeftColumn} class="rounded" />
-        <span>Show Filter Sidebar</span>
-      </label>
-    </div>
-  </section>
-
-  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-    <div class="px-6 py-4 border-b border-gray-100">
-      <h2 class="font-semibold text-gray-800">Images</h2>
-    </div>
-    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Small Image (filename)</label>
-        <input type="text" name="sm_image" value={v("Sm_Image")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Large Image (filename)</label>
-        <input type="text" name="lg_image" value={v("Lg_image")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-      <div class="md:col-span-2">
-        <label class="block text-sm font-medium text-gray-700 mb-1">Large Image Title</label>
-        <input type="text" name="lg_title" value={v("Lg_Title")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <label class="block text-sm font-medium text-gray-700 mb-1">Page URL Override</label>
+        <input type="text" name="page_url" value={v("Page_URL")} class={inp} />
+        <p class="text-xs text-gray-400 mt-1">Overrides dynamic category link. Enter NULL to make non-clickable.</p>
       </div>
     </div>
   </section>
 
+  <!-- IMAGES & CONTENT -->
   <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
     <div class="px-6 py-4 border-b border-gray-100">
-      <h2 class="font-semibold text-gray-800">Description</h2>
+      <h2 class="font-semibold text-gray-800">Images & Content</h2>
     </div>
     <div class="p-6 space-y-4">
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Short Description</label>
-        <textarea name="short_desc" rows="3"
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >{v("Short_Desc")}</textarea>
+      <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Teaser (appears as subcategory on other pages)</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Small Image</label>
+          <input type="text" name="sm_image" value={v("Sm_Image")} class={`${inp} font-mono`} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Short Description</label>
+          <textarea name="short_desc" rows="3" class={inp}>{v("Short_Desc")}</textarea>
+        </div>
       </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Long Description (HTML)</label>
-        <textarea name="long_desc" rows="6"
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >{v("Long_Desc")}</textarea>
+      <hr class="border-gray-100" />
+      <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Main (appears at top of category page)</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Large Image</label>
+          <input type="text" name="lg_image" value={v("Lg_image")} class={`${inp} font-mono`} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Large Image Title</label>
+          <input type="text" name="lg_title" value={v("Lg_Title")} class={inp} />
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Long Description (HTML)</label>
+          <textarea name="long_desc" rows="8" class={`${inp} font-mono`}>{v("Long_Desc")}</textarea>
+        </div>
       </div>
     </div>
   </section>
 
+  <!-- SEO -->
   <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
     <div class="px-6 py-4 border-b border-gray-100">
-      <h2 class="font-semibold text-gray-800">SEO & URL</h2>
+      <h2 class="font-semibold text-gray-800">SEO</h2>
     </div>
     <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
       <div class="md:col-span-2">
         <label class="block text-sm font-medium text-gray-700 mb-1">Permalink (slug)</label>
-        <input type="text" name="permalink" value={v("Permalink")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <input type="text" name="permalink" value={v("Permalink")} class={`${inp} font-mono`} />
       </div>
       <div class="md:col-span-2">
         <label class="block text-sm font-medium text-gray-700 mb-1">Title Tag</label>
-        <input type="text" name="title_tag" value={v("TitleTag")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <input type="text" name="title_tag" value={v("TitleTag")} class={inp} />
       </div>
       <div class="md:col-span-2">
         <label class="block text-sm font-medium text-gray-700 mb-1">Meta Description</label>
-        <textarea name="metadescription" rows="2"
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >{v("Metadescription")}</textarea>
+        <textarea name="metadescription" rows="2" class={inp}>{v("Metadescription")}</textarea>
       </div>
       <div class="md:col-span-2">
         <label class="block text-sm font-medium text-gray-700 mb-1">Keywords</label>
-        <input type="text" name="keywords" value={v("Keywords")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <textarea name="keywords" rows="2" class={inp}>{v("Keywords")}</textarea>
       </div>
     </div>
   </section>

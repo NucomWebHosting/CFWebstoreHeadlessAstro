@@ -3,7 +3,7 @@ export const prerender = false;
 import AdminLayout from "../../../components/layout/AdminLayout.astro";
 import CategoryForm from "../../../components/admin/CategoryForm.astro";
 import {
-  getCategoryByIdAdmin, getCategoriesAdmin,
+  getCategoryByIdAdmin, getCategoriesAdmin, getCatCores,
   updateCategory, deleteCategory,
 } from "../../../lib/queries/admin";
 
@@ -24,9 +24,10 @@ if (Astro.request.method === "POST") {
   }
 }
 
-const [category, { rows: allCategories }] = await Promise.all([
+const [category, { rows: allCategories }, catCores] = await Promise.all([
   getCategoryByIdAdmin(id),
   getCategoriesAdmin({ perPage: 9999 }),
+  getCatCores(),
 ]);
 if (!category) return new Response(null, { status: 404 });
 
@@ -51,6 +52,7 @@ const saved = Astro.url.searchParams.get("saved") === "1";
   <CategoryForm
     category={category}
     allCategories={allCategories}
+    catCores={catCores}
     action={`/admin/categories/${id}`}
     cancelHref="/admin/categories"
   />

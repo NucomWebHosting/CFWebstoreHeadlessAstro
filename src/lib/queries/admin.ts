@@ -182,6 +182,15 @@ export interface CategoryListRow {
   Catcore_name: string | null;
 }
 
+export interface CatCoreRow {
+  CatCore_ID: number;
+  Catcore_Name: string;
+}
+
+export async function getCatCores(): Promise<CatCoreRow[]> {
+  return query<CatCoreRow>("SELECT CatCore_ID, Catcore_Name FROM CatCore ORDER BY Catcore_Name ASC");
+}
+
 export async function getCategoriesAdmin(opts: {
   search?: string;
   display?: string;
@@ -236,31 +245,60 @@ export async function getCategoryByIdAdmin(id: number): Promise<CategoryRow | nu
 }
 
 function categoryParams(data: FormData): Record<string, string | number | boolean | null> {
-  const s = (k: string) => (data.get(k) as string | null) ?? null;
+  const s    = (k: string) => (data.get(k) as string | null) ?? null;
   const sval = (k: string) => { const v = s(k); return v?.trim() || null; };
-  const b = (k: string) => data.get(k) === "on";
-  const i = (k: string, fallback = 0) => parseInt(s(k) ?? "") || fallback;
+  const b    = (k: string) => data.get(k) === "on";
+  const n    = (k: string, def = 0) => { const v = s(k); return v?.trim() ? parseInt(v) || def : def; };
+  const nopt = (k: string) => { const v = s(k); return v?.trim() ? parseInt(v) || null : null; };
+  const i    = (k: string, fallback = 0) => parseInt(s(k) ?? "") || fallback;
   return {
-    name:               s("name") ?? "",
-    parent_id:          i("parent_id"),
-    short_desc:         sval("short_desc"),
-    long_desc:          sval("long_desc"),
-    sm_image:           sval("sm_image"),
-    lg_image:           sval("lg_image"),
-    lg_title:           sval("lg_title"),
-    lg_image_position:  i("lg_image_position"),
-    page_url:           sval("page_url"),
-    display:            b("display"),
-    display_menu:       b("display_menu"),
-    show_cat_header:    b("show_cat_header"),
-    show_sub_cats:      b("show_sub_cats"),
-    prod_first:         b("prod_first"),
-    show_prod_left_col: b("show_prod_left_col"),
-    priority:           i("priority", 50),
-    permalink:          sval("permalink"),
-    metadescription:    sval("metadescription"),
-    keywords:           sval("keywords"),
-    title_tag:          sval("title_tag"),
+    name:                s("name") ?? "",
+    parent_id:           i("parent_id"),
+    catcore_id:          i("catcore_id", 7),
+    short_desc:          sval("short_desc"),
+    long_desc:           sval("long_desc"),
+    sm_image:            sval("sm_image"),
+    lg_image:            sval("lg_image"),
+    lg_title:            sval("lg_title"),
+    lg_image_position:   i("lg_image_position"),
+    page_url:            sval("page_url"),
+    display:             b("display"),
+    display_menu:        b("display_menu"),
+    display_mobile:      b("display_mobile"),
+    show_cat_header:     b("show_cat_header"),
+    show_sub_cats:       b("show_sub_cats"),
+    prod_first:          b("prod_first"),
+    show_prod_left_col:  b("show_prod_left_col"),
+    highlight:           b("highlight"),
+    sale:                b("sale"),
+    priority:            i("priority", 50),
+    specialty_content:   sval("specialty_content"),
+    custom_include:      sval("custom_include"),
+    passparam:           sval("passparam"),
+    text_position:       n("text_position"),
+    gallery_position:    n("gallery_position"),
+    cat_image_height:    n("cat_image_height"),
+    ccolumns:            nopt("ccolumns"),
+    pcolumns:            nopt("pcolumns"),
+    show_brands:         b("show_brands"),
+    show_prod_filter:    b("show_prod_filter"),
+    show_prod_type:      b("show_prod_type"),
+    all_products:        b("all_products"),
+    random:              b("random"),
+    prod_show_details:   n("prod_show_details"),
+    prod_show_short_desc: n("prod_show_short_desc"),
+    prod_show_order_box: n("prod_show_order_box"),
+    prod_show_ratings:   n("prod_show_ratings"),
+    prod_show_icons:     n("prod_show_icons"),
+    prod_show_sku:       n("prod_show_sku"),
+    prod_show_custom_fields: n("prod_show_custom_fields"),
+    prod_image_height:   nopt("prod_image_height"),
+    dropdownlabel:       sval("dropdownlabel"),
+    search_criteria:     sval("search_criteria"),
+    permalink:           sval("permalink"),
+    metadescription:     sval("metadescription"),
+    keywords:            sval("keywords"),
+    title_tag:           sval("title_tag"),
   };
 }
 
@@ -268,15 +306,29 @@ export async function createCategory(data: FormData): Promise<number> {
   const p = categoryParams(data);
   const rows = await query<{ Category_ID: number }>(
     `INSERT INTO Categories
-       (Name, Parent_ID, Short_Desc, Long_Desc, Sm_Image, Lg_image, Lg_Title,
+       (Name, Parent_ID, CatCore_ID, Short_Desc, Long_Desc, Sm_Image, Lg_image, Lg_Title,
         Lg_image_position, Page_URL, Display, Display_Menu, ShowCatHeader,
         ShowSubCats, ProdFirst, ShowProdLeftColumn, Priority,
+        Highlight, Sale, Display_Mobile, Specialty_Content, Custom_include, Passparam,
+        Text_position, Gallery_position, Category_image_height,
+        CColumns, PColumns, Showbrands, Showprodfilter, Showprodtype,
+        All_products, Random,
+        Product_show_Details, Product_show_shortDesc, Product_show_orderBox,
+        Product_show_ratings, Product_show_Icons, Product_show_sku, Product_show_customFields,
+        Product_image_height, Dropdownlabel, SearchCriteria,
         Permalink, Metadescription, Keywords, TitleTag)
      OUTPUT INSERTED.Category_ID
      VALUES
-       (@name, @parent_id, @short_desc, @long_desc, @sm_image, @lg_image, @lg_title,
+       (@name, @parent_id, @catcore_id, @short_desc, @long_desc, @sm_image, @lg_image, @lg_title,
         @lg_image_position, @page_url, @display, @display_menu, @show_cat_header,
         @show_sub_cats, @prod_first, @show_prod_left_col, @priority,
+        @highlight, @sale, @display_mobile, @specialty_content, @custom_include, @passparam,
+        @text_position, @gallery_position, @cat_image_height,
+        @ccolumns, @pcolumns, @show_brands, @show_prod_filter, @show_prod_type,
+        @all_products, @random,
+        @prod_show_details, @prod_show_short_desc, @prod_show_order_box,
+        @prod_show_ratings, @prod_show_icons, @prod_show_sku, @prod_show_custom_fields,
+        @prod_image_height, @dropdownlabel, @search_criteria,
         @permalink, @metadescription, @keywords, @title_tag)`,
     p
   );
@@ -287,12 +339,26 @@ export async function updateCategory(id: number, data: FormData): Promise<void> 
   const p = categoryParams(data);
   await query(
     `UPDATE Categories SET
-       Name = @name, Parent_ID = @parent_id, Short_Desc = @short_desc, Long_Desc = @long_desc,
+       Name = @name, Parent_ID = @parent_id, CatCore_ID = @catcore_id,
+       Short_Desc = @short_desc, Long_Desc = @long_desc,
        Sm_Image = @sm_image, Lg_image = @lg_image, Lg_Title = @lg_title,
        Lg_image_position = @lg_image_position, Page_URL = @page_url,
        Display = @display, Display_Menu = @display_menu, ShowCatHeader = @show_cat_header,
        ShowSubCats = @show_sub_cats, ProdFirst = @prod_first,
        ShowProdLeftColumn = @show_prod_left_col, Priority = @priority,
+       Highlight = @highlight, Sale = @sale, Display_Mobile = @display_mobile,
+       Specialty_Content = @specialty_content, Custom_include = @custom_include, Passparam = @passparam,
+       Text_position = @text_position, Gallery_position = @gallery_position,
+       Category_image_height = @cat_image_height,
+       CColumns = @ccolumns, PColumns = @pcolumns,
+       Showbrands = @show_brands, Showprodfilter = @show_prod_filter, Showprodtype = @show_prod_type,
+       All_products = @all_products, Random = @random,
+       Product_show_Details = @prod_show_details, Product_show_shortDesc = @prod_show_short_desc,
+       Product_show_orderBox = @prod_show_order_box, Product_show_ratings = @prod_show_ratings,
+       Product_show_Icons = @prod_show_icons, Product_show_sku = @prod_show_sku,
+       Product_show_customFields = @prod_show_custom_fields,
+       Product_image_height = @prod_image_height,
+       Dropdownlabel = @dropdownlabel, SearchCriteria = @search_criteria,
        Permalink = @permalink, Metadescription = @metadescription,
        Keywords = @keywords, TitleTag = @title_tag
      WHERE Category_ID = @id`,

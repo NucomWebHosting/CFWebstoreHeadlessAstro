@@ -47,6 +47,44 @@ export interface CategoryRow {
   TitleTag: string | null;
   CatCore_ID: number;
   AccessKey: number | null;
+  Highlight: boolean | null;
+  Sale: boolean | null;
+  Passparam: string | null;
+  Specialty_Content: string | null;
+  Display_Mobile: boolean | null;
+  Text_position: number | null;
+  Gallery_position: number | null;
+  Category_image_height: number | null;
+  CColumns: number | null;
+  PColumns: number | null;
+  Showbrands: boolean | null;
+  Showprodfilter: boolean | null;
+  Showprodtype: boolean | null;
+  All_products: boolean | null;
+  Random: boolean | null;
+  Product_show_Details: number | null;
+  Product_show_shortDesc: number | null;
+  Product_show_orderBox: number | null;
+  Product_show_ratings: number | null;
+  Product_show_Icons: number | null;
+  Product_show_sku: number | null;
+  Product_show_customFields: number | null;
+  Product_image_height: number | null;
+  Dropdownlabel: string | null;
+  SearchCriteria: string | null;
+  MM_tab: boolean | null;
+  MM_width: string | null;
+  MM_flyout_width: string | null;
+  MM_columns: number | null;
+  MM_subcats: boolean | null;
+  MM_percolumn: string | null;
+  MM_productID: number | null;
+  MM_sm_image: string | null;
+  MM_show_sm_image: boolean | null;
+  MM_link: string | null;
+  MM_title: string | null;
+  MM_short_desc: string | null;
+  MM_dummy_title: string | null;
 }
 
 export interface ProductRow {
