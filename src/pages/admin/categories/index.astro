@@ -132,12 +132,12 @@ const { start: winStart, end: winEnd } = pageWindow(pageParam, totalPages);
     <table class="w-full text-sm">
       <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
         <tr>
-          <th class="px-4 py-3 text-left w-16">ID</th>
+          <th class="px-4 py-3 text-left w-20">ID</th>
           <th class="px-4 py-3 text-left">Category</th>
+          <th class="px-4 py-3 text-left w-32">Template</th>
           <th class="px-4 py-3 text-center w-20">Display</th>
           <th class="px-4 py-3 text-center w-20">Menu</th>
           <th class="px-4 py-3 text-right w-20">Priority</th>
-          <th class="px-4 py-3 text-right w-32"></th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
@@ -148,14 +148,18 @@ const { start: winStart, end: winEnd } = pageWindow(pageParam, totalPages);
         )}
         {categories.map((c) => (
           <tr class="hover:bg-gray-50">
-            <td class="px-4 py-3 text-gray-400 text-xs">{c.Category_ID}</td>
+            <td class="px-4 py-3 text-xs">
+              <a href={`/admin/categories/${c.Category_ID}`} class="text-blue-600 hover:underline font-mono">
+                {c.Category_ID}
+              </a>
+            </td>
             <td class="px-4 py-3 font-medium text-gray-800">
-              <!-- Name links into subcategory browse -->
               <a href={`/admin/categories?pid=${c.Category_ID}`} class="hover:text-blue-600">
                 {c.Name}
               </a>
               <span class="text-gray-300 ml-1">&raquo;</span>
             </td>
+            <td class="px-4 py-3 text-gray-500 text-xs">{c.Catcore_name ?? "—"}</td>
             <td class="px-4 py-3 text-center">
               {c.Display
                 ? <span class="text-green-600 font-bold text-xs">Yes</span>
@@ -167,14 +171,6 @@ const { start: winStart, end: winEnd } = pageWindow(pageParam, totalPages);
                 : <span class="text-gray-300 text-xs">No</span>}
             </td>
             <td class="px-4 py-3 text-right text-gray-500">{c.Priority}</td>
-            <td class="px-4 py-3 text-right">
-              <a href={`/admin/categories/${c.Category_ID}`} class="text-blue-600 hover:underline text-xs mr-3">Edit</a>
-              <form method="post" action={`/api/admin/categories/${c.Category_ID}`} class="inline"
-                    onsubmit="return confirm('Delete this category?')">
-                <input type="hidden" name="_method" value="DELETE" />
-                <button type="submit" class="text-red-500 hover:underline text-xs">Delete</button>
-              </form>
-            </td>
           </tr>
         ))}
       </tbody>

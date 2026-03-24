@@ -179,6 +179,7 @@ export interface CategoryListRow {
   Display: boolean;
   Display_Menu: boolean;
   Priority: number;
+  Catcore_name: string | null;
 }
 
 export async function getCategoriesAdmin(opts: {
@@ -196,25 +197,31 @@ export async function getCategoriesAdmin(opts: {
   const params: Record<string, string | number | null> = {};
 
   if (opts.search) {
-    conditions.push("Name LIKE @search");
+    conditions.push("C.Name LIKE @search");
     params.search = `%${opts.search}%`;
   }
-  if (opts.display === "1") conditions.push("Display = 1");
-  else if (opts.display === "0") conditions.push("Display = 0");
+  if (opts.display === "1") conditions.push("C.Display = 1");
+  else if (opts.display === "0") conditions.push("C.Display = 0");
 
   if (opts.parentId !== null && opts.parentId !== undefined) {
-    conditions.push("Parent_ID = @parent_id");
+    conditions.push("C.Parent_ID = @parent_id");
     params.parent_id = opts.parentId;
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
   const [countRows, rows] = await Promise.all([
-    query<{ total: number }>(`SELECT COUNT(*) AS total FROM Categories ${where}`, params),
+    query<{ total: number }>(
+      `SELECT COUNT(*) AS total FROM Categories C INNER JOIN CatCore CC ON C.CatCore_ID = CC.CatCore_ID ${where}`,
+      params
+    ),
     query<CategoryListRow>(
-      `SELECT Category_ID, Name, Parent_ID, Display, Display_Menu, Priority
-       FROM Categories ${where}
-       ORDER BY Priority ASC, Name ASC
+      `SELECT C.Category_ID, C.Name, C.Parent_ID, C.Display, C.Display_Menu, C.Priority,
+              CC.Catcore_Name AS Catcore_name
+       FROM Categories C
+       INNER JOIN CatCore CC ON C.CatCore_ID = CC.CatCore_ID
+       ${where}
+       ORDER BY C.Priority ASC, C.Name ASC
        OFFSET ${offset} ROWS FETCH NEXT ${perPage} ROWS ONLY`,
       params
     ),
