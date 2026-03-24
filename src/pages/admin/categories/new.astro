@@ -4,7 +4,7 @@ import AdminLayout from "../../../components/layout/AdminLayout.astro";
 import CategoryForm from "../../../components/admin/CategoryForm.astro";
 import { getCategoriesAdmin, createCategory } from "../../../lib/queries/admin";
 
-const allCategories = await getCategoriesAdmin();
+const { rows: allCategories } = await getCategoriesAdmin({ perPage: 9999 });
 let error = "";
 
 if (Astro.request.method === "POST") {

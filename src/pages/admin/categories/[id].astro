@@ -24,9 +24,9 @@ if (Astro.request.method === "POST") {
   }
 }
 
-const [category, allCategories] = await Promise.all([
+const [category, { rows: allCategories }] = await Promise.all([
   getCategoryByIdAdmin(id),
-  getCategoriesAdmin(),
+  getCategoriesAdmin({ perPage: 9999 }),
 ]);
 if (!category) return new Response(null, { status: 404 });
 
