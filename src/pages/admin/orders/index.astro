@@ -1,0 +1,350 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getOrdersAdmin } from "../../../lib/queries/admin-orders";
+
+const PER_PAGE = 40;
+
+// ── Params ────────────────────────────────────────────────────────────────────
+const tab         = Astro.url.searchParams.get("tab")         ?? "pending";
+const orderNo     = Astro.url.searchParams.get("order_no")    ?? "";
+const customer    = Astro.url.searchParams.get("customer")    ?? "";
+const paid        = Astro.url.searchParams.get("paid")        ?? "";
+const source      = Astro.url.searchParams.get("source")      ?? "";
+const voidStatus  = Astro.url.searchParams.get("void")        ?? "";
+const orderStatus = Astro.url.searchParams.get("ordertype")   ?? "";
+const orderdate   = Astro.url.searchParams.get("orderdate")   ?? "";
+const startDate   = Astro.url.searchParams.get("startdate")   ?? "";
+const toDate      = Astro.url.searchParams.get("todate")      ?? "";
+const pageParam   = parseInt(Astro.url.searchParams.get("page") ?? "1") || 1;
+
+const { rows: orders, total } = await getOrdersAdmin({
+  tab, orderNo, customer, paid, source,
+  voidStatus, orderStatus, orderdate, startDate, toDate,
+  page: pageParam, perPage: PER_PAGE,
+});
+
+const totalPages = Math.ceil(total / PER_PAGE);
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function filterQS(overrides: Record<string, string | number | null> = {}) {
+  const p: Record<string, string> = { tab };
+  if (orderNo)     p.order_no   = orderNo;
+  if (customer)    p.customer   = customer;
+  if (paid)        p.paid       = paid;
+  if (source)      p.source     = source;
+  if (voidStatus)  p.void       = voidStatus;
+  if (orderStatus) p.ordertype  = orderStatus;
+  if (orderdate)   p.orderdate  = orderdate;
+  if (startDate)   p.startdate  = startDate;
+  if (toDate)      p.todate     = toDate;
+  for (const [k, v] of Object.entries(overrides)) {
+    if (v === null || v === "") delete p[k];
+    else p[k] = String(v);
+  }
+  const qs = new URLSearchParams(p).toString();
+  return qs ? `?${qs}` : "";
+}
+
+function tabHref(t: string) {
+  return `?tab=${t}`;
+}
+
+function pageWindow(current: number, total: number, size = 5) {
+  const half  = Math.floor(size / 2);
+  let start   = Math.max(1, current - half);
+  const end   = Math.min(total, start + size - 1);
+  start       = Math.max(1, end - size + 1);
+  return { start, end };
+}
+const { start: winStart, end: winEnd } = pageWindow(pageParam, totalPages);
+
+function fmt(n: number) {
+  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+function fmtDate(d: Date | null) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit" });
+}
+
+// Totals row
+const totalToFill    = orders.reduce((s, o) => s + (o.ToFill > 0 ? o.ToFill : 0), 0);
+const totalOrderTot  = orders.reduce((s, o) => s + o.OrderTotal, 0);
+const totalAmtPaid   = orders.reduce((s, o) => s + o.AmountPaid, 0);
+const totalBalDue    = orders.reduce((s, o) => s + Math.max(0, o.OrderTotal - o.AmountPaid), 0);
+
+const showDateRange = tab === "filled" || tab === "search";
+const showQuickDate = tab === "pending" || tab === "process";
+const showVoidFilter   = tab === "filled";
+const showStatusFilter = tab === "search";
+const showStatusCol    = tab === "search";
+const showPackingCol   = tab === "pending" || tab === "process";
+
+const tabs = [
+  { key: "pending", label: "Pending"     },
+  { key: "process", label: "In Process"  },
+  { key: "filled",  label: "Filled"      },
+  { key: "search",  label: "Search All"  },
+];
+---
+<AdminLayout title="Orders">
+
+  <!-- Tab nav -->
+  <div class="flex gap-1 mb-4 border-b border-gray-200">
+    {tabs.map(t => (
+      <a href={tabHref(t.key)}
+         class={`px-4 py-2 text-sm font-medium rounded-t-lg -mb-px border ${
+           t.key === tab
+             ? "border-gray-200 border-b-white bg-white text-blue-600"
+             : "border-transparent text-gray-500 hover:text-gray-700"
+         }`}>
+        {t.label}
+      </a>
+    ))}
+  </div>
+
+  <!-- Filter form -->
+  <form method="get" action="/admin/orders" class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
+    <input type="hidden" name="tab" value={tab} />
+
+    <!-- Always-visible row -->
+    <div class="flex flex-wrap gap-3 items-end mb-3">
+      <button type="submit" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700">
+        Search
+      </button>
+
+      {showQuickDate && (
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Order Date</label>
+          <select name="orderdate" class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+            <option value="">All</option>
+            <option value="today"      selected={orderdate === "today"}>Today</option>
+            <option value="yesterday"  selected={orderdate === "yesterday"}>Yesterday</option>
+            <option value="this-month" selected={orderdate === "this-month"}>This Month</option>
+            <option value="last-month" selected={orderdate === "last-month"}>Last Month</option>
+            <option value="this-year"  selected={orderdate === "this-year"}>This Year</option>
+          </select>
+        </div>
+      )}
+
+      {showDateRange && (
+        <>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Order date from</label>
+            <input type="date" name="startdate" value={startDate}
+                   class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Order date through</label>
+            <input type="date" name="todate" value={toDate}
+                   class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </>
+      )}
+
+      <a href={tabHref(tab)} class="border border-gray-300 px-3 py-1.5 rounded text-sm text-gray-600 hover:bg-gray-50">
+        All
+      </a>
+    </div>
+
+    <!-- Advanced filters (collapsible) -->
+    <details class={orderNo || customer || paid || source || voidStatus || orderStatus ? "open" : ""}>
+      <summary class="text-xs text-gray-400 cursor-pointer hover:text-gray-600 mb-2">Advanced filters</summary>
+      <div class="border-t border-gray-100 pt-3 flex flex-wrap gap-3 items-end">
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Order No.</label>
+          <input type="number" name="order_no" value={orderNo} maxlength="10"
+                 class="border border-gray-300 rounded px-2 py-1 text-sm w-28 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Customer</label>
+          <input type="text" name="customer" value={customer} maxlength="50" placeholder="name or company"
+                 class="border border-gray-300 rounded px-2 py-1 text-sm w-48 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Paid</label>
+          <select name="paid" class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+            <option value="">All</option>
+            <option value="1" selected={paid === "1"}>Yes</option>
+            <option value="0" selected={paid === "0"}>No</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Source</label>
+          <select name="source" class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+            <option value="">All</option>
+            <option value="POS" selected={source === "POS"}>POS</option>
+            <option value="WEB" selected={source === "WEB"}>WEB</option>
+          </select>
+        </div>
+
+        {showVoidFilter && (
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Void</label>
+            <select name="void" class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+              <option value="">All</option>
+              <option value="none"      selected={voidStatus === "none"}>Not void</option>
+              <option value="void"      selected={voidStatus === "void"}>Void</option>
+              <option value="cancelled" selected={voidStatus === "cancelled"}>Cancelled</option>
+              <option value="fraud"     selected={voidStatus === "fraud"}>Fraud</option>
+            </select>
+          </div>
+        )}
+
+        {showStatusFilter && (
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Order Status</label>
+            <select name="ordertype" class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+              <option value="all">All</option>
+              <option value="pending"   selected={orderStatus === "pending"}>Pending</option>
+              <option value="process"   selected={orderStatus === "process"}>Web In-Process</option>
+              <option value="filled"    selected={orderStatus === "filled"}>Filled</option>
+              <option value="void"      selected={orderStatus === "void"}>Void</option>
+              <option value="cancelled" selected={orderStatus === "cancelled"}>Cancelled</option>
+              <option value="fraud"     selected={orderStatus === "fraud"}>Fraud</option>
+            </select>
+          </div>
+        )}
+
+      </div>
+    </details>
+  </form>
+
+  <!-- Results table -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+
+    <!-- Count + pagination top -->
+    <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between text-xs text-gray-500">
+      <span>{total} {total === 1 ? "order" : "orders"}{total > PER_PAGE ? `, page ${pageParam} of ${totalPages}` : ""}</span>
+      {totalPages > 1 && (
+        <div class="flex gap-1 items-center">
+          {pageParam > 1
+            ? <a href={filterQS({ page: pageParam - 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&lsaquo;</a>
+            : <span class="px-2 py-1 border rounded text-gray-300 cursor-default">&lsaquo;</span>}
+          {winStart > 1 && <span class="px-1 text-gray-400">…</span>}
+          {Array.from({ length: winEnd - winStart + 1 }, (_, i) => winStart + i).map((p) => (
+            <a href={filterQS({ page: p })}
+               class={`px-2 py-1 border rounded ${p === pageParam ? "bg-blue-600 text-white border-blue-600" : "hover:bg-gray-50"}`}>
+              {p}
+            </a>
+          ))}
+          {winEnd < totalPages && <span class="px-1 text-gray-400">…</span>}
+          {pageParam < totalPages
+            ? <a href={filterQS({ page: pageParam + 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&rsaquo;</a>
+            : <span class="px-2 py-1 border rounded text-gray-300 cursor-default">&rsaquo;</span>}
+        </div>
+      )}
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-4 py-3 text-left w-24">Order No.</th>
+            <th class="px-4 py-3 text-left w-24">Date</th>
+            <th class="px-4 py-3 text-left">Customer</th>
+            <th class="px-4 py-3 text-right w-20">To Fill</th>
+            <th class="px-4 py-3 text-right w-28">Order Total</th>
+            <th class="px-4 py-3 text-right w-28">Amt Paid</th>
+            <th class="px-4 py-3 text-right w-28">Balance Due</th>
+            <th class="px-4 py-3 text-center w-16">Paid</th>
+            <th class="px-4 py-3 text-left w-32">Shipping</th>
+            {showStatusCol && <th class="px-4 py-3 text-left w-24">Status</th>}
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {orders.length === 0 && (
+            <tr>
+              <td colspan={showStatusCol ? "10" : "9"} class="px-5 py-10 text-center text-gray-400">
+                No orders found.
+              </td>
+            </tr>
+          )}
+          {orders.map((o) => {
+            const balance = o.OrderTotal - o.AmountPaid;
+            return (
+              <tr class="hover:bg-gray-50">
+                <td class="px-4 py-3 font-mono text-xs">
+                  <a href={`/admin/orders/${o.Order_No}`} class="text-blue-600 hover:underline">
+                    {o.Order_No}
+                  </a>
+                </td>
+                <td class="px-4 py-3 text-xs text-gray-600">{fmtDate(o.DateOrdered)}</td>
+                <td class="px-4 py-3">
+                  <div class="font-medium text-gray-800">
+                    {o.FirstName} {o.LastName}
+                  </div>
+                  <div class="text-xs text-gray-400">
+                    {o.TotalProds} product{o.TotalProds !== 1 ? "s" : ""} ({o.TotalItems} items)
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-right text-xs">
+                  {o.ToFill > 0
+                    ? <span class="text-red-600 font-bold">{o.ToFill}</span>
+                    : <span class="text-gray-400">{o.ToFill}</span>}
+                </td>
+                <td class="px-4 py-3 text-right text-xs">{fmt(o.OrderTotal)}</td>
+                <td class="px-4 py-3 text-right text-xs">{fmt(o.AmountPaid)}</td>
+                <td class={`px-4 py-3 text-right text-xs ${balance > 0.005 ? "text-red-600 font-medium" : "text-gray-400"}`}>
+                  {fmt(balance)}
+                </td>
+                <td class="px-4 py-3 text-center">
+                  {o.Paid
+                    ? <span class="text-green-600 font-bold text-xs">✓</span>
+                    : <span class="text-red-400 text-xs">✗</span>}
+                </td>
+                <td class="px-4 py-3 text-xs text-gray-500">{o.ShipType ?? "—"}</td>
+                {showStatusCol && (
+                  <td class="px-4 py-3 text-xs text-gray-500">
+                    {o.Status || (o.Filled ? "Filled" : o.Process ? "In Process" : "Pending")}
+                  </td>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+        {orders.length > 0 && (
+          <tfoot class="bg-gray-50 text-xs font-semibold border-t border-gray-200">
+            <tr>
+              <td class="px-4 py-2 text-right text-gray-500" colspan={showStatusCol ? "3" : "3"}>Totals:</td>
+              <td class="px-4 py-2 text-right">{totalToFill}</td>
+              <td class="px-4 py-2 text-right">{fmt(totalOrderTot)}</td>
+              <td class="px-4 py-2 text-right">{fmt(totalAmtPaid)}</td>
+              <td class={`px-4 py-2 text-right ${totalBalDue > 0.005 ? "text-red-600" : "text-gray-400"}`}>
+                {fmt(totalBalDue)}
+              </td>
+              <td colspan={showStatusCol ? "3" : "2"}></td>
+            </tr>
+          </tfoot>
+        )}
+      </table>
+    </div>
+
+    <!-- Pagination bottom -->
+    {totalPages > 1 && (
+      <div class="px-5 py-3 border-t border-gray-100 flex justify-end">
+        <div class="flex gap-1 text-xs items-center">
+          {pageParam > 1
+            ? <a href={filterQS({ page: pageParam - 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&lsaquo;</a>
+            : <span class="px-2 py-1 border rounded text-gray-300 cursor-default">&lsaquo;</span>}
+          {winStart > 1 && <span class="px-1 text-gray-400">…</span>}
+          {Array.from({ length: winEnd - winStart + 1 }, (_, i) => winStart + i).map((p) => (
+            <a href={filterQS({ page: p })}
+               class={`px-2 py-1 border rounded ${p === pageParam ? "bg-blue-600 text-white border-blue-600" : "hover:bg-gray-50"}`}>
+              {p}
+            </a>
+          ))}
+          {winEnd < totalPages && <span class="px-1 text-gray-400">…</span>}
+          {pageParam < totalPages
+            ? <a href={filterQS({ page: pageParam + 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&rsaquo;</a>
+            : <span class="px-2 py-1 border rounded text-gray-300 cursor-default">&rsaquo;</span>}
+        </div>
+      </div>
+    )}
+  </div>
+
+</AdminLayout>
