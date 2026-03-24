@@ -10,12 +10,13 @@ const search    = Astro.url.searchParams.get("name") ?? "";
 const display   = Astro.url.searchParams.get("catdisplay") ?? "";
 const pidParam  = Astro.url.searchParams.get("pid");
 const pageParam = parseInt(Astro.url.searchParams.get("page") ?? "1") || 1;
-const parentId  = pidParam !== null ? parseInt(pidParam) || 0 : null;
+// Default to top-level (parent_id = 0) when no pid param is provided
+const parentId  = pidParam !== null ? (parseInt(pidParam) || 0) : 0;
 
 const { rows: categories, total } = await getCategoriesAdmin({
   search:   search || undefined,
   display:  display || undefined,
-  parentId: parentId ?? undefined,
+  parentId,
   page:     pageParam,
   perPage:  PER_PAGE,
 });
@@ -33,7 +34,7 @@ function filterQS(overrides: Record<string, string | number | null> = {}) {
   const p: Record<string, string> = {};
   if (search)  p.name       = search;
   if (display) p.catdisplay = display;
-  if (parentId !== null) p.pid = String(parentId);
+  p.pid = String(parentId);
   for (const [k, v] of Object.entries(overrides)) {
     if (v === null || v === "") delete p[k];
     else p[k] = String(v);
@@ -41,6 +42,16 @@ function filterQS(overrides: Record<string, string | number | null> = {}) {
   const qs = new URLSearchParams(p).toString();
   return qs ? `?${qs}` : "";
 }
+
+// 5-page sliding window
+function pageWindow(current: number, total: number, size = 5) {
+  const half  = Math.floor(size / 2);
+  let start   = Math.max(1, current - half);
+  const end   = Math.min(total, start + size - 1);
+  start       = Math.max(1, end - size + 1);
+  return { start, end };
+}
+const { start: winStart, end: winEnd } = pageWindow(pageParam, totalPages);
 ---
 <AdminLayout title="Categories">
   {saved   && <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved successfully.</div>}
@@ -80,9 +91,9 @@ function filterQS(overrides: Record<string, string | number | null> = {}) {
   </form>
 
   <!-- Breadcrumb / parent context -->
-  {parentId !== null && (
+  {parentId > 0 && (
     <div class="mb-3 flex items-center gap-2 text-sm">
-      <a href="/admin/categories" class="text-blue-600 hover:underline">All Categories</a>
+      <a href="/admin/categories" class="text-blue-600 hover:underline">Top Level</a>
       {parentCat && (
         <>
           <span class="text-gray-400">&raquo;</span>
@@ -99,19 +110,21 @@ function filterQS(overrides: Record<string, string | number | null> = {}) {
     <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between text-xs text-gray-500">
       <span>{total} {total === 1 ? "category" : "categories"}{total > PER_PAGE ? `, page ${pageParam} of ${totalPages}` : ""}</span>
       {totalPages > 1 && (
-        <div class="flex gap-1">
-          {pageParam > 1 && (
-            <a href={filterQS({ page: pageParam - 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&laquo;</a>
-          )}
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+        <div class="flex gap-1 items-center">
+          {pageParam > 1
+            ? <a href={filterQS({ page: pageParam - 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&lsaquo;</a>
+            : <span class="px-2 py-1 border rounded text-gray-300 cursor-default">&lsaquo;</span>}
+          {winStart > 1 && <span class="px-1 text-gray-400">…</span>}
+          {Array.from({ length: winEnd - winStart + 1 }, (_, i) => winStart + i).map((p) => (
             <a href={filterQS({ page: p })}
                class={`px-2 py-1 border rounded ${p === pageParam ? "bg-blue-600 text-white border-blue-600" : "hover:bg-gray-50"}`}>
               {p}
             </a>
           ))}
-          {pageParam < totalPages && (
-            <a href={filterQS({ page: pageParam + 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&raquo;</a>
-          )}
+          {winEnd < totalPages && <span class="px-1 text-gray-400">…</span>}
+          {pageParam < totalPages
+            ? <a href={filterQS({ page: pageParam + 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&rsaquo;</a>
+            : <span class="px-2 py-1 border rounded text-gray-300 cursor-default">&rsaquo;</span>}
         </div>
       )}
     </div>
@@ -170,13 +183,21 @@ function filterQS(overrides: Record<string, string | number | null> = {}) {
     <!-- Pagination bottom -->
     {totalPages > 1 && (
       <div class="px-5 py-3 border-t border-gray-100 flex justify-end">
-        <div class="flex gap-1 text-xs">
-          {pageParam > 1 && (
-            <a href={filterQS({ page: pageParam - 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&laquo; Prev</a>
-          )}
-          {pageParam < totalPages && (
-            <a href={filterQS({ page: pageParam + 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">Next &raquo;</a>
-          )}
+        <div class="flex gap-1 text-xs items-center">
+          {pageParam > 1
+            ? <a href={filterQS({ page: pageParam - 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&lsaquo;</a>
+            : <span class="px-2 py-1 border rounded text-gray-300 cursor-default">&lsaquo;</span>}
+          {winStart > 1 && <span class="px-1 text-gray-400">…</span>}
+          {Array.from({ length: winEnd - winStart + 1 }, (_, i) => winStart + i).map((p) => (
+            <a href={filterQS({ page: p })}
+               class={`px-2 py-1 border rounded ${p === pageParam ? "bg-blue-600 text-white border-blue-600" : "hover:bg-gray-50"}`}>
+              {p}
+            </a>
+          ))}
+          {winEnd < totalPages && <span class="px-1 text-gray-400">…</span>}
+          {pageParam < totalPages
+            ? <a href={filterQS({ page: pageParam + 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&rsaquo;</a>
+            : <span class="px-2 py-1 border rounded text-gray-300 cursor-default">&rsaquo;</span>}
         </div>
       </div>
     )}

@@ -214,7 +214,7 @@ export async function getCategoriesAdmin(opts: {
     query<CategoryListRow>(
       `SELECT Category_ID, Name, Parent_ID, Display, Display_Menu, Priority
        FROM Categories ${where}
-       ORDER BY Parent_ID ASC, Priority ASC, Name ASC
+       ORDER BY Priority ASC, Name ASC
        OFFSET ${offset} ROWS FETCH NEXT ${perPage} ROWS ONLY`,
       params
     ),
