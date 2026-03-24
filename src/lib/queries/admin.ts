@@ -46,32 +46,92 @@ export interface ProductListRow {
   Product_ID: number;
   Name: string;
   SKU: string | null;
-  Base_Price: number;
-  NumInStock: number;
+  UPC: string | null;
   Display: boolean;
+  Highlight: boolean | null;
   Sale: boolean;
+  Hot: boolean;
+  Prod_Type: string | null;
   Priority: number;
 }
 
+export interface ProductListOptions {
+  name?: string;
+  upc?: string;
+  sku?: string;
+  displayStatus?: string;  // "on" | "off" | "current" | "scheduled" | "expired"
+  highlight?: string;      // "1" | "0"
+  sale?: string;           // "1" | "0"
+  hot?: string;            // "1" | "0"
+  type?: string;           // "product" | "membership" | "download" | "certificate"
+  categoryId?: number | null;
+  nocat?: boolean;
+  sortBy?: string;         // "name" | "sku" | "priority"
+  sortOrder?: string;      // "asc" | "desc"
+  page?: number;
+  perPage?: number;
+}
+
 export async function getProductsAdmin(
-  page = 1,
-  search = "",
-  pageSize = 50
+  opts: ProductListOptions = {}
 ): Promise<{ rows: ProductListRow[]; total: number }> {
-  const offset = (page - 1) * pageSize;
+  const {
+    name = "", upc = "", sku = "",
+    displayStatus = "", highlight = "", sale = "", hot = "", type = "",
+    categoryId, nocat = false,
+    sortBy = "name", sortOrder = "asc",
+    page = 1, perPage = 40,
+  } = opts;
+
+  const orderCol = sortBy === "sku" ? "P.SKU" : sortBy === "priority" ? "P.Priority" : "P.Name";
+  const orderDir = sortOrder === "desc" ? "DESC" : "ASC";
+
+  const conditions: string[] = ["1=1"];
+  const params: Record<string, string | number | boolean | null> = {};
+
+  if (name)          { conditions.push("P.Name LIKE '%' + @name + '%'");  params.name = name; }
+  if (upc)           { conditions.push("P.UPC LIKE @upc + '%'");          params.upc = upc; }
+  if (sku)           { conditions.push("P.SKU LIKE @sku + '%'");          params.sku = sku; }
+  if (highlight === "1") conditions.push("P.Highlight = 1");
+  if (highlight === "0") conditions.push("P.Highlight = 0");
+  if (sale === "1")  conditions.push("P.Sale = 1");
+  if (sale === "0")  conditions.push("P.Sale = 0");
+  if (hot === "1")   conditions.push("P.Hot = 1");
+  if (hot === "0")   conditions.push("P.Hot = 0");
+  if (type)          { conditions.push("P.Prod_Type = @type");             params.type = type; }
+  if (displayStatus === "on")  conditions.push("P.Display = 1");
+  if (displayStatus === "off") conditions.push("P.Display = 0");
+  if (displayStatus === "current") {
+    conditions.push("(P.Sale_Start IS NULL OR P.Sale_Start <= GETDATE()) AND (P.Sale_End IS NULL OR P.Sale_End >= GETDATE())");
+  }
+  if (displayStatus === "scheduled") conditions.push("P.Sale_Start > GETDATE()");
+  if (displayStatus === "expired")   conditions.push("P.Sale_End < GETDATE()");
+  if (nocat) conditions.push("P.Product_ID NOT IN (SELECT Product_ID FROM Product_Category)");
+
+  let fromClause = "FROM Products P";
+  if (categoryId != null) {
+    fromClause += " INNER JOIN Product_Category PC ON PC.Product_ID = P.Product_ID AND PC.Category_ID = @categoryId";
+    params.categoryId = categoryId;
+  }
+
+  const where = conditions.join(" AND ");
+  const offset = (page - 1) * perPage;
+  const countParams = { ...params };
+  params.offset = offset;
+  params.perPage = perPage;
+
   const [rows, counts] = await Promise.all([
     query<ProductListRow>(
-      `SELECT Product_ID, Name, SKU, Base_Price, NumInStock, Display, Sale, Priority
-       FROM Products
-       WHERE LEN(@search) = 0 OR Name LIKE '%' + @search + '%' OR SKU LIKE '%' + @search + '%'
-       ORDER BY Name ASC
-       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`,
-      { search, offset, pageSize }
+      `SELECT DISTINCT P.Product_ID, P.Name, P.SKU, P.UPC, P.Display, P.Highlight, P.Sale, P.Hot, P.Prod_Type, P.Priority
+       ${fromClause}
+       WHERE ${where}
+       ORDER BY ${orderCol} ${orderDir}
+       OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`,
+      params
     ),
     query<{ total: number }>(
-      `SELECT COUNT(*) AS total FROM Products
-       WHERE LEN(@search) = 0 OR Name LIKE '%' + @search + '%' OR SKU LIKE '%' + @search + '%'`,
-      { search }
+      `SELECT COUNT(DISTINCT P.Product_ID) AS total ${fromClause} WHERE ${where}`,
+      countParams
     ),
   ]);
   return { rows, total: counts[0]?.total ?? 0 };
