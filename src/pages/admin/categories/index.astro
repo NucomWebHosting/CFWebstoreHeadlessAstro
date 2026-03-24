@@ -1,69 +1,184 @@
 ---
 export const prerender = false;
 import AdminLayout from "../../../components/layout/AdminLayout.astro";
-import { getCategoriesAdmin } from "../../../lib/queries/admin";
+import { getCategoriesAdmin, getCategoryByIdAdmin } from "../../../lib/queries/admin";
 
-const categories = await getCategoriesAdmin();
-// Build name lookup for parent display
-const nameMap = new Map(categories.map((c) => [c.Category_ID, c.Name]));
+const PER_PAGE = 50;
+
+// Query params
+const search    = Astro.url.searchParams.get("name") ?? "";
+const display   = Astro.url.searchParams.get("catdisplay") ?? "";
+const pidParam  = Astro.url.searchParams.get("pid");
+const pageParam = parseInt(Astro.url.searchParams.get("page") ?? "1") || 1;
+const parentId  = pidParam !== null ? parseInt(pidParam) || 0 : null;
+
+const { rows: categories, total } = await getCategoriesAdmin({
+  search:   search || undefined,
+  display:  display || undefined,
+  parentId: parentId ?? undefined,
+  page:     pageParam,
+  perPage:  PER_PAGE,
+});
+
+const totalPages = Math.ceil(total / PER_PAGE);
+
+// Parent breadcrumb
+const parentCat = parentId ? await getCategoryByIdAdmin(parentId) : null;
 
 const saved   = Astro.url.searchParams.get("saved")   === "1";
 const deleted = Astro.url.searchParams.get("deleted") === "1";
+
+// Build filter query string (preserves filters across pagination / parent browse)
+function filterQS(overrides: Record<string, string | number | null> = {}) {
+  const p: Record<string, string> = {};
+  if (search)  p.name       = search;
+  if (display) p.catdisplay = display;
+  if (parentId !== null) p.pid = String(parentId);
+  for (const [k, v] of Object.entries(overrides)) {
+    if (v === null || v === "") delete p[k];
+    else p[k] = String(v);
+  }
+  const qs = new URLSearchParams(p).toString();
+  return qs ? `?${qs}` : "";
+}
 ---
 <AdminLayout title="Categories">
   {saved   && <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved successfully.</div>}
-  {deleted && <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Category deleted.</div>}
+  {deleted && <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">Category deleted.</div>}
 
-  <div class="flex justify-end mb-4">
-    <a href="/admin/categories/new" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700">
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-lg font-semibold text-gray-800">Categories Manager</h2>
+    <a href={`/admin/categories/new${parentId !== null ? `?parent_id=${parentId}` : ""}`}
+       class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700">
       + New Category
     </a>
   </div>
 
+  <!-- Filter form -->
+  <form method="get" action="/admin/categories" class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
+    {parentId !== null && <input type="hidden" name="pid" value={parentId} />}
+    <div class="flex flex-wrap gap-3 items-end">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Name</label>
+        <input type="text" name="name" value={search} maxlength="50"
+               class="border border-gray-300 rounded px-2 py-1 text-sm w-44 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Display</label>
+        <select name="catdisplay" class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          <option value="">all</option>
+          <option value="1" selected={display === "1"}>yes</option>
+          <option value="0" selected={display === "0"}>no</option>
+        </select>
+      </div>
+      <div class="flex gap-2">
+        <button type="submit" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700">Search</button>
+        <a href="/admin/categories" class="border border-gray-300 px-3 py-1.5 rounded text-sm text-gray-600 hover:bg-gray-50">All</a>
+      </div>
+    </div>
+  </form>
+
+  <!-- Breadcrumb / parent context -->
+  {parentId !== null && (
+    <div class="mb-3 flex items-center gap-2 text-sm">
+      <a href="/admin/categories" class="text-blue-600 hover:underline">All Categories</a>
+      {parentCat && (
+        <>
+          <span class="text-gray-400">&raquo;</span>
+          <span class="font-medium text-gray-700">{parentCat.Name}</span>
+          <span class="text-gray-400 text-xs">(subcategories)</span>
+        </>
+      )}
+    </div>
+  )}
+
+  <!-- Results -->
   <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-    <div class="px-5 py-3 border-b border-gray-100 text-xs text-gray-500">{categories.length} categories</div>
+    <!-- Count + pagination top -->
+    <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between text-xs text-gray-500">
+      <span>{total} {total === 1 ? "category" : "categories"}{total > PER_PAGE ? `, page ${pageParam} of ${totalPages}` : ""}</span>
+      {totalPages > 1 && (
+        <div class="flex gap-1">
+          {pageParam > 1 && (
+            <a href={filterQS({ page: pageParam - 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&laquo;</a>
+          )}
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+            <a href={filterQS({ page: p })}
+               class={`px-2 py-1 border rounded ${p === pageParam ? "bg-blue-600 text-white border-blue-600" : "hover:bg-gray-50"}`}>
+              {p}
+            </a>
+          ))}
+          {pageParam < totalPages && (
+            <a href={filterQS({ page: pageParam + 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&raquo;</a>
+          )}
+        </div>
+      )}
+    </div>
+
     <table class="w-full text-sm">
       <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
         <tr>
-          <th class="px-5 py-3 text-left">Name</th>
-          <th class="px-5 py-3 text-left">Parent</th>
-          <th class="px-5 py-3 text-right">Priority</th>
-          <th class="px-5 py-3 text-center">Active</th>
-          <th class="px-5 py-3"></th>
+          <th class="px-4 py-3 text-left w-16">ID</th>
+          <th class="px-4 py-3 text-left">Category</th>
+          <th class="px-4 py-3 text-center w-20">Display</th>
+          <th class="px-4 py-3 text-center w-20">Menu</th>
+          <th class="px-4 py-3 text-right w-20">Priority</th>
+          <th class="px-4 py-3 text-right w-32"></th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
         {categories.length === 0 && (
-          <tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">No categories found.</td></tr>
+          <tr>
+            <td colspan="6" class="px-5 py-10 text-center text-gray-400">No categories found.</td>
+          </tr>
         )}
         {categories.map((c) => (
           <tr class="hover:bg-gray-50">
-            <td class="px-5 py-3 font-medium text-gray-800">
-              <a href={`/admin/categories/${c.Category_ID}`} class="hover:text-blue-600">{c.Name}</a>
+            <td class="px-4 py-3 text-gray-400 text-xs">{c.Category_ID}</td>
+            <td class="px-4 py-3 font-medium text-gray-800">
+              <!-- Name links into subcategory browse -->
+              <a href={`/admin/categories?pid=${c.Category_ID}`} class="hover:text-blue-600">
+                {c.Name}
+              </a>
+              <span class="text-gray-300 ml-1">&raquo;</span>
             </td>
-            <td class="px-5 py-3 text-gray-500">
-              {c.Parent_ID > 0 ? nameMap.get(c.Parent_ID) ?? `ID ${c.Parent_ID}` : "—"}
-            </td>
-            <td class="px-5 py-3 text-right text-gray-500">{c.Priority}</td>
-            <td class="px-5 py-3 text-center">
+            <td class="px-4 py-3 text-center">
               {c.Display
-                ? <span class="text-green-600 font-bold">✓</span>
-                : <span class="text-gray-300">—</span>}
+                ? <span class="text-green-600 font-bold text-xs">Yes</span>
+                : <span class="text-gray-300 text-xs">No</span>}
             </td>
-            <td class="px-5 py-3 text-right">
+            <td class="px-4 py-3 text-center">
+              {c.Display_Menu
+                ? <span class="text-green-600 font-bold text-xs">Yes</span>
+                : <span class="text-gray-300 text-xs">No</span>}
+            </td>
+            <td class="px-4 py-3 text-right text-gray-500">{c.Priority}</td>
+            <td class="px-4 py-3 text-right">
               <a href={`/admin/categories/${c.Category_ID}`} class="text-blue-600 hover:underline text-xs mr-3">Edit</a>
-              <form method="post" action={`/admin/categories/${c.Category_ID}`} class="inline">
-                <input type="hidden" name="_action" value="delete" />
-                <button
-                  type="submit"
-                  class="text-red-500 hover:underline text-xs"
-                  onclick="return confirm('Delete this category?')"
-                >Delete</button>
+              <form method="post" action={`/api/admin/categories/${c.Category_ID}`} class="inline"
+                    onsubmit="return confirm('Delete this category?')">
+                <input type="hidden" name="_method" value="DELETE" />
+                <button type="submit" class="text-red-500 hover:underline text-xs">Delete</button>
               </form>
             </td>
           </tr>
         ))}
       </tbody>
     </table>
+
+    <!-- Pagination bottom -->
+    {totalPages > 1 && (
+      <div class="px-5 py-3 border-t border-gray-100 flex justify-end">
+        <div class="flex gap-1 text-xs">
+          {pageParam > 1 && (
+            <a href={filterQS({ page: pageParam - 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&laquo; Prev</a>
+          )}
+          {pageParam < totalPages && (
+            <a href={filterQS({ page: pageParam + 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">Next &raquo;</a>
+          )}
+        </div>
+      </div>
+    )}
   </div>
 </AdminLayout>

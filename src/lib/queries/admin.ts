@@ -177,14 +177,50 @@ export interface CategoryListRow {
   Name: string;
   Parent_ID: number;
   Display: boolean;
+  Display_Menu: boolean;
   Priority: number;
 }
 
-export async function getCategoriesAdmin(): Promise<CategoryListRow[]> {
-  return query<CategoryListRow>(
-    `SELECT Category_ID, Name, Parent_ID, Display, Priority
-     FROM Categories ORDER BY Parent_ID ASC, Priority ASC, Name ASC`
-  );
+export async function getCategoriesAdmin(opts: {
+  search?: string;
+  display?: string;
+  parentId?: number | null;
+  page?: number;
+  perPage?: number;
+} = {}): Promise<{ rows: CategoryListRow[]; total: number }> {
+  const perPage = opts.perPage ?? 50;
+  const page    = Math.max(1, opts.page ?? 1);
+  const offset  = (page - 1) * perPage;
+
+  const conditions: string[] = [];
+  const params: Record<string, string | number | null> = {};
+
+  if (opts.search) {
+    conditions.push("Name LIKE @search");
+    params.search = `%${opts.search}%`;
+  }
+  if (opts.display === "1") conditions.push("Display = 1");
+  else if (opts.display === "0") conditions.push("Display = 0");
+
+  if (opts.parentId !== null && opts.parentId !== undefined) {
+    conditions.push("Parent_ID = @parent_id");
+    params.parent_id = opts.parentId;
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const [countRows, rows] = await Promise.all([
+    query<{ total: number }>(`SELECT COUNT(*) AS total FROM Categories ${where}`, params),
+    query<CategoryListRow>(
+      `SELECT Category_ID, Name, Parent_ID, Display, Display_Menu, Priority
+       FROM Categories ${where}
+       ORDER BY Parent_ID ASC, Priority ASC, Name ASC
+       OFFSET ${offset} ROWS FETCH NEXT ${perPage} ROWS ONLY`,
+      params
+    ),
+  ]);
+
+  return { rows, total: countRows[0]?.total ?? 0 };
 }
 
 export async function getCategoryByIdAdmin(id: number): Promise<CategoryRow | null> {
