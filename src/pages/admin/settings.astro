@@ -10,8 +10,6 @@ if (Astro.request.method === "POST") {
   const data = await Astro.request.formData();
   try {
     await updateSettings(data);
-    // Bust settings cache by clearing module-level variable via restart — but we can't
-    // do that directly. For now, just redirect. The cache resets on next PM2 restart.
     return Astro.redirect("/admin/settings?saved=1");
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to save settings.";
@@ -21,18 +19,22 @@ if (Astro.request.method === "POST") {
 const settings = await getSettings();
 const saved = Astro.url.searchParams.get("saved") === "1";
 const v = (field: keyof NonNullable<typeof settings>) => settings?.[field] ?? "";
+const checked = (field: keyof NonNullable<typeof settings>) => !!settings?.[field];
+
+const inp = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+const inpMono = inp + " font-mono";
 ---
 <AdminLayout title="Settings">
   {saved && (
     <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
-      Settings saved. Changes will be visible after the next server restart (pm2 restart) due to caching.
+      Settings saved. Some changes (e.g. site name, images path) require a server restart (<code>pm2 restart</code>) to take effect due to caching.
     </div>
   )}
   {error && <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
 
   <form method="post" class="space-y-6">
 
-    <!-- Site Identity -->
+    <!-- ── Site Identity ──────────────────────────────────────── -->
     <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
       <div class="px-6 py-4 border-b border-gray-100">
         <h2 class="font-semibold text-gray-800">Site Identity</h2>
@@ -40,38 +42,37 @@ const v = (field: keyof NonNullable<typeof settings>) => settings?.[field] ?? ""
       <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Site Name</label>
-          <input type="text" name="site_name" value={String(v("SiteName"))}
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" name="site_name" value={String(v("SiteName"))} class={inp} />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Site Abbreviation</label>
-          <input type="text" name="site_name_ab" value={String(v("SiteNameAB"))}
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" name="site_name_ab" value={String(v("SiteNameAB"))} class={inp} />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Domain Name</label>
-          <input type="text" name="domain_name" value={String(v("DomainName"))} placeholder="https://example.com"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" name="domain_name" value={String(v("DomainName"))} placeholder="https://example.com/" class={inpMono} />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Default Images Path</label>
-          <input type="text" name="default_images" value={String(v("DefaultImages"))} placeholder="/images"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" name="default_images" value={String(v("DefaultImages"))} placeholder="/images" class={inpMono} />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Desktop Logo (filename)</label>
-          <input type="text" name="logo_desktop" value={String(v("Logo_desktop"))}
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" name="logo_desktop" value={String(v("Logo_desktop"))} class={inpMono} />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Mobile Logo (filename)</label>
-          <input type="text" name="logo_mobile" value={String(v("Logo_mobile"))}
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" name="logo_mobile" value={String(v("Logo_mobile"))} class={inpMono} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Print Logo (filename)</label>
+          <input type="text" name="logo_print" value={String(v("Logo_print"))} class={inpMono} />
+          <p class="text-xs text-gray-400 mt-1">Generally smaller and black &amp; white.</p>
         </div>
       </div>
     </section>
 
-    <!-- Contact Info -->
+    <!-- ── Contact Information ───────────────────────────────── -->
     <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
       <div class="px-6 py-4 border-b border-gray-100">
         <h2 class="font-semibold text-gray-800">Contact Information</h2>
@@ -79,71 +80,76 @@ const v = (field: keyof NonNullable<typeof settings>) => settings?.[field] ?? ""
       <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Phone (Order Desk)</label>
-          <input type="text" name="phone" value={String(v("Phone"))}
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" name="phone" value={String(v("Phone"))} class={inp} />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Phone 2 (International)</label>
-          <input type="text" name="phone2" value={String(v("Phone2"))}
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" name="phone2" value={String(v("Phone2"))} class={inp} />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Phone 3 (Fax)</label>
-          <input type="text" name="phone3" value={String(v("Phone3"))}
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" name="phone3" value={String(v("Phone3"))} class={inp} />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Phone 4 (Tech Support)</label>
-          <input type="text" name="phone4" value={String(v("Phone4"))}
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" name="phone4" value={String(v("Phone4"))} class={inp} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Phone 5</label>
+          <input type="text" name="phone5" value={String(v("Phone5"))} class={inp} />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Address Line 1</label>
-          <input type="text" name="address1" value={String(v("Address1"))}
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" name="address1" value={String(v("Address1"))} class={inp} />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Address Line 2</label>
-          <input type="text" name="address2" value={String(v("Address2"))}
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" name="address2" value={String(v("Address2"))} class={inp} />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">City</label>
-          <input type="text" name="city" value={String(v("City"))}
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" name="city" value={String(v("City"))} class={inp} />
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">State</label>
-            <input type="text" name="state" value={String(v("State"))}
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="text" name="state" value={String(v("State"))} class={inp} />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">ZIP</label>
-            <input type="text" name="postalcode" value={String(v("Postalcode"))}
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="text" name="postalcode" value={String(v("Postalcode"))} class={inp} />
           </div>
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-          <input type="email" name="email" value={String(v("Email"))}
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <label class="block text-sm font-medium text-gray-700 mb-1">Country</label>
+          <input type="text" name="home_country" value={String(v("HomeCountry"))} placeholder="US^United States" class={inpMono} />
+          <p class="text-xs text-gray-400 mt-1">Format: Abbrev^Name (e.g. US^United States)</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Store Email</label>
+          <input type="email" name="email" value={String(v("Email"))} class={inp} />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Merchant Email (receives orders)</label>
-          <input type="email" name="merchant_email" value={String(v("MerchantEmail"))}
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="email" name="merchant_email" value={String(v("MerchantEmail"))} class={inp} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Webmaster Email</label>
+          <input type="email" name="webmaster" value={String(v("Webmaster"))} class={inp} />
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Custom Merchant Text</label>
+          <textarea name="merchant" rows={3} class={inp}>{String(v("Merchant"))}</textarea>
+          <p class="text-xs text-gray-400 mt-1">Store hours, fax, etc. Printed on order receipts.</p>
         </div>
         <div class="md:col-span-2">
           <label class="block text-sm font-medium text-gray-700 mb-1">Google Map Embed (iframe HTML)</label>
-          <textarea name="google_map_embed" rows="3"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >{String(v("GoogleMapEmbed"))}</textarea>
+          <textarea name="google_map_embed" rows={3} class={inpMono}>{String(v("GoogleMapEmbed"))}</textarea>
         </div>
       </div>
     </section>
 
-    <!-- SMTP -->
+    <!-- ── SMTP Email ─────────────────────────────────────────── -->
     <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
       <div class="px-6 py-4 border-b border-gray-100">
         <h2 class="font-semibold text-gray-800">SMTP Email</h2>
@@ -151,33 +157,258 @@ const v = (field: keyof NonNullable<typeof settings>) => settings?.[field] ?? ""
       <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">SMTP Server</label>
-          <input type="text" name="email_server" value={String(v("Email_Server"))}
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" name="email_server" value={String(v("Email_Server"))} class={inpMono} />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Port</label>
-          <input type="number" name="email_port" value={String(v("Email_Port") || 587)}
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="number" name="email_port" value={String(v("Email_Port") || 587)} class={inp} />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">SMTP Username</label>
-          <input type="text" name="email_user" value={String(v("Email_User"))} autocomplete="username"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" name="email_user" value={String(v("Email_User"))} autocomplete="username" class={inp} />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">SMTP Password</label>
-          <input type="password" name="email_pass" value={String(v("Email_Pass"))} autocomplete="current-password"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="password" name="email_pass" value={String(v("Email_Pass"))} autocomplete="current-password" class={inp} />
         </div>
         <div class="flex gap-6">
           <label class="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" name="email_use_ssl" checked={!!settings?.Email_useSSL} class="rounded" />
+            <input type="checkbox" name="email_use_ssl" checked={checked("Email_useSSL")} class="rounded" />
             Use SSL
           </label>
           <label class="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" name="email_use_tls" checked={!!settings?.Email_useTLS} class="rounded" />
+            <input type="checkbox" name="email_use_tls" checked={checked("Email_useTLS")} class="rounded" />
             Use TLS (STARTTLS)
           </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── SEO ────────────────────────────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">SEO</h2>
+      </div>
+      <div class="p-6 grid grid-cols-1 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Homepage Title Tag</label>
+          <input type="text" name="metatitle" value={String(v("metatitle"))} class={inp} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Homepage Meta Description</label>
+          <textarea name="metadescription" rows={2} class={inp}>{String(v("metadescription"))}</textarea>
+          <p class="text-xs text-gray-400 mt-1">Default when no page-level description is set. Recommended: 150–160 characters.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Meta Keywords</label>
+          <textarea name="keywords" rows={2} class={inp}>{String(v("Keywords"))}</textarea>
+          <p class="text-xs text-gray-400 mt-1">Comma-separated. Default site keywords when none are set per-page.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">OG / Social Image (filename)</label>
+          <input type="text" name="og_image" value={String(v("og_image"))} class={inpMono} />
+          <p class="text-xs text-gray-400 mt-1">Default image for Facebook, Pinterest, iMessage link previews. Recommended: 1200×627px.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Google ─────────────────────────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Google</h2>
+      </div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Google API Key (Maps, Autocomplete, Address Validation)</label>
+          <input type="text" name="googleapikey" value={String(v("googleapikey"))} class={inpMono} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Google Analytics ID (GA4)</label>
+          <input type="text" name="googletrackingcode" value={String(v("googletrackingcode"))} placeholder="G-XXXXXXXXXX" class={inpMono} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Google Site Verification</label>
+          <input type="text" name="google_site_verification" value={String(v("google_site_verification"))} class={inpMono} />
+        </div>
+      </div>
+    </section>
+
+    <!-- ── External / Social Logins ───────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">External Logins</h2>
+      </div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Google Client ID</label>
+          <input type="text" name="google_client_id" value={String(v("GoogleClientID"))} class={inpMono} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Facebook App ID</label>
+          <input type="text" name="facebook_app_id" value={String(v("FacebookAppID"))} class={inpMono} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Apple App ID</label>
+          <input type="text" name="apple_app_id" value={String(v("AppleAppID"))} class={inpMono} />
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Pinterest ──────────────────────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Pinterest</h2>
+      </div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Pinterest Tag ID</label>
+          <input type="text" name="pinteresttagid" value={String(v("pinteresttagid"))} class={inpMono} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Pinterest Site Verification</label>
+          <input type="text" name="pinterest_site_verification" value={String(v("pinterest_site_verification"))} class={inpMono} />
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Cloudflare Turnstile ───────────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Cloudflare Turnstile</h2>
+      </div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Site Key</label>
+          <input type="text" name="turnstile_site_key" value={String(v("turnstile_site_key"))} class={inpMono} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Secret Key</label>
+          <input type="text" name="turnstile_secret_key" value={String(v("turnstile_secret_key"))} class={inpMono} />
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Google reCAPTCHA ───────────────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Google reCAPTCHA</h2>
+      </div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="md:col-span-2">
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="showcaptcha" checked={checked("showcaptcha")} class="rounded" />
+            Show reCAPTCHA on contact form
+          </label>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Site Key</label>
+          <input type="text" name="captcha_site_key" value={String(v("captchaSiteKey"))} class={inpMono} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Site Secret</label>
+          <input type="text" name="captcha_site_secret" value={String(v("captchaSiteSecret"))} class={inpMono} />
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Algolia Search ─────────────────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Algolia Search</h2>
+      </div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="md:col-span-2 flex gap-6">
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="algolia_instant_search" checked={checked("Algolia_ShowInstantSearch")} class="rounded" />
+            Show Instant Search
+          </label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="algolia_autocomplete" checked={checked("Algolia_ShowAutocomplete")} class="rounded" />
+            Show Autocomplete
+          </label>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Application ID</label>
+          <input type="text" name="algolia_app_id" value={String(v("Algolia_Application_ID"))} class={inpMono} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Search API Key</label>
+          <input type="text" name="algolia_search_key" value={String(v("Algolia_Search_API_Key"))} class={inpMono} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Site Verification</label>
+          <input type="text" name="algolia_verification" value={String(v("Algolia_site_verification"))} class={inpMono} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Product Index</label>
+          <input type="text" name="algolia_product_index" value={String(v("Algolia_Product_Index"))} class={inpMono} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Category Index</label>
+          <input type="text" name="algolia_category_index" value={String(v("Algolia_Category_Index"))} class={inpMono} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Article Index</label>
+          <input type="text" name="algolia_article_index" value={String(v("Algolia_Article_Index"))} class={inpMono} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Suggestion Index</label>
+          <input type="text" name="algolia_suggestion_index" value={String(v("Algolia_Suggestion_Index"))} class={inpMono} />
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Product Display ────────────────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Product Display</h2>
+      </div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Inventory Control</label>
+          <select name="inv_level" class={inp}>
+            {["None","Store","Admin","Mixed"].map(opt => (
+              <option value={opt} selected={settings?.InvLevel === opt}>{opt}</option>
+            ))}
+          </select>
+          <p class="text-xs text-gray-400 mt-1">Store: subtracts when order placed. Admin: subtracts when order filled. Mixed: online=Store, offline=Admin.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Order Button Text</label>
+          <input type="text" name="order_button_text" value={String(v("OrderButtonText"))} placeholder="Add to Cart" class={inp} />
+        </div>
+        <div class="flex flex-col gap-2">
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="show_in_stock" checked={checked("ShowInStock")} class="rounded" />
+            Show # in Stock
+          </label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="out_of_stock" checked={checked("OutofStock")} class="rounded" />
+            Show Out-of-Stock Products
+          </label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="show_retail" checked={checked("ShowRetail")} class="rounded" />
+            Show Retail / Compare-At Prices
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Sitewide Alert ─────────────────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Sitewide Alert Banner</h2>
+      </div>
+      <div class="p-6 grid grid-cols-1 gap-4">
+        <div>
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="alert_display" checked={checked("Alert_Display")} class="rounded" />
+            Display alert on every page
+          </label>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Alert Message</label>
+          <textarea name="alert_message" rows={3} class={inp}>{String(v("alert_message"))}</textarea>
         </div>
       </div>
     </section>

@@ -96,30 +96,80 @@ export interface ProductImageRow {
 
 export interface SettingsRow {
   SettingID: number;
+  // Site Identity
   SiteName: string | null;
   SiteNameAB: string | null;
   DomainName: string | null;
+  DefaultImages: string | null;  // e.g. "/images" — prepended to image filenames
+  Logo_desktop: string | null;
+  Logo_mobile: string | null;
+  Logo_print: string | null;
+  // Contact
   Phone: string | null;
   Phone2: string | null;
   Phone3: string | null;
   Phone4: string | null;
-  Logo_desktop: string | null;
-  Logo_mobile: string | null;
+  Phone5: string | null;
   Address1: string | null;
   Address2: string | null;
   City: string | null;
   State: string | null;
   Postalcode: string | null;
+  HomeCountry: string | null;
   Email: string | null;
   MerchantEmail: string | null;
-  DefaultImages: string | null;  // e.g. "/images" — prepended to image filenames
+  Webmaster: string | null;
+  Merchant: string | null;      // custom text printed on order receipts
   GoogleMapEmbed: string | null;
+  // SMTP
   Email_Server: string | null;
   Email_User: string | null;
   Email_Pass: string | null;
   Email_Port: number | null;
   Email_useSSL: boolean | null;
   Email_useTLS: boolean | null;
+  // SEO
+  metatitle: string | null;
+  metadescription: string | null;
+  Keywords: string | null;
+  og_image: string | null;
+  // Google
+  googleapikey: string | null;
+  googletrackingcode: string | null;
+  google_site_verification: string | null;
+  // Social / external logins
+  GoogleClientID: string | null;
+  FacebookAppID: string | null;
+  AppleAppID: string | null;
+  // Pinterest
+  pinteresttagid: string | null;
+  pinterest_site_verification: string | null;
+  // Cloudflare Turnstile
+  turnstile_site_key: string | null;
+  turnstile_secret_key: string | null;
+  // Google reCAPTCHA
+  showcaptcha: boolean | null;
+  captchaSiteKey: string | null;
+  captchaSiteSecret: string | null;
+  // Algolia
+  Algolia_ShowInstantSearch: boolean | null;
+  Algolia_ShowAutocomplete: boolean | null;
+  Algolia_Application_ID: string | null;
+  Algolia_Search_API_Key: string | null;
+  Algolia_site_verification: string | null;
+  Algolia_Product_Index: string | null;
+  Algolia_Category_Index: string | null;
+  Algolia_Article_Index: string | null;
+  Algolia_Suggestion_Index: string | null;
+  // Product display
+  InvLevel: string | null;        // None | Store | Admin | Mixed
+  ShowInStock: boolean | null;
+  OutofStock: boolean | null;
+  ShowRetail: boolean | null;
+  OrderButtonText: string | null;
+  // Sitewide alert
+  Alert_Display: boolean | null;
+  alert_message: string | null;
 }
 
 // Build the image base URL from Settings: DomainName + DefaultImages
