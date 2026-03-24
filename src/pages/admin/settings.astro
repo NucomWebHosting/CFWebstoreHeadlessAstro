@@ -18,16 +18,25 @@ if (Astro.request.method === "POST") {
 
 const settings = await getSettings();
 const saved = Astro.url.searchParams.get("saved") === "1";
-const v = (field: keyof NonNullable<typeof settings>) => settings?.[field] ?? "";
-const checked = (field: keyof NonNullable<typeof settings>) => !!settings?.[field];
+const v  = (field: keyof NonNullable<typeof settings>) => settings?.[field] ?? "";
+const chk = (field: keyof NonNullable<typeof settings>) => !!settings?.[field];
 
-const inp = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+// Product_show_* use 1=No / 2=Yes / sometimes 3+, not 0/1
+const yesno = (field: keyof NonNullable<typeof settings>, yesVal = 2) =>
+  (settings?.[field] as number | null) === yesVal;
+
+const inp     = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
 const inpMono = inp + " font-mono";
+const inpNum  = "border border-gray-300 rounded-lg px-3 py-2 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-blue-500";
+
+function sectionHead(title: string) {
+  return `<div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">${title}</h2></div>`;
+}
 ---
 <AdminLayout title="Settings">
   {saved && (
     <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
-      Settings saved. Some changes (e.g. site name, images path) require a server restart (<code>pm2 restart</code>) to take effect due to caching.
+      Settings saved. Some changes require a server restart (<code>pm2 restart</code>) to take effect due to caching.
     </div>
   )}
   {error && <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
@@ -36,9 +45,7 @@ const inpMono = inp + " font-mono";
 
     <!-- ── Site Identity ──────────────────────────────────────── -->
     <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-      <div class="px-6 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-800">Site Identity</h2>
-      </div>
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Site Identity</h2></div>
       <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Site Name</label>
@@ -69,14 +76,69 @@ const inpMono = inp + " font-mono";
           <input type="text" name="logo_print" value={String(v("Logo_print"))} class={inpMono} />
           <p class="text-xs text-gray-400 mt-1">Generally smaller and black &amp; white.</p>
         </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Desktop Sticky Logo Size (W × H px)</label>
+          <div class="flex items-center gap-2">
+            <input type="number" name="logo_sticky_w" value={String(v("Logo_desktop_stickey_width"))} placeholder="W" class={inpNum} />
+            <span class="text-gray-500 text-sm">×</span>
+            <input type="number" name="logo_sticky_h" value={String(v("Logo_desktop_stickey_height"))} placeholder="H" class={inpNum} />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Desktop Sticky Data Size (W × H px)</label>
+          <div class="flex items-center gap-2">
+            <input type="number" name="logo_sticky_data_w" value={String(v("Logo_desktop_stickey_data_width"))} placeholder="W" class={inpNum} />
+            <span class="text-gray-500 text-sm">×</span>
+            <input type="number" name="logo_sticky_data_h" value={String(v("Logo_desktop_stickey_data_height"))} placeholder="H" class={inpNum} />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Store Settings ────────────────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Store Settings</h2></div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Locale</label>
+          <input type="text" name="locale" value={String(v("Locale"))} placeholder="English (US)" class={inp} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+          <input type="text" name="money_unit" value={String(v("MoneyUnit"))} placeholder="USD^US Dollar" class={inpMono} />
+          <p class="text-xs text-gray-400 mt-1">Format: CODE^Name (e.g. USD^US Dollar)</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Weight Unit</label>
+          <select name="weight_unit" class={inp}>
+            {[["gm","Grams (gm)"],["kg","Kilograms (kg)"],["oz","Ounces (oz)"],["lbs","Pounds (lbs)"]].map(([val, label]) => (
+              <option value={val} selected={settings?.WeightUnit === val}>{label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Size Unit</label>
+          <select name="size_unit" class={inp}>
+            <option value="cm" selected={settings?.SizeUnit === "cm"}>Centimeters (cm)</option>
+            <option value="in" selected={settings?.SizeUnit === "in"}>Inches (in)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Time Offset (hours)</label>
+          <input type="number" name="time_offset" value={String(v("TimeOffset"))} min="-12" max="12" class={inpNum} />
+          <p class="text-xs text-gray-400 mt-1">Hours to add/subtract from server time to match your local time.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Exclude IP from Errors</label>
+          <input type="text" name="exclude_ip" value={String(v("ExcludeIP"))} placeholder="e.g. 192.168.1.1" class={inpMono} />
+          <p class="text-xs text-gray-400 mt-1">Comma-separated IPs that skip error handling (for debugging).</p>
+        </div>
       </div>
     </section>
 
     <!-- ── Contact Information ───────────────────────────────── -->
     <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-      <div class="px-6 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-800">Contact Information</h2>
-      </div>
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Contact Information</h2></div>
       <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Phone (Order Desk)</label>
@@ -151,9 +213,7 @@ const inpMono = inp + " font-mono";
 
     <!-- ── SMTP Email ─────────────────────────────────────────── -->
     <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-      <div class="px-6 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-800">SMTP Email</h2>
-      </div>
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">SMTP Email</h2></div>
       <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">SMTP Server</label>
@@ -161,7 +221,7 @@ const inpMono = inp + " font-mono";
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Port</label>
-          <input type="number" name="email_port" value={String(v("Email_Port") || 587)} class={inp} />
+          <input type="number" name="email_port" value={String(v("Email_Port") || 587)} class={inpNum} />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">SMTP Username</label>
@@ -173,22 +233,27 @@ const inpMono = inp + " font-mono";
         </div>
         <div class="flex gap-6">
           <label class="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" name="email_use_ssl" checked={checked("Email_useSSL")} class="rounded" />
+            <input type="checkbox" name="email_use_ssl" checked={chk("Email_useSSL")} class="rounded" />
             Use SSL
           </label>
           <label class="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" name="email_use_tls" checked={checked("Email_useTLS")} class="rounded" />
+            <input type="checkbox" name="email_use_tls" checked={chk("Email_useTLS")} class="rounded" />
             Use TLS (STARTTLS)
           </label>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Mailing List Integration</label>
+          <select name="use_mailing_list" class={inp}>
+            <option value="0" selected={!settings?.use_mailingList}>None</option>
+            <option value="1" selected={settings?.use_mailingList === 1}>Mailchimp</option>
+          </select>
         </div>
       </div>
     </section>
 
     <!-- ── SEO ────────────────────────────────────────────────── -->
     <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-      <div class="px-6 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-800">SEO</h2>
-      </div>
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">SEO</h2></div>
       <div class="p-6 grid grid-cols-1 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Homepage Title Tag</label>
@@ -197,12 +262,12 @@ const inpMono = inp + " font-mono";
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Homepage Meta Description</label>
           <textarea name="metadescription" rows={2} class={inp}>{String(v("metadescription"))}</textarea>
-          <p class="text-xs text-gray-400 mt-1">Default when no page-level description is set. Recommended: 150–160 characters.</p>
+          <p class="text-xs text-gray-400 mt-1">Default when no page-level description is set. Aim for 150–160 characters.</p>
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Meta Keywords</label>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Default Meta Keywords</label>
           <textarea name="keywords" rows={2} class={inp}>{String(v("Keywords"))}</textarea>
-          <p class="text-xs text-gray-400 mt-1">Comma-separated. Default site keywords when none are set per-page.</p>
+          <p class="text-xs text-gray-400 mt-1">Comma-separated. Used as a fallback when no per-page keywords are set.</p>
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">OG / Social Image (filename)</label>
@@ -212,11 +277,248 @@ const inpMono = inp + " font-mono";
       </div>
     </section>
 
+    <!-- ── Category Images ───────────────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Category Images</h2></div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Max Category Image Height (px)</label>
+          <input type="number" name="cat_image_height" value={String(v("Category_Image_Height"))} placeholder="150" class={inpNum} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Image Quality (%)</label>
+          <input type="number" name="image_quality" value={String(v("Image_quality"))} min="20" max="100" placeholder="85" class={inpNum} />
+          <p class="text-xs text-gray-400 mt-1">Lossy compression applied when resizing images.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Small Image (W × H px)</label>
+          <div class="flex items-center gap-2">
+            <input type="number" name="cat_sm_w" value={String(v("category_sm_image_width"))} placeholder="W" class={inpNum} />
+            <span class="text-gray-500 text-sm">×</span>
+            <input type="number" name="cat_sm_h" value={String(v("category_sm_image_height"))} placeholder="H" class={inpNum} />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Large Image (W × H px)</label>
+          <div class="flex items-center gap-2">
+            <input type="number" name="cat_lg_w" value={String(v("category_lg_image_width"))} placeholder="W" class={inpNum} />
+            <span class="text-gray-500 text-sm">×</span>
+            <input type="number" name="cat_lg_h" value={String(v("category_lg_image_height"))} placeholder="H" class={inpNum} />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Features / Blog Posts ─────────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Features / Blog Posts</h2></div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Max Features Per Page</label>
+          <input type="number" name="maxfeatures" value={String(v("Maxfeatures"))} min="0" class={inpNum} />
+        </div>
+        <div class="flex items-center mt-6">
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="feat_off_cats" checked={chk("DoNotDspFeaturesInOffCats")} class="rounded" />
+            Show features from disabled categories
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Product Display ────────────────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Product Display</h2></div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Inventory Control</label>
+          <select name="inv_level" class={inp}>
+            {(["None","Store","Admin","Mixed"] as const).map(opt => (
+              <option value={opt} selected={settings?.InvLevel === opt}>{opt}</option>
+            ))}
+          </select>
+          <p class="text-xs text-gray-400 mt-1">Store: subtracts on order placed. Admin: on order filled. Mixed: online=Store, offline=Admin.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Sort Products By</label>
+          <select name="item_sort" class={inp}>
+            <option value="SKU"  selected={settings?.ItemSort === "SKU"}>SKU</option>
+            <option value="Name" selected={settings?.ItemSort === "Name"}>Name</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Order Button Text</label>
+          <input type="text" name="order_button_text" value={String(v("OrderButtonText"))} placeholder="Add to Cart" class={inp} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Registry Button Text</label>
+          <input type="text" name="registry_button_text" value={String(v("RegistryButtonText"))} class={inp} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Wish List Button Text</label>
+          <input type="text" name="wishlist_button_text" value={String(v("WishlistButtonText"))} class={inp} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Related Products Section Title</label>
+          <input type="text" name="related_products_title" value={String(v("RelatedProducts_title"))} class={inp} />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Max Products Per Page</label>
+          <input type="number" name="maxprods" value={String(v("Maxprods"))} min="0" class={inpNum} />
+        </div>
+        <div class="flex flex-col gap-2">
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="use_inv_tab" checked={chk("UseInvTab")} class="rounded" />
+            Use Inventory Tab (per-size/color inventory overrides product-level)
+          </label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="show_in_stock" checked={chk("ShowInStock")} class="rounded" />
+            Show # in Stock
+          </label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="out_of_stock" checked={chk("OutofStock")} class="rounded" />
+            Show Out-of-Stock Products
+          </label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="show_retail" checked={chk("ShowRetail")} class="rounded" />
+            Show Retail / Compare-At Prices
+          </label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="show_subscriptions" checked={chk("ShowProductSubscriptions")} class="rounded" />
+            Show Product Subscriptions (requires Braintree or Square)
+          </label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="prods_off_cats" checked={chk("DoNotDspProdsInOffCats")} class="rounded" />
+            Show products from disabled categories
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Product Teaser ─────────────────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Product Teaser (listing pages)</h2></div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Max Product Image Height (px)</label>
+          <input type="number" name="prod_image_height" value={String(v("Product_Image_Height"))} placeholder="300" class={inpNum} />
+          <p class="text-xs text-gray-400 mt-1">Set a max height so product names align. 300 is a good starting point.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Always Link to Product Details</label>
+          <select name="prod_show_details" class={inp}>
+            <option value="2" selected={yesno("Product_show_Details")}>Yes</option>
+            <option value="1" selected={!yesno("Product_show_Details")}>No – only if has large image or long desc</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Show Short Description</label>
+          <select name="prod_show_short_desc" class={inp}>
+            <option value="2" selected={yesno("Product_show_shortDesc")}>Yes</option>
+            <option value="1" selected={!yesno("Product_show_shortDesc")}>No</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Show Order Box</label>
+          <select name="prod_show_order_box" class={inp}>
+            <option value="2" selected={settings?.Product_show_orderBox === 2}>Yes (options + buy button)</option>
+            <option value="1" selected={settings?.Product_show_orderBox === 1}>No</option>
+            <option value="3" selected={settings?.Product_show_orderBox === 3}>Price Only</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Show Ratings</label>
+          <select name="prod_show_ratings" class={inp}>
+            <option value="2" selected={yesno("Product_show_ratings")}>Yes</option>
+            <option value="1" selected={!yesno("Product_show_ratings")}>No</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Show Badges (Sale / New / Hot icons)</label>
+          <select name="prod_show_icons" class={inp}>
+            <option value="2" selected={settings?.Product_show_Icons === 2}>Yes (all)</option>
+            <option value="1" selected={settings?.Product_show_Icons === 1}>No</option>
+            <option value="3" selected={settings?.Product_show_Icons === 3}>Sale Only</option>
+            <option value="4" selected={settings?.Product_show_Icons === 4}>New Only</option>
+            <option value="5" selected={settings?.Product_show_Icons === 5}>Hot Only</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Show SKU</label>
+          <select name="prod_show_sku" class={inp}>
+            <option value="2" selected={yesno("Product_show_sku")}>Yes</option>
+            <option value="1" selected={!yesno("Product_show_sku")}>No</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Show Custom Fields</label>
+          <select name="prod_show_custom_fields" class={inp}>
+            <option value="2" selected={yesno("Product_show_customFields")}>Yes</option>
+            <option value="1" selected={!yesno("Product_show_customFields")}>No</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Product Image Sizes ───────────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Product Image Sizes</h2></div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Thumbnail – Product Gallery (W × H px)</label>
+          <div class="flex items-center gap-2">
+            <input type="number" name="th_w" value={String(v("th_image_width"))} placeholder="W" class={inpNum} />
+            <span class="text-gray-500 text-sm">×</span>
+            <input type="number" name="th_h" value={String(v("th_image_height"))} placeholder="H" class={inpNum} />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Small – Category Listing (W × H px)</label>
+          <div class="flex items-center gap-2">
+            <input type="number" name="sm_w" value={String(v("sm_image_width"))} placeholder="W" class={inpNum} />
+            <span class="text-gray-500 text-sm">×</span>
+            <input type="number" name="sm_h" value={String(v("sm_image_height"))} placeholder="H" class={inpNum} />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Medium – Main Product Image (W × H px)</label>
+          <div class="flex items-center gap-2">
+            <input type="number" name="md_w" value={String(v("md_image_width"))} placeholder="W" class={inpNum} />
+            <span class="text-gray-500 text-sm">×</span>
+            <input type="number" name="md_h" value={String(v("md_image_height"))} placeholder="H" class={inpNum} />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Large – Pop-up / Zoom (W × H px)</label>
+          <div class="flex items-center gap-2">
+            <input type="number" name="lg_w" value={String(v("lg_image_width"))} placeholder="W" class={inpNum} />
+            <span class="text-gray-500 text-sm">×</span>
+            <input type="number" name="lg_h" value={String(v("lg_image_height"))} placeholder="H" class={inpNum} />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── File Types ─────────────────────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">File Types</h2></div>
+      <div class="p-6 grid grid-cols-1 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Allowed MIME Types</label>
+          <input type="text" name="mimetypes" value={String(v("Mimetypes"))} class={inpMono} />
+          <p class="text-xs text-gray-400 mt-1">Comma-separated list of MIME types allowed for upload/download.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Allowed File Extensions (downloadable products)</label>
+          <input type="text" name="allow_extensions" value={String(v("AllowExtensions"))} class={inpMono} />
+          <p class="text-xs text-gray-400 mt-1">Comma-separated extensions (e.g. pdf,zip,mp3).</p>
+        </div>
+      </div>
+    </section>
+
     <!-- ── Google ─────────────────────────────────────────────── -->
     <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-      <div class="px-6 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-800">Google</h2>
-      </div>
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Google</h2></div>
       <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="md:col-span-2">
           <label class="block text-sm font-medium text-gray-700 mb-1">Google API Key (Maps, Autocomplete, Address Validation)</label>
@@ -233,11 +535,22 @@ const inpMono = inp + " font-mono";
       </div>
     </section>
 
+    <!-- ── Customer Logins ────────────────────────────────────── -->
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Customer Logins</h2></div>
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="md:col-span-2">
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="login_one_time_code" checked={chk("Login_ShowOneTimeCode")} class="rounded" />
+            Enable one-time login code (passwordless login via email)
+          </label>
+        </div>
+      </div>
+    </section>
+
     <!-- ── External / Social Logins ───────────────────────────── -->
     <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-      <div class="px-6 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-800">External Logins</h2>
-      </div>
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">External Logins (OAuth)</h2></div>
       <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Google Client ID</label>
@@ -256,9 +569,7 @@ const inpMono = inp + " font-mono";
 
     <!-- ── Pinterest ──────────────────────────────────────────── -->
     <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-      <div class="px-6 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-800">Pinterest</h2>
-      </div>
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Pinterest</h2></div>
       <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Pinterest Tag ID</label>
@@ -273,9 +584,7 @@ const inpMono = inp + " font-mono";
 
     <!-- ── Cloudflare Turnstile ───────────────────────────────── -->
     <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-      <div class="px-6 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-800">Cloudflare Turnstile</h2>
-      </div>
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Cloudflare Turnstile</h2></div>
       <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Site Key</label>
@@ -290,13 +599,11 @@ const inpMono = inp + " font-mono";
 
     <!-- ── Google reCAPTCHA ───────────────────────────────────── -->
     <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-      <div class="px-6 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-800">Google reCAPTCHA</h2>
-      </div>
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Google reCAPTCHA</h2></div>
       <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="md:col-span-2">
           <label class="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" name="showcaptcha" checked={checked("showcaptcha")} class="rounded" />
+            <input type="checkbox" name="showcaptcha" checked={chk("showcaptcha")} class="rounded" />
             Show reCAPTCHA on contact form
           </label>
         </div>
@@ -313,17 +620,15 @@ const inpMono = inp + " font-mono";
 
     <!-- ── Algolia Search ─────────────────────────────────────── -->
     <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-      <div class="px-6 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-800">Algolia Search</h2>
-      </div>
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Algolia Search</h2></div>
       <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="md:col-span-2 flex gap-6">
           <label class="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" name="algolia_instant_search" checked={checked("Algolia_ShowInstantSearch")} class="rounded" />
+            <input type="checkbox" name="algolia_instant_search" checked={chk("Algolia_ShowInstantSearch")} class="rounded" />
             Show Instant Search
           </label>
           <label class="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" name="algolia_autocomplete" checked={checked("Algolia_ShowAutocomplete")} class="rounded" />
+            <input type="checkbox" name="algolia_autocomplete" checked={chk("Algolia_ShowAutocomplete")} class="rounded" />
             Show Autocomplete
           </label>
         </div>
@@ -358,51 +663,13 @@ const inpMono = inp + " font-mono";
       </div>
     </section>
 
-    <!-- ── Product Display ────────────────────────────────────── -->
-    <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-      <div class="px-6 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-800">Product Display</h2>
-      </div>
-      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Inventory Control</label>
-          <select name="inv_level" class={inp}>
-            {["None","Store","Admin","Mixed"].map(opt => (
-              <option value={opt} selected={settings?.InvLevel === opt}>{opt}</option>
-            ))}
-          </select>
-          <p class="text-xs text-gray-400 mt-1">Store: subtracts when order placed. Admin: subtracts when order filled. Mixed: online=Store, offline=Admin.</p>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Order Button Text</label>
-          <input type="text" name="order_button_text" value={String(v("OrderButtonText"))} placeholder="Add to Cart" class={inp} />
-        </div>
-        <div class="flex flex-col gap-2">
-          <label class="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" name="show_in_stock" checked={checked("ShowInStock")} class="rounded" />
-            Show # in Stock
-          </label>
-          <label class="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" name="out_of_stock" checked={checked("OutofStock")} class="rounded" />
-            Show Out-of-Stock Products
-          </label>
-          <label class="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" name="show_retail" checked={checked("ShowRetail")} class="rounded" />
-            Show Retail / Compare-At Prices
-          </label>
-        </div>
-      </div>
-    </section>
-
     <!-- ── Sitewide Alert ─────────────────────────────────────── -->
     <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-      <div class="px-6 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-800">Sitewide Alert Banner</h2>
-      </div>
+      <div class="px-6 py-4 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Sitewide Alert Banner</h2></div>
       <div class="p-6 grid grid-cols-1 gap-4">
         <div>
           <label class="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" name="alert_display" checked={checked("Alert_Display")} class="rounded" />
+            <input type="checkbox" name="alert_display" checked={chk("Alert_Display")} class="rounded" />
             Display alert on every page
           </label>
         </div>
@@ -413,7 +680,7 @@ const inpMono = inp + " font-mono";
       </div>
     </section>
 
-    <div class="flex gap-3">
+    <div class="flex gap-3 pb-8">
       <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">
         Save Settings
       </button>

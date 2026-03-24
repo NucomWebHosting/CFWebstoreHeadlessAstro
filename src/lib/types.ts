@@ -161,12 +161,67 @@ export interface SettingsRow {
   Algolia_Category_Index: string | null;
   Algolia_Article_Index: string | null;
   Algolia_Suggestion_Index: string | null;
+  // Email extras
+  use_mailingList: number | null;   // 0=None, 1=Mailchimp
+  // Logo sticky header dimensions
+  Logo_desktop_stickey_width: number | null;
+  Logo_desktop_stickey_height: number | null;
+  Logo_desktop_stickey_data_width: number | null;
+  Logo_desktop_stickey_data_height: number | null;
+  // Store settings
+  Locale: string | null;
+  MoneyUnit: string | null;         // e.g. "USD^US Dollar"
+  WeightUnit: string | null;        // gm | kg | oz | lbs
+  SizeUnit: string | null;          // cm | in
+  TimeOffset: number | null;
+  ExcludeIP: string | null;
+  // Category images
+  Category_Image_Height: number | null;
+  category_sm_image_width: number | null;
+  category_sm_image_height: number | null;
+  category_lg_image_width: number | null;
+  category_lg_image_height: number | null;
+  Image_quality: number | null;
+  // Features / blog posts
+  Maxfeatures: number | null;
+  DoNotDspFeaturesInOffCats: boolean | null;
   // Product display
-  InvLevel: string | null;        // None | Store | Admin | Mixed
+  InvLevel: string | null;          // None | Store | Admin | Mixed
+  UseInvTab: boolean | null;
   ShowInStock: boolean | null;
   OutofStock: boolean | null;
   ShowRetail: boolean | null;
+  ItemSort: string | null;          // SKU | Name
+  ShowProductSubscriptions: boolean | null;
   OrderButtonText: string | null;
+  RegistryButtonText: string | null;
+  WishlistButtonText: string | null;
+  RelatedProducts_title: string | null;
+  DoNotDspProdsInOffCats: boolean | null;
+  Maxprods: number | null;
+  // Product teaser display (1=No, 2=Yes, some have additional values)
+  Product_show_Details: number | null;
+  Product_show_shortDesc: number | null;
+  Product_show_orderBox: number | null;   // 1=No, 2=Yes, 3=Price Only
+  Product_show_ratings: number | null;
+  Product_show_Icons: number | null;      // 1=No, 2=Yes, 3=Sale, 4=New, 5=Hot
+  Product_show_sku: number | null;
+  Product_show_customFields: number | null;
+  Product_Image_Height: number | null;
+  // Product image sizes (pixels)
+  th_image_width: number | null;
+  th_image_height: number | null;
+  sm_image_width: number | null;
+  sm_image_height: number | null;
+  md_image_width: number | null;
+  md_image_height: number | null;
+  lg_image_width: number | null;
+  lg_image_height: number | null;
+  // File types
+  Mimetypes: string | null;
+  AllowExtensions: string | null;
+  // Customer logins
+  Login_ShowOneTimeCode: boolean | null;
   // Sitewide alert
   Alert_Display: boolean | null;
   alert_message: string | null;
