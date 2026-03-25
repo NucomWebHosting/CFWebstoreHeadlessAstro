@@ -1,0 +1,231 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getShipSettings, saveShipSettings } from "../../../lib/queries/admin-shipping";
+
+const SHIP_TYPES = [
+  ["Price",       "Amount Added by Total Price"],
+  ["Weight",      "Amount Added by Total Weight"],
+  ["Items",       "Amount Added per Item"],
+  ["Price2",      "Percentage Added by Total Price"],
+  ["Weight2",     "Percentage Added by Total Weight"],
+  ["UPS",         "Automated UPS Shipping Rates"],
+  ["USPS",        "Automated USPS Shipping Rates"],
+  ["FedEx",       "Automated FedEx Shipping Rates"],
+  ["Easypost",    "Automated Easypost Shipping Rates"],
+];
+
+const CUSTOM_TYPES = ["Price", "Price2", "Weight", "Weight2", "Items"];
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g  = (k: string) => (d.get(k) as string) ?? "";
+  const gb = (k: string) => g(k) === "1";
+  const shipType = g("ShipType");
+  await saveShipSettings({
+    ShipType:           shipType,
+    InStorePickup:      gb("InStorePickup"),
+    ShowEstimator:      gb("ShowEstimator"),
+    ShowFreight:        gb("ShowFreight"),
+    OverrideFreight:    gb("OverrideFreight"),
+    UseDropShippers:    gb("UseDropShippers"),
+    SingleShipmentOnly: gb("SingleShipmentOnly"),
+    ShowFrontEnd:       CUSTOM_TYPES.includes(shipType) ? true : gb("ShowFrontEnd"),
+    ShipBase:           parseFloat(g("ShipBase")) || 0,
+    ShipHand:           (parseFloat(g("ShipHand")) || 0) / 100,
+    AllowNoShip:        gb("AllowNoShip"),
+    NoShipType:         g("NoShipType") || null,
+    NoShipMess:         g("NoShipMess") || null,
+  });
+  return Astro.redirect("/admin/shipping?saved=1");
+}
+
+const s = await getShipSettings();
+const saved = Astro.url.searchParams.get("saved") === "1";
+const isCustom = CUSTOM_TYPES.includes(s?.ShipType ?? "");
+const isEasypost = s?.ShipType === "Easypost";
+---
+
+<AdminLayout title="Shipping">
+
+  <!-- Sub-nav -->
+  <nav class="flex flex-wrap gap-1 mb-6 text-sm border-b border-gray-200 pb-0">
+    {[
+      ["/admin/shipping",                  "Settings"],
+      ["/admin/shipping/rates",            "Rates"],
+      ["/admin/shipping/country-rates",    "Country Rates"],
+      ["/admin/shipping/methods",          "Methods"],
+      ["/admin/shipping/custom-settings",  "Custom Settings"],
+      ["/admin/shipping/promotions",       "Promotions"],
+    ].map(([href, label]) => {
+      const active = Astro.url.pathname === href;
+      return (
+        <a href={href}
+           class={`px-4 py-2 font-medium border-b-2 -mb-px transition-colors ${
+             active ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
+           }`}>
+          {label}
+        </a>
+      );
+    })}
+  </nav>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved.</div>
+  )}
+
+  {s && (
+    <form method="post" class="space-y-6 max-w-3xl">
+
+      <section class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
+        <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">General Settings</h2>
+
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <label class="text-sm text-gray-600 font-medium text-right">Shipping Type</label>
+          <select name="ShipType"
+                  class="col-span-2 w-auto border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+            {SHIP_TYPES.map(([val, label]) => (
+              <option value={val} selected={s.ShipType === val}>{label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">In-Store Pickup</span>
+          <div class="col-span-2 flex gap-4 pt-1">
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="InStorePickup" value="1" checked={s.InStorePickup} /> Yes</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="InStorePickup" value="0" checked={!s.InStorePickup} /> No</label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Show Estimator</span>
+          <div class="col-span-2 space-y-1 pt-1">
+            <div class="flex gap-4">
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="ShowEstimator" value="1" checked={s.ShowEstimator} /> Yes</label>
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="ShowEstimator" value="0" checked={!s.ShowEstimator} /> No</label>
+            </div>
+            <p class="text-xs text-gray-400">Shows a shipping estimator in the cart. May be slow with automated rates.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Show Freight</span>
+          <div class="col-span-2 space-y-1 pt-1">
+            <div class="flex gap-4">
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="ShowFreight" value="1" checked={s.ShowFreight} /> Yes</label>
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="ShowFreight" value="0" checked={!s.ShowFreight} /> No</label>
+            </div>
+            <p class="text-xs text-gray-400">Show freight charges separately or combined with shipping.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Freight Override</span>
+          <div class="col-span-2 space-y-1 pt-1">
+            <div class="flex gap-4">
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="OverrideFreight" value="1" checked={s.OverrideFreight} /> Yes</label>
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="OverrideFreight" value="0" checked={!s.OverrideFreight} /> No</label>
+            </div>
+            <p class="text-xs text-gray-400">Freight price added to shipping; freight weight excluded from general shipping calc.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Use Drop-Shippers</span>
+          <div class="col-span-2 space-y-1 pt-1">
+            <div class="flex gap-4">
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="UseDropShippers" value="1" checked={s.UseDropShippers} /> Yes</label>
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="UseDropShippers" value="0" checked={!s.UseDropShippers} /> No</label>
+            </div>
+            <p class="text-xs text-gray-400">Use drop-shipper addresses for rate calculations. Mainly for automated rates.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Single Shipment Only</span>
+          <div class="col-span-2 space-y-1 pt-1">
+            <div class="flex gap-4">
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="SingleShipmentOnly" value="1" checked={s.SingleShipmentOnly} /> Yes</label>
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="SingleShipmentOnly" value="0" checked={!s.SingleShipmentOnly} /> No</label>
+            </div>
+            <p class="text-xs text-gray-400">Auto-create shipment when order is placed instead of allowing multiple shipments.</p>
+          </div>
+        </div>
+
+        {isEasypost && (
+          <div class="grid grid-cols-3 gap-3 items-start">
+            <span class="text-sm text-gray-600 font-medium text-right pt-1">Show Easypost</span>
+            <div class="col-span-2 flex gap-4 pt-1">
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="ShowFrontEnd" value="0" checked={!s.ShowFrontEnd} /> Backend only</label>
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="ShowFrontEnd" value="1" checked={s.ShowFrontEnd} /> Show rates in checkout</label>
+            </div>
+          </div>
+        )}
+        {!isEasypost && <input type="hidden" name="ShowFrontEnd" value="1" />}
+      </section>
+
+      <section class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
+        <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Base Rates</h2>
+        <p class="text-xs text-gray-400">Added to all shipping orders. Base Amount = fixed fee; Handling = percentage of item total.</p>
+
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <label class="text-sm text-gray-600 font-medium text-right">Base Amount</label>
+          <div class="col-span-2 flex items-center gap-2">
+            <input type="number" name="ShipBase" value={s.ShipBase} step="any" min="0"
+                   class="w-28 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="text-sm text-gray-500">$</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <label class="text-sm text-gray-600 font-medium text-right">Handling %</label>
+          <div class="col-span-2 flex items-center gap-2">
+            <input type="number" name="ShipHand" value={parseFloat((s.ShipHand * 100).toPrecision(10)).toString()} step="any" min="0"
+                   class="w-28 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="text-sm text-gray-500">%</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
+        <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">No Shipping</h2>
+        <p class="text-xs text-gray-400">Settings for when shipping cannot be calculated (e.g. international orders).</p>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Allow No Shipping</span>
+          <div class="col-span-2 flex gap-4 pt-1">
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="AllowNoShip" value="1" checked={s.AllowNoShip} /> Yes</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="AllowNoShip" value="0" checked={!s.AllowNoShip} /> No</label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <label class="text-sm text-gray-600 font-medium text-right">Admin Message</label>
+          <input type="text" name="NoShipType" value={s.NoShipType ?? ""} maxlength="50"
+                 class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <label class="text-sm text-gray-600 font-medium text-right pt-1">Customer Message</label>
+          <textarea name="NoShipMess" rows={4}
+                    class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">{s.NoShipMess ?? ""}</textarea>
+        </div>
+      </section>
+
+      <div class="flex gap-3">
+        <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded text-sm hover:bg-blue-700">Save Changes</button>
+      </div>
+
+      {isCustom && (
+        <div class="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-700">
+          Custom shipping is active. Configure your
+          <a href="/admin/shipping/rates" class="underline">Rate Tables</a>,
+          <a href="/admin/shipping/country-rates" class="underline">Country Rates</a>,
+          <a href="/admin/shipping/methods" class="underline">Shipping Methods</a>, and
+          <a href="/admin/shipping/custom-settings" class="underline">Custom Settings</a>.
+        </div>
+      )}
+    </form>
+  )}
+</AdminLayout>

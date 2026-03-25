@@ -1,0 +1,213 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import {
+  getShipMethods, getShipMethod, saveShipMethod, deleteShipMethod,
+  saveMethodsUsedAndPriority,
+} from "../../../lib/queries/admin-shipping";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g  = (k: string) => (d.get(k) as string) ?? "";
+  const gb = (k: string) => g(k) === "1";
+
+  if (g("_action") === "delete") {
+    await deleteShipMethod(parseInt(g("ID")));
+    return Astro.redirect("/admin/shipping/methods?saved=1");
+  }
+
+  if (g("_action") === "update-list") {
+    // bulk Used + Priority update from methods list
+    const ids = (d.getAll("method_ids") as string[]).map(Number);
+    const updates = ids.map(id => ({
+      ID: id,
+      Used: d.has(`Used${id}`),
+      Priority: parseInt((d.get(`Priority${id}`) as string) ?? "99") || 99,
+    }));
+    await saveMethodsUsedAndPriority(updates);
+    return Astro.redirect("/admin/shipping/methods?saved=1");
+  }
+
+  // add / edit single method
+  const id = parseInt(g("ID")) || 0;
+  const priority = parseInt(g("Priority")) || 99;
+  await saveShipMethod(id, {
+    Name:          g("Name"),
+    Amount:        parseFloat(g("Amount")) || 0,
+    Used:          gb("Used"),
+    Domestic:      gb("Domestic"),
+    International: gb("International"),
+    Priority:      priority,
+  });
+  return Astro.redirect("/admin/shipping/methods?saved=1");
+}
+
+const methods = await getShipMethods();
+const saved   = Astro.url.searchParams.get("saved") === "1";
+const editId  = parseInt(Astro.url.searchParams.get("edit") ?? "0") || 0;
+const editing = editId > 0 ? await getShipMethod(editId) : null;
+---
+
+<AdminLayout title="Shipping — Methods">
+
+  <nav class="flex flex-wrap gap-1 mb-6 text-sm border-b border-gray-200 pb-0">
+    {[
+      ["/admin/shipping",                  "Settings"],
+      ["/admin/shipping/rates",            "Rates"],
+      ["/admin/shipping/country-rates",    "Country Rates"],
+      ["/admin/shipping/methods",          "Methods"],
+      ["/admin/shipping/custom-settings",  "Custom Settings"],
+      ["/admin/shipping/promotions",       "Promotions"],
+    ].map(([href, label]) => {
+      const active = Astro.url.pathname === href;
+      return (
+        <a href={href}
+           class={`px-4 py-2 font-medium border-b-2 -mb-px transition-colors ${
+             active ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
+           }`}>{label}</a>
+      );
+    })}
+  </nav>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved.</div>
+  )}
+
+  <div class="space-y-6 max-w-3xl">
+
+    {/* Add / Edit form */}
+    <section class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
+      <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">
+        {editing ? `Edit Method: ${editing.Name}` : "Add Shipping Method"}
+      </h2>
+
+      <form method="post" class="space-y-3">
+        <input type="hidden" name="ID" value={String(editing?.ID ?? 0)} />
+
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <label class="text-sm text-gray-600 font-medium text-right">Description</label>
+          <input type="text" name="Name" value={editing?.Name ?? ""} maxlength="60" required
+                 class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <label class="text-sm text-gray-600 font-medium text-right">Method Cost</label>
+          <div class="col-span-2 flex items-center gap-2">
+            <input type="number" name="Amount" step="any" min="0"
+                   value={editing?.Amount ?? "0"}
+                   class="w-28 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="text-sm text-gray-400">$</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <label class="text-sm text-gray-600 font-medium text-right">Priority</label>
+          <input type="number" name="Priority" min="0" max="9999"
+                 value={editing?.Priority ?? "99"}
+                 class="col-span-2 w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Domestic</span>
+          <div class="col-span-2 flex gap-4 pt-1">
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="Domestic" value="1" checked={editing?.Domestic ?? true} /> Yes</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="Domestic" value="0" checked={editing ? !editing.Domestic : false} /> No</label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">International</span>
+          <div class="col-span-2 flex gap-4 pt-1">
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="International" value="1" checked={editing?.International ?? false} /> Yes</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="International" value="0" checked={editing ? !editing.International : true} /> No</label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Used</span>
+          <div class="col-span-2 flex gap-4 pt-1">
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="Used" value="1" checked={editing?.Used ?? true} /> Yes</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="Used" value="0" checked={editing ? !editing.Used : false} /> No</label>
+          </div>
+        </div>
+
+        <div class="flex gap-2">
+          <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+            {editing ? "Update Method" : "Add Method"}
+          </button>
+          {editing && (
+            <>
+              <a href="/admin/shipping/methods" class="px-4 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">Cancel</a>
+              <form method="post" class="ml-auto">
+                <input type="hidden" name="_action" value="delete" />
+                <input type="hidden" name="ID" value={String(editing.ID)} />
+                <button type="submit" onclick="return confirm('Delete this method?')"
+                        class="px-4 py-1.5 rounded text-sm border border-red-300 text-red-500 hover:bg-red-50">
+                  Delete Method
+                </button>
+              </form>
+            </>
+          )}
+        </div>
+      </form>
+    </section>
+
+    {/* Methods list with inline Used + Priority editing */}
+    {methods.length > 0 && (
+      <section class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+        <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2 mb-4">
+          All Methods ({methods.length})
+        </h2>
+        <form method="post">
+          <input type="hidden" name="_action" value="update-list" />
+          {methods.map(m => (
+            <input type="hidden" name="method_ids" value={String(m.ID)} />
+          ))}
+
+          <table class="w-full text-sm mb-4">
+            <thead>
+              <tr class="border-b border-gray-100 text-left">
+                <th class="py-2 pr-3 text-gray-500 font-medium">Description</th>
+                <th class="py-2 pr-3 text-gray-500 font-medium text-center">Cost</th>
+                <th class="py-2 pr-3 text-gray-500 font-medium text-center">Used</th>
+                <th class="py-2 pr-3 text-gray-500 font-medium text-center">Dom</th>
+                <th class="py-2 pr-3 text-gray-500 font-medium text-center">Int'l</th>
+                <th class="py-2 pr-3 text-gray-500 font-medium text-center">Priority</th>
+                <th class="py-2 text-gray-500 font-medium"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {methods.map(m => (
+                <tr class="border-b border-gray-50 hover:bg-gray-50">
+                  <td class="py-2 pr-3">{m.Name}</td>
+                  <td class="py-2 pr-3 text-center">${m.Amount.toFixed(2)}</td>
+                  <td class="py-2 pr-3 text-center">
+                    <input type="checkbox" name={`Used${m.ID}`} value="1" checked={m.Used} />
+                  </td>
+                  <td class="py-2 pr-3 text-center">{m.Domestic ? "Yes" : "No"}</td>
+                  <td class="py-2 pr-3 text-center">{m.International ? "Yes" : "No"}</td>
+                  <td class="py-2 pr-3 text-center">
+                    <input type="number" name={`Priority${m.ID}`} value={String(m.Priority)} min="0" max="9999"
+                           class="w-16 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  </td>
+                  <td class="py-2">
+                    <a href={`/admin/shipping/methods?edit=${m.ID}`}
+                       class="text-blue-600 hover:underline text-xs">Edit</a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+            Update Used &amp; Priority
+          </button>
+        </form>
+
+        <div class="mt-4 p-3 bg-blue-50 rounded text-xs text-blue-700">
+          Set up at least one domestic and one international method. Any countries you ship to internationally must be in Country Rates.
+        </div>
+      </section>
+    )}
+  </div>
+</AdminLayout>
