@@ -66,7 +66,7 @@ export async function getAccessToken(): Promise<string> {
 export async function makeRequest<T>(
   method:  string,
   path:    string,
-  query:   Record<string, string> = {},
+  query:   Record<string, string | string[]> = {},
   body?:   string,
 ): Promise<T> {
   const accessKey  = process.env.AMAZON_AWS_KEY ?? "";
@@ -78,10 +78,15 @@ export async function makeRequest<T>(
   const amzDate   = now.toISOString().replace(/[:-]/g, "").replace(/\.\d{3}/, "");
   const dateStamp = amzDate.slice(0, 8);
 
-  // Canonical query string — keys sorted, RFC-3986 encoded
-  const sortedQuery = Object.keys(query)
-    .sort()
-    .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(query[k])}`)
+  // Canonical query string — array values become repeated params, all sorted
+  const pairs: [string, string][] = [];
+  for (const [k, v] of Object.entries(query)) {
+    if (Array.isArray(v)) { for (const item of v) pairs.push([k, item]); }
+    else pairs.push([k, v]);
+  }
+  const sortedQuery = pairs
+    .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
     .join("&");
 
   // Canonical headers (lowercase, sorted, newline-terminated)
@@ -167,4 +172,83 @@ export async function getMarketplaceParticipations(): Promise<MarketplacePartici
     "/sellers/v1/marketplaceParticipations"
   );
   return res.payload ?? [];
+}
+
+// ── Orders ─────────────────────────────────────────────────────────────────
+
+export interface SPMoney { CurrencyCode: string; Amount: string; }
+
+export interface SPOrder {
+  AmazonOrderId:          string;
+  PurchaseDate:           string;
+  LastUpdateDate:         string;
+  OrderStatus:            string;
+  FulfillmentChannel?:    string;
+  SalesChannel?:          string;
+  OrderType?:             string;
+  ShipServiceLevel?:      string;
+  NumberOfItemsShipped:   number;
+  NumberOfItemsUnshipped: number;
+  OrderTotal?:            SPMoney;
+  BuyerInfo?: {
+    BuyerEmail?: string;
+    BuyerName?:  string;
+  };
+  ShippingAddress?: {
+    Name?:            string;
+    AddressLine1?:    string;
+    AddressLine2?:    string;
+    City?:            string;
+    StateOrRegion?:   string;
+    PostalCode?:      string;
+    CountryCode?:     string;
+  };
+}
+
+export interface SPOrderItem {
+  ASIN:             string;
+  OrderItemId:      string;
+  SellerSKU?:       string;
+  Title?:           string;
+  QuantityOrdered:  number;
+  QuantityShipped:  number;
+  ItemPrice?:       SPMoney;
+  ItemTax?:         SPMoney;
+  ShippingPrice?:   SPMoney;
+  ShippingTax?:     SPMoney;
+  PromotionDiscount?: SPMoney;
+}
+
+export interface GetOrdersParams {
+  lastUpdatedAfter?:  string; // ISO-8601
+  lastUpdatedBefore?: string;
+  orderStatuses?:     string[];
+  nextToken?:         string;
+}
+
+export async function getOrders(params: GetOrdersParams = {}): Promise<{ orders: SPOrder[]; nextToken?: string }> {
+  const query: Record<string, string | string[]> = {
+    MarketplaceIds: [process.env.AMAZON_MARKETPLACE_ID ?? "ATVPDKIKX0DER"],
+  };
+  if (params.lastUpdatedAfter)    query.LastUpdatedAfter  = params.lastUpdatedAfter;
+  if (params.lastUpdatedBefore)   query.LastUpdatedBefore = params.lastUpdatedBefore;
+  if (params.orderStatuses?.length) query.OrderStatuses   = params.orderStatuses;
+  if (params.nextToken)           query.NextToken         = params.nextToken;
+
+  const res = await makeRequest<{ payload: { Orders: SPOrder[]; NextToken?: string } }>(
+    "GET", "/orders/v0/orders", query
+  );
+  return { orders: res.payload.Orders ?? [], nextToken: res.payload.NextToken };
+}
+
+export async function getOrder(orderId: string): Promise<SPOrder> {
+  const res = await makeRequest<{ payload: SPOrder }>("GET", `/orders/v0/orders/${orderId}`);
+  return res.payload;
+}
+
+export async function getOrderItems(orderId: string): Promise<SPOrderItem[]> {
+  const res = await makeRequest<{ payload: { OrderItems: SPOrderItem[]; AmazonOrderId: string } }>(
+    "GET", `/orders/v0/orders/${orderId}/orderItems`
+  );
+  return res.payload.OrderItems ?? [];
 }

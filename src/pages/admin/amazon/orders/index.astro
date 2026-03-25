@@ -1,0 +1,187 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../components/layout/AdminLayout.astro";
+import { getOrders } from "../../../../lib/amazon/spapi";
+import type { SPOrder } from "../../../../lib/amazon/spapi";
+
+const ORDER_STATUSES = [
+  "Pending",
+  "Unshipped",
+  "PartiallyShipped",
+  "Shipped",
+  "Canceled",
+  "Unfulfillable",
+];
+
+const STATUS_STYLES: Record<string, string> = {
+  Pending:          "bg-blue-100 text-blue-700",
+  Unshipped:        "bg-amber-100 text-amber-700",
+  PartiallyShipped: "bg-purple-100 text-purple-700",
+  Shipped:          "bg-green-100 text-green-700",
+  Canceled:         "bg-gray-100 text-gray-500",
+  Unfulfillable:    "bg-red-100 text-red-700",
+};
+
+const sp = Astro.url.searchParams;
+
+// Date defaults: last 30 days
+function isoDate(d: Date) { return d.toISOString().split("T")[0]; }
+const defaultAfter = isoDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+const defaultBefore = isoDate(new Date());
+
+const afterDate  = sp.get("after")  || defaultAfter;
+const beforeDate = sp.get("before") || defaultBefore;
+const nextToken  = sp.get("next")   || undefined;
+const selectedStatuses = sp.getAll("status").length
+  ? sp.getAll("status")
+  : ["Pending", "Unshipped", "PartiallyShipped", "Shipped"];
+
+let orders: SPOrder[] = [];
+let nextPageToken: string | undefined;
+let fetchError = "";
+
+try {
+  const result = await getOrders({
+    lastUpdatedAfter:  afterDate  ? afterDate  + "T00:00:00Z" : undefined,
+    lastUpdatedBefore: beforeDate ? beforeDate + "T23:59:59Z" : undefined,
+    orderStatuses:     selectedStatuses,
+    nextToken,
+  });
+  orders       = result.orders;
+  nextPageToken = result.nextToken;
+} catch (e: unknown) {
+  fetchError = e instanceof Error ? e.message : String(e);
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "2-digit", day: "2-digit", year: "2-digit",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+function fmtMoney(m: { Amount: string; CurrencyCode: string } | undefined) {
+  if (!m) return "—";
+  return `$${parseFloat(m.Amount).toFixed(2)}`;
+}
+
+// Build filter URL preserving current params
+function filterUrl(overrides: Record<string, string | string[]>) {
+  const p = new URLSearchParams();
+  const merged = { after: afterDate, before: beforeDate, status: selectedStatuses, ...overrides };
+  for (const [k, v] of Object.entries(merged)) {
+    if (Array.isArray(v)) { for (const item of v) p.append(k, item); }
+    else p.set(k, v);
+  }
+  return `/admin/amazon/orders?${p.toString()}`;
+}
+---
+
+<AdminLayout title="Amazon Orders">
+
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-xl font-semibold text-gray-800">Amazon Orders</h1>
+    <a href="/admin/amazon" class="text-sm text-blue-600 hover:underline">← Marketplace</a>
+  </div>
+
+  {fetchError && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 break-all">
+      <strong class="font-medium">Error:</strong> {fetchError}
+    </div>
+  )}
+
+  {/* Filters */}
+  <form method="get" class="mb-6 bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-4 flex flex-wrap gap-4 items-end">
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Updated After</label>
+      <input type="date" name="after" value={afterDate}
+             class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Updated Before</label>
+      <input type="date" name="before" value={beforeDate}
+             class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-2">Order Status</label>
+      <div class="flex flex-wrap gap-3">
+        {ORDER_STATUSES.map(s => (
+          <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+            <input type="checkbox" name="status" value={s}
+                   checked={selectedStatuses.includes(s)}
+                   class="accent-blue-600" />
+            <span class={`px-1.5 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[s] ?? "bg-gray-100 text-gray-600"}`}>{s}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Fetch</button>
+      <a href="/admin/amazon/orders" class="px-4 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">Reset</a>
+    </div>
+  </form>
+
+  {/* Table */}
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    {orders.length === 0 && !fetchError ? (
+      <p class="px-5 py-10 text-center text-sm text-gray-400">No orders found for the selected filters.</p>
+    ) : (
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-5 py-3 text-left">Order ID</th>
+            <th class="px-5 py-3 text-left">Buyer</th>
+            <th class="px-5 py-3 text-center">Status</th>
+            <th class="px-5 py-3 text-center">Channel</th>
+            <th class="px-5 py-3 text-right">Total</th>
+            <th class="px-5 py-3 text-center">Items</th>
+            <th class="px-5 py-3 text-center">Purchase Date</th>
+            <th class="px-5 py-3 text-center">Last Updated</th>
+            <th class="px-5 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {orders.map(o => (
+            <tr class="hover:bg-gray-50">
+              <td class="px-5 py-3 font-mono text-xs text-gray-700">{o.AmazonOrderId}</td>
+              <td class="px-5 py-3 text-gray-700 text-xs">{o.BuyerInfo?.BuyerName || "—"}</td>
+              <td class="px-5 py-3 text-center">
+                <span class={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[o.OrderStatus] ?? "bg-gray-100 text-gray-600"}`}>
+                  {o.OrderStatus}
+                </span>
+              </td>
+              <td class="px-5 py-3 text-center text-xs text-gray-500">{o.FulfillmentChannel ?? "—"}</td>
+              <td class="px-5 py-3 text-right font-mono text-xs text-gray-700">{fmtMoney(o.OrderTotal)}</td>
+              <td class="px-5 py-3 text-center text-xs text-gray-600">
+                {o.NumberOfItemsShipped + o.NumberOfItemsUnshipped}
+                {o.NumberOfItemsUnshipped > 0 && (
+                  <span class="text-amber-600 ml-1">({o.NumberOfItemsUnshipped} pending)</span>
+                )}
+              </td>
+              <td class="px-5 py-3 text-center text-xs text-gray-500 whitespace-nowrap">{fmtDate(o.PurchaseDate)}</td>
+              <td class="px-5 py-3 text-center text-xs text-gray-500 whitespace-nowrap">{fmtDate(o.LastUpdateDate)}</td>
+              <td class="px-5 py-3 text-right">
+                <a href={`/admin/amazon/orders/${o.AmazonOrderId}`}
+                   class="px-3 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700">
+                  View
+                </a>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+
+    <div class="px-5 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+      <span>{orders.length} order{orders.length !== 1 ? "s" : ""} on this page</span>
+      <div class="flex gap-3">
+        {nextToken && (
+          <a href={filterUrl({ next: nextPageToken ?? "" })}
+             class="text-blue-600 hover:underline font-medium">
+            Next page →
+          </a>
+        )}
+      </div>
+    </div>
+  </div>
+
+</AdminLayout>

@@ -1,0 +1,188 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../components/layout/AdminLayout.astro";
+import { getOrder, getOrderItems } from "../../../../lib/amazon/spapi";
+import type { SPOrder, SPOrderItem } from "../../../../lib/amazon/spapi";
+
+const { orderId } = Astro.params;
+
+let order: SPOrder | null = null;
+let items: SPOrderItem[] = [];
+let fetchError = "";
+
+try {
+  [order, items] = await Promise.all([
+    getOrder(orderId!),
+    getOrderItems(orderId!),
+  ]);
+} catch (e: unknown) {
+  fetchError = e instanceof Error ? e.message : String(e);
+}
+
+const STATUS_STYLES: Record<string, string> = {
+  Pending:          "bg-blue-100 text-blue-700",
+  Unshipped:        "bg-amber-100 text-amber-700",
+  PartiallyShipped: "bg-purple-100 text-purple-700",
+  Shipped:          "bg-green-100 text-green-700",
+  Canceled:         "bg-gray-100 text-gray-500",
+  Unfulfillable:    "bg-red-100 text-red-700",
+};
+
+function fmtDate(iso: string | undefined) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "long", day: "numeric", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+function fmtMoney(m: { Amount: string; CurrencyCode: string } | undefined) {
+  if (!m) return "—";
+  return `$${parseFloat(m.Amount).toFixed(2)}`;
+}
+function moneyVal(m: { Amount: string } | undefined) {
+  return m ? parseFloat(m.Amount) : 0;
+}
+
+const itemTotal   = items.reduce((s, i) => s + moneyVal(i.ItemPrice), 0);
+const shippingTotal = items.reduce((s, i) => s + moneyVal(i.ShippingPrice), 0);
+const taxTotal    = items.reduce((s, i) => s + moneyVal(i.ItemTax) + moneyVal(i.ShippingTax), 0);
+const promoTotal  = items.reduce((s, i) => s + moneyVal(i.PromotionDiscount), 0);
+---
+
+<AdminLayout title={`Order ${orderId}`}>
+
+  <div class="mb-5">
+    <a href="/admin/amazon/orders" class="text-sm text-blue-600 hover:underline">← Amazon Orders</a>
+  </div>
+
+  {fetchError && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 break-all">
+      <strong class="font-medium">Error:</strong> {fetchError}
+    </div>
+  )}
+
+  {order && (
+    <div class="max-w-3xl space-y-6">
+
+      {/* Order header */}
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h2 class="font-semibold text-gray-800 font-mono">{order.AmazonOrderId}</h2>
+            <p class="text-xs text-gray-400 mt-0.5">Purchased {fmtDate(order.PurchaseDate)}</p>
+          </div>
+          <span class={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[order.OrderStatus] ?? "bg-gray-100 text-gray-600"}`}>
+            {order.OrderStatus}
+          </span>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-0 divide-x divide-y divide-gray-100 text-sm">
+          <div class="px-5 py-4">
+            <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Buyer</p>
+            <p class="font-medium text-gray-800">{order.BuyerInfo?.BuyerName || "—"}</p>
+            {order.BuyerInfo?.BuyerEmail && (
+              <p class="text-xs text-gray-500 mt-0.5">{order.BuyerInfo.BuyerEmail}</p>
+            )}
+          </div>
+          <div class="px-5 py-4">
+            <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Ship To</p>
+            {order.ShippingAddress ? (
+              <div class="text-gray-700 leading-snug">
+                <p class="font-medium">{order.ShippingAddress.Name}</p>
+                {order.ShippingAddress.AddressLine1 && <p class="text-xs">{order.ShippingAddress.AddressLine1}</p>}
+                {order.ShippingAddress.AddressLine2 && <p class="text-xs">{order.ShippingAddress.AddressLine2}</p>}
+                <p class="text-xs">
+                  {[order.ShippingAddress.City, order.ShippingAddress.StateOrRegion, order.ShippingAddress.PostalCode].filter(Boolean).join(", ")}
+                </p>
+              </div>
+            ) : <p class="text-gray-400">—</p>}
+          </div>
+          <div class="px-5 py-4">
+            <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Fulfillment</p>
+            <p class="text-gray-700">{order.FulfillmentChannel ?? "—"}</p>
+            {order.ShipServiceLevel && <p class="text-xs text-gray-500 mt-0.5">{order.ShipServiceLevel}</p>}
+          </div>
+          <div class="px-5 py-4">
+            <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Order Total</p>
+            <p class="font-semibold text-gray-800 text-base">{fmtMoney(order.OrderTotal)}</p>
+          </div>
+          <div class="px-5 py-4">
+            <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Items</p>
+            <p class="text-gray-700">
+              {order.NumberOfItemsShipped} shipped
+              {order.NumberOfItemsUnshipped > 0 && (
+                <span class="text-amber-600 ml-1">/ {order.NumberOfItemsUnshipped} pending</span>
+              )}
+            </p>
+          </div>
+          <div class="px-5 py-4">
+            <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Last Updated</p>
+            <p class="text-gray-700 text-xs">{fmtDate(order.LastUpdateDate)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Order items */}
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100">
+          <h2 class="font-semibold text-gray-800">Order Items</h2>
+        </div>
+
+        {items.length === 0 ? (
+          <p class="px-5 py-8 text-sm text-center text-gray-400">No items returned.</p>
+        ) : (
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+              <tr>
+                <th class="px-5 py-3 text-left">Product</th>
+                <th class="px-5 py-3 text-left">SKU / ASIN</th>
+                <th class="px-5 py-3 text-center">Qty Ordered</th>
+                <th class="px-5 py-3 text-center">Qty Shipped</th>
+                <th class="px-5 py-3 text-right">Item Price</th>
+                <th class="px-5 py-3 text-right">Shipping</th>
+                <th class="px-5 py-3 text-right">Tax</th>
+                <th class="px-5 py-3 text-right">Promo</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              {items.map(item => (
+                <tr class="hover:bg-gray-50">
+                  <td class="px-5 py-3 text-gray-800 max-w-xs">
+                    <p class="font-medium leading-snug line-clamp-2">{item.Title || "—"}</p>
+                  </td>
+                  <td class="px-5 py-3 font-mono text-xs text-gray-500">
+                    {item.SellerSKU && <p>{item.SellerSKU}</p>}
+                    <p class="text-gray-400">{item.ASIN}</p>
+                  </td>
+                  <td class="px-5 py-3 text-center text-gray-700">{item.QuantityOrdered}</td>
+                  <td class="px-5 py-3 text-center text-gray-700">{item.QuantityShipped}</td>
+                  <td class="px-5 py-3 text-right font-mono text-xs text-gray-700">{fmtMoney(item.ItemPrice)}</td>
+                  <td class="px-5 py-3 text-right font-mono text-xs text-gray-700">{fmtMoney(item.ShippingPrice)}</td>
+                  <td class="px-5 py-3 text-right font-mono text-xs text-gray-500">
+                    {fmtMoney({ Amount: String(moneyVal(item.ItemTax) + moneyVal(item.ShippingTax)), CurrencyCode: "USD" })}
+                  </td>
+                  <td class="px-5 py-3 text-right font-mono text-xs text-red-500">
+                    {promoTotal > 0 ? `-${fmtMoney(item.PromotionDiscount)}` : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot class="bg-gray-50 border-t-2 border-gray-200 text-xs font-medium">
+              <tr>
+                <td colspan="4" class="px-5 py-3 text-right text-gray-600">Subtotals</td>
+                <td class="px-5 py-3 text-right font-mono text-gray-700">${itemTotal.toFixed(2)}</td>
+                <td class="px-5 py-3 text-right font-mono text-gray-700">${shippingTotal.toFixed(2)}</td>
+                <td class="px-5 py-3 text-right font-mono text-gray-500">${taxTotal.toFixed(2)}</td>
+                <td class="px-5 py-3 text-right font-mono text-red-500">
+                  {promoTotal > 0 ? `-$${promoTotal.toFixed(2)}` : "—"}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
+      </div>
+
+    </div>
+  )}
+
+</AdminLayout>
