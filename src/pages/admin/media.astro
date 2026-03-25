@@ -1,0 +1,9 @@
+---
+export const prerender = false;
+import AdminLayout from "../../components/layout/AdminLayout.astro";
+import MediaManager from "../../components/admin/MediaManager";
+---
+
+<AdminLayout title="Media">
+  <MediaManager client:only="react" />
+</AdminLayout>

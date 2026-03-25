@@ -2,15 +2,12 @@ import type { APIRoute } from "astro";
 import { writeFile, mkdir } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { randomBytes } from "node:crypto";
+import sharp from "sharp";
 
 export const prerender = false;
 
-// In production set UPLOAD_DIR env var to an absolute path outside dist/
-// e.g. UPLOAD_DIR=/var/www/frontend.nucomwebhosting.com/images
-// In dev, falls back to public/images/ which Astro serves at /images/
 const UPLOAD_DIR =
   process.env.UPLOAD_DIR ?? join(process.cwd(), "public", "images");
-
 const IMAGE_BASE_URL = process.env.IMAGE_BASE_URL ?? "/images";
 
 const ALLOWED_TYPES = new Set([
@@ -24,11 +21,13 @@ const ALLOWED_TYPES = new Set([
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
-export const POST: APIRoute = async ({ request }) => {
-  // Auth check — require a valid session
-  // (session check relies on middleware having already guarded /admin/* routes;
-  //  this endpoint is under /api/admin so middleware covers it too)
+// Images wider than this are resized on upload to save disk space
+const MAX_DIMENSION = 2400;
+const THUMB_SIZE = 400;
+const SVG_TYPE = "image/svg+xml";
+const GIF_TYPE = "image/gif";
 
+export const POST: APIRoute = async ({ request }) => {
   let formData: FormData;
   try {
     formData = await request.formData();
@@ -36,7 +35,6 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ success: false, data: { messages: ["Invalid request"] } }, 400);
   }
 
-  // Jodit sends files as files[0], files[1], …
   const uploaded: string[] = [];
   const errors: string[] = [];
 
@@ -58,12 +56,39 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     const ext = extname(file.name).toLowerCase() || ".jpg";
-    const filename = `${Date.now()}-${randomBytes(6).toString("hex")}${ext}`;
+    const stem = `${Date.now()}-${randomBytes(6).toString("hex")}`;
+    const filename = `${stem}${ext}`;
+    const filePath = join(UPLOAD_DIR, filename);
 
     try {
       await mkdir(UPLOAD_DIR, { recursive: true });
       const buffer = Buffer.from(await file.arrayBuffer());
-      await writeFile(join(UPLOAD_DIR, filename), buffer);
+
+      const canProcessWithSharp = file.type !== SVG_TYPE && file.type !== GIF_TYPE;
+
+      if (canProcessWithSharp) {
+        // Resize if too wide, otherwise write as-is
+        const img = sharp(buffer);
+        const meta = await img.metadata();
+        if ((meta.width ?? 0) > MAX_DIMENSION) {
+          await img.resize(MAX_DIMENSION, undefined, { withoutEnlargement: true }).toFile(filePath);
+        } else {
+          await writeFile(filePath, buffer);
+        }
+
+        // Generate thumbnail
+        const thumbDir = join(UPLOAD_DIR, "thumbs");
+        await mkdir(thumbDir, { recursive: true });
+        const thumbFilename = `${stem}.jpg`;
+        await sharp(filePath)
+          .resize(THUMB_SIZE, THUMB_SIZE, { fit: "inside", withoutEnlargement: true })
+          .jpeg({ quality: 80 })
+          .toFile(join(thumbDir, thumbFilename));
+      } else {
+        // SVG / GIF — write as-is, no thumb
+        await writeFile(filePath, buffer);
+      }
+
       uploaded.push(`${IMAGE_BASE_URL}/${filename}`);
     } catch (err) {
       errors.push(`${file.name}: write failed`);

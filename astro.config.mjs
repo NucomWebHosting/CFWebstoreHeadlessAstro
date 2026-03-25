@@ -15,4 +15,9 @@ export default defineConfig({
   security: {
     checkOrigin: false,
   },
+  vite: {
+    ssr: {
+      external: ["sharp"],
+    },
+  },
 });
