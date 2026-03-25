@@ -1,0 +1,67 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getLists, LIST_STYLES } from "../../../lib/queries/admin-list-manager";
+
+const deleted = Astro.url.searchParams.get("deleted") === "1";
+const lists = await getLists();
+---
+
+<AdminLayout title="List Manager">
+
+  {deleted && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">List deleted.</div>
+  )}
+
+  <!-- Sub-nav -->
+  <div class="flex gap-2 mb-5 text-sm">
+    <a href="/admin/list-manager" class="px-3 py-1.5 rounded bg-slate-700 text-white font-medium">Lists</a>
+    <a href="/admin/list-manager/categories" class="px-3 py-1.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white">Categories</a>
+  </div>
+
+  <div class="flex items-center gap-4 mb-4">
+    <span class="text-sm text-gray-500">{lists.length} list{lists.length !== 1 ? "s" : ""}</span>
+    <a href="/admin/list-manager/new" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+      + New List
+    </a>
+  </div>
+
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+    <table class="w-full text-sm whitespace-nowrap">
+      <thead class="bg-gray-50 border-b border-gray-200">
+        <tr>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">ID</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Name</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Description</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Style</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Questions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {lists.length === 0 && (
+          <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">No lists found.</td></tr>
+        )}
+        {lists.map(l => (
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-2.5">
+              <a href={`/admin/list-manager/${l.List_ID}`}
+                 class="text-blue-600 hover:underline text-xs font-mono">
+                Edit {l.List_ID}
+              </a>
+            </td>
+            <td class="px-4 py-2.5 font-medium text-gray-800">{l.name}</td>
+            <td class="px-4 py-2.5 text-gray-500 text-xs">{l.text || "—"}</td>
+            <td class="px-4 py-2.5 text-gray-500 text-xs">{LIST_STYLES[l.list_style] ?? l.list_style}</td>
+            <td class="px-4 py-2.5">
+              <a href={`/admin/list-manager/${l.List_ID}/questions`}
+                 class="text-blue-500 hover:underline text-xs">
+                View Questions →
+              </a>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+</AdminLayout>

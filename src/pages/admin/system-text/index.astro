@@ -1,0 +1,81 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getSystemTexts } from "../../../lib/queries/admin-system-text";
+
+const p = Astro.url.searchParams;
+const name    = p.get("name")    ?? "";
+const deleted = p.get("deleted") === "1";
+
+const rows = await getSystemTexts(name || undefined);
+---
+
+<AdminLayout title="System Text">
+
+  {deleted && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Template deleted.</div>
+  )}
+
+  <p class="text-sm text-gray-600 mb-4">
+    Edit the default system text for various pages in your store. Customize or translate these templates,
+    inserting merge codes as needed.
+  </p>
+
+  <!-- Filters -->
+  <form method="get" action="/admin/system-text" class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-5">
+    <div class="flex flex-wrap gap-3 items-end">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Text Name</label>
+        <input type="text" name="name" value={name} maxlength="50"
+               class="w-48 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Search</button>
+      <a href="/admin/system-text" class="text-xs text-blue-600 hover:underline self-end pb-2">All</a>
+    </div>
+  </form>
+
+  <!-- Count + New -->
+  <div class="flex items-center gap-4 mb-3">
+    <span class="text-sm text-gray-500">{rows.length} template{rows.length !== 1 ? "s" : ""}</span>
+    <a href="/admin/system-text/new" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+      + New Template
+    </a>
+  </div>
+
+  <!-- Table -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+    <table class="w-full text-sm whitespace-nowrap">
+      <thead class="bg-gray-50 border-b border-gray-200">
+        <tr>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">ID</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Text Name</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">System Name</th>
+          <th class="px-4 py-2.5 text-center font-medium text-gray-600">Display</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {rows.length === 0 && (
+          <tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">No records found.</td></tr>
+        )}
+        {rows.map(r => (
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-2.5">
+              <a href={`/admin/system-text/${r.SystemText_ID}`}
+                 class="text-blue-600 hover:underline text-xs font-mono">
+                Edit {r.SystemText_ID}
+              </a>
+            </td>
+            <td class="px-4 py-2.5 font-medium text-gray-800">{r.Text_Name}</td>
+            <td class="px-4 py-2.5 text-gray-500 text-xs font-mono">{r.CallAction || "—"}</td>
+            <td class="px-4 py-2.5 text-center">
+              {r.Display
+                ? <span class="text-xs text-green-600">Yes</span>
+                : <span class="text-xs text-gray-400">No</span>}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+</AdminLayout>

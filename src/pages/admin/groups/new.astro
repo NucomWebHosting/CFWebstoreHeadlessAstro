@@ -1,0 +1,130 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { createGroup, getGroupDiscounts, getGroupPromotions } from "../../../lib/queries/admin-groups";
+
+const [allDiscounts, allPromotions] = await Promise.all([
+  getGroupDiscounts(),
+  getGroupPromotions(),
+]);
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g = (k: string) => (d.get(k) as string ?? "").trim();
+  const bit = (k: string) => g(k) === "1";
+
+  const selectedDiscounts = (d.getAll("Discounts") as string[])
+    .map(Number).filter(n => n > 0);
+  const selectedPromotions = (d.getAll("Promotions") as string[])
+    .map(Number).filter(n => n > 0);
+
+  try {
+    const newId = await createGroup({
+      Name:        g("Name"),
+      Description: g("Description"),
+      Group_Code:  g("Group_Code"),
+      Wholesale:   bit("Wholesale"),
+      TaxExempt:   bit("TaxExempt"),
+      ShipExempt:  bit("ShipExempt"),
+      discountIds:  selectedDiscounts,
+      promotionIds: selectedPromotions,
+    });
+    return Astro.redirect(`/admin/groups/${newId}?saved=1`);
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+---
+
+<AdminLayout title="New Group">
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/groups" class="text-sm text-blue-600 hover:underline">← Back to Groups</a>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4 max-w-2xl">
+    <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">New Group</h2>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Name <span class="text-red-500">*</span></label>
+      <input type="text" name="Name" value="" maxlength="100" required
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Description</label>
+      <input type="text" name="Description" value="" maxlength="255"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Group Code</label>
+      <div class="col-span-2">
+        <input type="text" name="Group_Code" value="" maxlength="20"
+               class="w-48 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <p class="text-xs text-gray-400 mt-0.5">Code entered during registration to auto-assign this group.</p>
+      </div>
+    </div>
+
+    {[
+      { name: "Wholesale",  label: "Wholesale" },
+      { name: "TaxExempt",  label: "Tax Exempt" },
+      { name: "ShipExempt", label: "Shipping Exempt" },
+    ].map(({ name, label }) => (
+      <div class="grid grid-cols-3 gap-3 items-center">
+        <span class="text-sm text-gray-600 font-medium text-right">{label}</span>
+        <div class="col-span-2 flex gap-4">
+          <label class="flex items-center gap-2 text-sm">
+            <input type="radio" name={name} value="1" /> Yes
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="radio" name={name} value="0" checked /> No
+          </label>
+        </div>
+      </div>
+    ))}
+
+    {allDiscounts.length > 0 && (
+      <div class="grid grid-cols-3 gap-3 items-start">
+        <label class="text-sm text-gray-600 font-medium text-right pt-1">Discounts</label>
+        <select name="Discounts" multiple
+                size={Math.min(allDiscounts.length + 1, 6)}
+                class="col-span-2 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          {allDiscounts.map(d => (
+            <option value={d.Discount_ID}>{d.Name} (#{d.Discount_ID})</option>
+          ))}
+        </select>
+        <div class="col-start-2 col-span-2">
+          <p class="text-xs text-gray-400">Hold Ctrl/Cmd to select multiple. Select none to assign no discounts.</p>
+        </div>
+      </div>
+    )}
+
+    {allPromotions.length > 0 && (
+      <div class="grid grid-cols-3 gap-3 items-start">
+        <label class="text-sm text-gray-600 font-medium text-right pt-1">Promotions</label>
+        <select name="Promotions" multiple
+                size={Math.min(allPromotions.length + 1, 6)}
+                class="col-span-2 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          {allPromotions.map(pr => (
+            <option value={pr.Promotion_ID}>{pr.Name} (#{pr.Promotion_ID})</option>
+          ))}
+        </select>
+        <div class="col-start-2 col-span-2">
+          <p class="text-xs text-gray-400">Hold Ctrl/Cmd to select multiple.</p>
+        </div>
+      </div>
+    )}
+
+    <div class="pt-2">
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">
+        Add Group
+      </button>
+    </div>
+  </form>
+</AdminLayout>

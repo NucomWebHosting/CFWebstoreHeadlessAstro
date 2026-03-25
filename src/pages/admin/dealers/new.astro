@@ -1,0 +1,222 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import {
+  createDealer, getDealerSettings, getDealerCategories,
+  geocodeAddress, normalizeWebsite, normalizePriority,
+} from "../../../lib/queries/admin-dealers";
+import { getStates, getCountries } from "../../../lib/queries/admin-customers";
+
+const [settings, categories, states, countries] = await Promise.all([
+  getDealerSettings(),
+  getDealerCategories(),
+  getStates(),
+  getCountries(),
+]);
+
+let error = "";
+let geoWarn = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g = (k: string) => (d.get(k) as string ?? "").trim();
+  const bit = (k: string) => g(k) === "1";
+
+  const address1 = g("address1"), city = g("city"),
+        state = g("state"), zip = g("zip");
+
+  let lat = "", lng = "";
+  const apiKey = settings?.GoogleAPIKey ?? "";
+  if (apiKey) {
+    const geo = await geocodeAddress(address1, city, state, zip, apiKey);
+    lat = geo.lat; lng = geo.lng;
+    if (geo.error) geoWarn = geo.error;
+  }
+
+  try {
+    const newId = await createDealer({
+      name:        g("name"),
+      logo:        g("logo"),
+      website:     normalizeWebsite(g("website")),
+      priority:    normalizePriority(g("priority")),
+      contact:     g("contact"),
+      address1,
+      address2:    g("address2"),
+      city,
+      state,
+      zip,
+      country:     g("country"),
+      phone:       g("phone"),
+      fax:         g("fax"),
+      email:       g("email"),
+      category_id: parseInt(g("category_id")) || 0,
+      short_desc:  g("short_desc"),
+      display:     bit("display"),
+      account_id:  parseInt(g("account_id")) || 0,
+      dealer_latitude:  lat,
+      dealer_longitude: lng,
+    });
+    return Astro.redirect(`/admin/dealers/${newId}?saved=1${geoWarn ? "&geowarn=1" : ""}`);
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+---
+
+<AdminLayout title="New Dealer">
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/dealers" class="text-sm text-blue-600 hover:underline">← Back to Dealers</a>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4 max-w-2xl">
+    <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">New Dealer</h2>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Company Name <span class="text-red-500">*</span></label>
+      <input type="text" name="name" value="" required
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Logo filename</label>
+      <input type="text" name="logo" value="" maxlength="100"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Priority</label>
+      <div class="col-span-2">
+        <input type="number" name="priority" value="0" min="0" max="9999"
+               class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span class="ml-2 text-xs text-gray-400">1 = highest, 0 = none</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Contact</label>
+      <input type="text" name="contact" value="" maxlength="150"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Address <span class="text-red-500">*</span></label>
+      <input type="text" name="address1" value="" required
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Apt / Suite</label>
+      <input type="text" name="address2" value=""
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">City <span class="text-red-500">*</span></label>
+      <input type="text" name="city" value="" required
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">State <span class="text-red-500">*</span></label>
+      <select name="state" required
+              class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-64">
+        <option value="Unlisted">Unlisted / None</option>
+        {states.map(s => <option value={s.Abb}>{s.Name} ({s.Abb})</option>)}
+      </select>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Zip <span class="text-red-500">*</span></label>
+      <input type="text" name="zip" value="" required
+             class="col-span-2 w-36 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Country</label>
+      <select name="country"
+              class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-64">
+        <option value="US^United States">United States</option>
+        <option value="US^United States">───────────────</option>
+        {countries.map(c => {
+          const val = `${c.Abbrev}^${c.Country}`;
+          return <option value={val}>{c.Country}</option>;
+        })}
+      </select>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Phone</label>
+      <input type="tel" name="phone" value="" maxlength="150"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Fax</label>
+      <input type="tel" name="fax" value="" maxlength="150"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Email</label>
+      <input type="email" name="email" value="" maxlength="150"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Website</label>
+      <input type="text" name="website" value="http://" maxlength="150"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Category</label>
+      <select name="category_id"
+              class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-56">
+        <option value="0">none</option>
+        {categories.map(c => (
+          <option value={c.category_ID}>{c.name}</option>
+        ))}
+      </select>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Short Description</label>
+      <textarea name="short_desc" rows={4}
+                class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"></textarea>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <span class="text-sm text-gray-600 font-medium text-right">Display</span>
+      <div class="col-span-2 flex gap-4">
+        <label class="flex items-center gap-2 text-sm">
+          <input type="radio" name="display" value="1" checked /> Yes
+        </label>
+        <label class="flex items-center gap-2 text-sm">
+          <input type="radio" name="display" value="0" /> No
+        </label>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Account ID</label>
+      <input type="number" name="account_id" value="0" min="0"
+             class="col-span-2 w-32 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    {!settings?.GoogleAPIKey && (
+      <div class="col-span-3 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+        No Google API key configured — geocoordinates will not be set. Add a key in <a href="/admin/dealers/settings" class="underline">Dealer Settings</a>.
+      </div>
+    )}
+
+    <div class="pt-2">
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">
+        Add Dealer
+      </button>
+    </div>
+  </form>
+</AdminLayout>

@@ -1,0 +1,209 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getCustomers, PAGE_SIZE } from "../../../lib/queries/admin-customers";
+
+const p = Astro.url.searchParams;
+
+const opts = {
+  un:        p.get("un")        ?? "",
+  firstname: p.get("firstname") ?? "",
+  lastname:  p.get("lastname")  ?? "",
+  company:   p.get("company")   ?? "",
+  location:  p.get("location")  ?? "",
+  phone:     p.get("phone")     ?? "",
+  email:     p.get("email")     ?? "",
+  lastused:  p.get("lastused")  ?? "",
+  show:      p.get("show")      ?? "recent",
+  page:      parseInt(p.get("page") ?? "1") || 1,
+};
+
+const { rows, total } = await getCustomers(opts);
+const totalPages = Math.ceil(total / PAGE_SIZE);
+
+function filterQS(overrides: Record<string, string | number>) {
+  const base = { ...opts, ...overrides };
+  return Object.entries(base)
+    .filter(([, v]) => String(v).length > 0)
+    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+    .join("&");
+}
+function pageUrl(pg: number) { return `/admin/customers?${filterQS({ page: pg })}`; }
+
+const windowSize = 5;
+const halfW = Math.floor(windowSize / 2);
+let winStart = Math.max(1, opts.page - halfW);
+let winEnd   = Math.min(totalPages, winStart + windowSize - 1);
+if (winEnd - winStart < windowSize - 1) winStart = Math.max(1, winEnd - windowSize + 1);
+
+function countryLabel(raw: string | null) {
+  if (!raw) return "";
+  const parts = raw.split("^");
+  return parts[1] ?? parts[0] ?? "";
+}
+
+function stateLabel(state: string | null, state2: string | null) {
+  if (state && state !== "Unlisted") return state;
+  return state2 ?? "";
+}
+---
+
+<AdminLayout title="Customer Addresses">
+
+  <!-- Filters -->
+  <form method="get" action="/admin/customers" class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-5 space-y-3">
+    <input type="hidden" name="show" value="all" />
+    <div class="flex flex-wrap gap-3 items-end">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Username</label>
+        <input type="text" name="un" value={opts.un} maxlength="50"
+               class="w-32 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">First Name</label>
+        <input type="text" name="firstname" value={opts.firstname} maxlength="50"
+               class="w-28 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Last Name</label>
+        <input type="text" name="lastname" value={opts.lastname} maxlength="50"
+               class="w-28 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Company</label>
+        <input type="text" name="company" value={opts.company} maxlength="50"
+               class="w-32 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Address</label>
+        <input type="text" name="location" value={opts.location} maxlength="50"
+               class="w-36 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+               placeholder="city, state, zip…" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Phone</label>
+        <input type="text" name="phone" value={opts.phone} maxlength="25"
+               class="w-28 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Email</label>
+        <input type="text" name="email" value={opts.email} maxlength="50"
+               class="w-36 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Last Used After</label>
+        <input type="date" name="lastused" value={opts.lastused}
+               class="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Search</button>
+      <a href="/admin/customers?show=all" class="text-xs text-blue-600 hover:underline self-end pb-2">All</a>
+      <a href="/admin/customers?show=recent" class="text-xs text-blue-600 hover:underline self-end pb-2">Recent</a>
+    </div>
+  </form>
+
+  <!-- Count + New + Mode label + Pagination -->
+  <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+    <div class="flex items-center gap-4">
+      <span class="text-sm text-gray-500">
+        {total.toLocaleString()} record{total !== 1 ? "s" : ""}
+        {opts.show === "recent" && <span class="ml-1 text-xs text-gray-400">(last 7 days)</span>}
+      </span>
+      <a href="/admin/customers/new" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+        + New Address
+      </a>
+    </div>
+    {totalPages > 1 && (
+      <div class="flex gap-1 text-sm">
+        {opts.page > 1 && <a href={pageUrl(opts.page - 1)} class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">‹</a>}
+        {winStart > 1 && <span class="px-2 py-1 text-gray-400">…</span>}
+        {Array.from({length: winEnd - winStart + 1}, (_, i) => winStart + i).map(pg => (
+          <a href={pageUrl(pg)}
+             class={`px-2 py-1 rounded border ${pg === opts.page ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 hover:bg-gray-50"}`}>
+            {pg}
+          </a>
+        ))}
+        {winEnd < totalPages && <span class="px-2 py-1 text-gray-400">…</span>}
+        {opts.page < totalPages && <a href={pageUrl(opts.page + 1)} class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">›</a>}
+      </div>
+    )}
+  </div>
+
+  <!-- Table -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 border-b border-gray-200">
+        <tr>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Customer</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">User</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Name / Company</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Address</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Contact</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Last Used</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {rows.length === 0 && (
+          <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">No records found.</td></tr>
+        )}
+        {rows.map(r => {
+          const isBillTo = r.BillTo === r.Customer_ID;
+          const isShipTo = r.ShipTo === r.Customer_ID;
+          const country = countryLabel(r.Country);
+          const isUS = !country || country.toLowerCase().startsWith("united states");
+          const stateStr = stateLabel(r.State, r.State2);
+          return (
+            <tr class="hover:bg-gray-50">
+              <td class="px-4 py-2.5">
+                <a href={`/admin/customers/${r.Customer_ID}`}
+                   class="text-blue-600 hover:underline text-xs font-mono whitespace-nowrap">
+                  Edit {r.Customer_ID}
+                </a>
+              </td>
+              <td class="px-4 py-2.5 text-gray-700">
+                <span class="text-sm">{r.Username ?? "—"}</span>
+                {isBillTo && <span class="ml-1 text-xs bg-blue-100 text-blue-700 px-1 rounded">B</span>}
+                {isShipTo && <span class="ml-1 text-xs bg-gray-100 text-gray-600 px-1 rounded">S</span>}
+              </td>
+              <td class="px-4 py-2.5">
+                <div class="text-gray-800">{r.Firstname} {r.LastName}</div>
+                {r.Company && <div class="text-xs text-gray-400">{r.Company}</div>}
+              </td>
+              <td class="px-4 py-2.5 text-gray-600 text-xs">
+                <div>{r.Address1}{r.Address2 ? `, ${r.Address2}` : ""}</div>
+                <div class="text-gray-400">
+                  {r.City}{stateStr ? `, ${stateStr}` : ""} {r.Zip}
+                  {!isUS && country ? ` · ${country}` : ""}
+                </div>
+              </td>
+              <td class="px-4 py-2.5 text-xs">
+                {r.Phone && <div class="text-gray-600">{r.Phone}</div>}
+                {r.Email && (
+                  <a href={`mailto:${r.Email}`} class="text-blue-500 hover:underline">{r.Email}</a>
+                )}
+              </td>
+              <td class="px-4 py-2.5 text-gray-400 text-xs whitespace-nowrap">
+                {r.LastUsed ? new Date(r.LastUsed).toLocaleDateString() : "—"}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+
+  {totalPages > 1 && (
+    <div class="flex justify-end mt-3 gap-1 text-sm">
+      {opts.page > 1 && <a href={pageUrl(opts.page - 1)} class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">‹</a>}
+      {winStart > 1 && <span class="px-2 py-1 text-gray-400">…</span>}
+      {Array.from({length: winEnd - winStart + 1}, (_, i) => winStart + i).map(pg => (
+        <a href={pageUrl(pg)}
+           class={`px-2 py-1 rounded border ${pg === opts.page ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 hover:bg-gray-50"}`}>
+          {pg}
+        </a>
+      ))}
+      {winEnd < totalPages && <span class="px-2 py-1 text-gray-400">…</span>}
+      {opts.page < totalPages && <a href={pageUrl(opts.page + 1)} class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">›</a>}
+    </div>
+  )}
+
+</AdminLayout>

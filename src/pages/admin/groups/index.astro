@@ -1,0 +1,177 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getGroups, PAGE_SIZE } from "../../../lib/queries/admin-groups";
+
+const p = Astro.url.searchParams;
+
+const opts = {
+  name:        p.get("name")        ?? "",
+  description: p.get("description") ?? "",
+  wholesale:   p.get("wholesale")   ?? "",
+  discounts:   p.get("discounts")   ?? "",
+  promotions:  p.get("promotions")  ?? "",
+  page:        parseInt(p.get("page") ?? "1") || 1,
+};
+
+const deleted = p.get("deleted") === "1";
+const { rows, total } = await getGroups(opts);
+const totalPages = Math.ceil(total / PAGE_SIZE);
+
+function filterQS(overrides: Record<string, string | number>) {
+  const base = { ...opts, ...overrides };
+  return Object.entries(base)
+    .filter(([, v]) => String(v).length > 0)
+    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+    .join("&");
+}
+function pageUrl(pg: number) { return `/admin/groups?${filterQS({ page: pg })}`; }
+
+const windowSize = 5;
+const halfW = Math.floor(windowSize / 2);
+let winStart = Math.max(1, opts.page - halfW);
+let winEnd   = Math.min(totalPages, winStart + windowSize - 1);
+if (winEnd - winStart < windowSize - 1) winStart = Math.max(1, winEnd - windowSize + 1);
+---
+
+<AdminLayout title="User Groups">
+
+  {deleted && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Group deleted.</div>
+  )}
+
+  <!-- Filters -->
+  <form method="get" action="/admin/groups" class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-5">
+    <div class="flex flex-wrap gap-3 items-end">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Name</label>
+        <input type="text" name="name" value={opts.name} maxlength="50"
+               class="w-36 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Description</label>
+        <input type="text" name="description" value={opts.description} maxlength="50"
+               class="w-40 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Wholesale</label>
+        <select name="wholesale"
+                class="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          <option value="" selected={opts.wholesale === ""}>all</option>
+          <option value="0" selected={opts.wholesale === "0"}>no</option>
+          <option value="1" selected={opts.wholesale === "1"}>yes</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Discounts</label>
+        <select name="discounts"
+                class="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          <option value="" selected={opts.discounts === ""}>all</option>
+          <option value="0" selected={opts.discounts === "0"}>none</option>
+          <option value="1" selected={opts.discounts === "1"}>has discounts</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Promotions</label>
+        <select name="promotions"
+                class="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          <option value="" selected={opts.promotions === ""}>all</option>
+          <option value="0" selected={opts.promotions === "0"}>none</option>
+          <option value="1" selected={opts.promotions === "1"}>has promotions</option>
+        </select>
+      </div>
+      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Search</button>
+      <a href="/admin/groups" class="text-xs text-blue-600 hover:underline self-end pb-2">All</a>
+    </div>
+  </form>
+
+  <!-- Count + New + Pagination -->
+  <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+    <div class="flex items-center gap-4">
+      <span class="text-sm text-gray-500">{total.toLocaleString()} group{total !== 1 ? "s" : ""}</span>
+      <a href="/admin/groups/new" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+        + New Group
+      </a>
+    </div>
+    {totalPages > 1 && (
+      <div class="flex gap-1 text-sm">
+        {opts.page > 1 && <a href={pageUrl(opts.page - 1)} class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">‹</a>}
+        {winStart > 1 && <span class="px-2 py-1 text-gray-400">…</span>}
+        {Array.from({length: winEnd - winStart + 1}, (_, i) => winStart + i).map(pg => (
+          <a href={pageUrl(pg)}
+             class={`px-2 py-1 rounded border ${pg === opts.page ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 hover:bg-gray-50"}`}>
+            {pg}
+          </a>
+        ))}
+        {winEnd < totalPages && <span class="px-2 py-1 text-gray-400">…</span>}
+        {opts.page < totalPages && <a href={pageUrl(opts.page + 1)} class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">›</a>}
+      </div>
+    )}
+  </div>
+
+  <!-- Table -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 border-b border-gray-200">
+        <tr>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Group</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Name / Description</th>
+          <th class="px-4 py-2.5 text-center font-medium text-gray-600">Wholesale</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Discounts</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Promotions</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {rows.length === 0 && (
+          <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">No records found.</td></tr>
+        )}
+        {rows.map(r => (
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-2.5">
+              <a href={`/admin/groups/${r.Group_ID}`}
+                 class="text-blue-600 hover:underline text-xs font-mono whitespace-nowrap">
+                Edit {r.Group_ID}
+              </a>
+            </td>
+            <td class="px-4 py-2.5">
+              <div class="font-medium text-gray-800">{r.Name}</div>
+              {r.Description && <div class="text-xs text-gray-400">{r.Description}</div>}
+            </td>
+            <td class="px-4 py-2.5 text-center">
+              {r.Wholesale
+                ? <span class="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Yes</span>
+                : <span class="text-xs text-gray-400">No</span>}
+            </td>
+            <td class="px-4 py-2.5 text-xs text-gray-500 font-mono">
+              {r.DiscountIds || <span class="text-gray-300">—</span>}
+            </td>
+            <td class="px-4 py-2.5 text-xs text-gray-500 font-mono">
+              {r.PromotionIds || <span class="text-gray-300">—</span>}
+            </td>
+            <td class="px-4 py-2.5">
+              <a href={`/admin/users?gid=${r.Group_ID}&show=all`}
+                 class="text-xs text-blue-500 hover:underline">view users</a>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  {totalPages > 1 && (
+    <div class="flex justify-end mt-3 gap-1 text-sm">
+      {opts.page > 1 && <a href={pageUrl(opts.page - 1)} class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">‹</a>}
+      {winStart > 1 && <span class="px-2 py-1 text-gray-400">…</span>}
+      {Array.from({length: winEnd - winStart + 1}, (_, i) => winStart + i).map(pg => (
+        <a href={pageUrl(pg)}
+           class={`px-2 py-1 rounded border ${pg === opts.page ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 hover:bg-gray-50"}`}>
+          {pg}
+        </a>
+      ))}
+      {winEnd < totalPages && <span class="px-2 py-1 text-gray-400">…</span>}
+      {opts.page < totalPages && <a href={pageUrl(opts.page + 1)} class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">›</a>}
+    </div>
+  )}
+
+</AdminLayout>

@@ -1,0 +1,160 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getAccounts, PAGE_SIZE } from "../../../lib/queries/admin-accounts";
+
+const p = Astro.url.searchParams;
+
+const opts = {
+  un:             p.get("un")             ?? "",
+  account_name:   p.get("account_name")   ?? "",
+  customer_id:    p.get("customer_id")    ?? "",
+  type1:          p.get("type1")          ?? "",
+  directory_live: p.get("directory_live") ?? "",
+  page:           parseInt(p.get("page") ?? "1") || 1,
+};
+
+const { rows, total } = await getAccounts(opts);
+const totalPages = Math.ceil(total / PAGE_SIZE);
+
+function filterQS(overrides: Record<string, string | number>) {
+  const base = { ...opts, ...overrides };
+  return Object.entries(base)
+    .filter(([, v]) => String(v).length > 0)
+    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+    .join("&");
+}
+function pageUrl(pg: number) { return `/admin/accounts?${filterQS({ page: pg })}`; }
+
+const windowSize = 5;
+const halfW = Math.floor(windowSize / 2);
+let winStart = Math.max(1, opts.page - halfW);
+let winEnd   = Math.min(totalPages, winStart + windowSize - 1);
+if (winEnd - winStart < windowSize - 1) winStart = Math.max(1, winEnd - windowSize + 1);
+
+const TYPES = ["", "manufacturer", "vendor", "retailer"];
+---
+
+<AdminLayout title="Accounts">
+
+  <!-- Filters -->
+  <form method="get" action="/admin/accounts" class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-5">
+    <div class="flex flex-wrap gap-3 items-end">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Username</label>
+        <input type="text" name="un" value={opts.un} maxlength="50"
+               class="w-36 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Account Name</label>
+        <input type="text" name="account_name" value={opts.account_name} maxlength="50"
+               class="w-40 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Cust ID</label>
+        <input type="text" name="customer_id" value={opts.customer_id} maxlength="12"
+               class="w-24 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Type</label>
+        <select name="type1"
+                class="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          {TYPES.map(t => (
+            <option value={t} selected={opts.type1 === t}>{t || "all"}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Directory</label>
+        <select name="directory_live"
+                class="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          <option value="" selected={opts.directory_live === ""}>all</option>
+          <option value="1" selected={opts.directory_live === "1"}>yes</option>
+          <option value="0" selected={opts.directory_live === "0"}>no</option>
+        </select>
+      </div>
+      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Search</button>
+      <a href="/admin/accounts" class="text-xs text-blue-600 hover:underline self-end pb-2">All</a>
+    </div>
+  </form>
+
+  <!-- Count + New + Pagination -->
+  <div class="flex items-center justify-between mb-3">
+    <div class="flex items-center gap-4">
+      <span class="text-sm text-gray-500">{total.toLocaleString()} account{total !== 1 ? "s" : ""}</span>
+      <a href="/admin/accounts/new" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+        + New Account
+      </a>
+    </div>
+    {totalPages > 1 && (
+      <div class="flex gap-1 text-sm">
+        {opts.page > 1 && <a href={pageUrl(opts.page - 1)} class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">‹</a>}
+        {winStart > 1 && <span class="px-2 py-1 text-gray-400">…</span>}
+        {Array.from({length: winEnd - winStart + 1}, (_, i) => winStart + i).map(pg => (
+          <a href={pageUrl(pg)}
+             class={`px-2 py-1 rounded border ${pg === opts.page ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 hover:bg-gray-50"}`}>
+            {pg}
+          </a>
+        ))}
+        {winEnd < totalPages && <span class="px-2 py-1 text-gray-400">…</span>}
+        {opts.page < totalPages && <a href={pageUrl(opts.page + 1)} class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">›</a>}
+      </div>
+    )}
+  </div>
+
+  <!-- Table -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 border-b border-gray-200">
+        <tr>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Account</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Username</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Account Name</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Cust ID</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Type</th>
+          <th class="px-4 py-2.5 text-center font-medium text-gray-600">Directory</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {rows.length === 0 && (
+          <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">No records found.</td></tr>
+        )}
+        {rows.map(r => (
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-2.5">
+              <a href={`/admin/accounts/${r.Account_ID}`}
+                 class="text-blue-600 hover:underline text-xs font-mono">
+                Edit {r.Account_ID}
+              </a>
+            </td>
+            <td class="px-4 py-2.5 text-gray-700">{r.Username ?? "—"}</td>
+            <td class="px-4 py-2.5 text-gray-800 font-medium">{r.Account_Name}</td>
+            <td class="px-4 py-2.5 text-gray-500 text-xs">{r.Customer_ID ?? "—"}</td>
+            <td class="px-4 py-2.5 text-gray-500 text-xs">{r.Type1 ?? "—"}</td>
+            <td class="px-4 py-2.5 text-center">
+              {r.Directory_Live
+                ? <span class="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Yes</span>
+                : <span class="text-xs text-gray-400">No</span>}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  {totalPages > 1 && (
+    <div class="flex justify-end mt-3 gap-1 text-sm">
+      {opts.page > 1 && <a href={pageUrl(opts.page - 1)} class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">‹</a>}
+      {winStart > 1 && <span class="px-2 py-1 text-gray-400">…</span>}
+      {Array.from({length: winEnd - winStart + 1}, (_, i) => winStart + i).map(pg => (
+        <a href={pageUrl(pg)}
+           class={`px-2 py-1 rounded border ${pg === opts.page ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 hover:bg-gray-50"}`}>
+          {pg}
+        </a>
+      ))}
+      {winEnd < totalPages && <span class="px-2 py-1 text-gray-400">…</span>}
+      {opts.page < totalPages && <a href={pageUrl(opts.page + 1)} class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">›</a>}
+    </div>
+  )}
+
+</AdminLayout>

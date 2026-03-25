@@ -1,0 +1,239 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import {
+  createBlog, getBlogCategories, getBlogUsers, generatePermalink,
+} from "../../../lib/queries/admin-blog";
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g = (k: string) => (d.get(k) as string ?? "").trim();
+  const bit = (k: string) => g(k) === "1";
+
+  const name = g("Name");
+  let permalink = g("Permalink").trim();
+  if (!permalink && name) permalink = generatePermalink(name);
+
+  try {
+    const id = await createBlog({
+      User_ID:         parseInt(g("User_ID")) || 0,
+      Name:            name,
+      Permalink:       permalink,
+      Author:          g("Author"),
+      Display:         bit("Display"),
+      Approved:        bit("Approved"),
+      Start:           g("Start") || null,
+      Expire:          g("Expire") || null,
+      Highlight:       bit("Highlight"),
+      Reviewable:      bit("Reviewable"),
+      Sm_Image:        g("Sm_Image"),
+      Lg_Image:        g("Lg_Image"),
+      Short_Desc:      g("Short_Desc"),
+      Long_Desc:       g("Long_Desc"),
+      TitleTag:        g("TitleTag"),
+      Metadescription: g("Metadescription"),
+      Keywords:        g("Keywords"),
+      PassParam:       g("PassParam"),
+      Created:         g("Created") || null,
+      category_id:     parseInt(g("category_id")) || 0,
+      cloud:           g("cloud"),
+    });
+    return Astro.redirect(`/admin/blog/${id}?saved=1`);
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+const [categories, users] = await Promise.all([
+  getBlogCategories(),
+  getBlogUsers(),
+]);
+
+const today = new Date().toISOString().slice(0, 10);
+---
+
+<AdminLayout title="New Blog">
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/blog" class="text-sm text-blue-600 hover:underline">← Back to Blogs</a>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4 max-w-3xl">
+
+    <!-- Identity -->
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">User <span class="text-red-500">*</span></label>
+      <select name="User_ID" required
+              class="col-span-2 w-56 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+        <option value="">Select user…</option>
+        {users.map(u => <option value={u.User_ID}>{u.UserName}</option>)}
+      </select>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Title <span class="text-red-500">*</span></label>
+      <input type="text" name="Name" required maxlength="100"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Permalink</label>
+      <input type="text" name="Permalink" maxlength="100" placeholder="Auto-generated from title"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Author</label>
+      <input type="text" name="Author" maxlength="100"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Date</label>
+      <input type="date" name="Created" value={today}
+             class="w-44 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <!-- Display section -->
+    <div class="grid grid-cols-3 gap-3 items-center pt-2">
+      <div class="text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Display</div>
+      <div class="col-span-2 border-t border-gray-100"></div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Category</label>
+      <select name="category_id"
+              class="col-span-2 w-56 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+        <option value="0">— none —</option>
+        {categories.map(c => <option value={c.Category_ID}>{c.name}</option>)}
+      </select>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <span class="text-sm text-gray-600 font-medium text-right">Display <span class="text-red-500">*</span></span>
+      <div class="col-span-2 flex gap-4">
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="Display" value="1" required checked /> Yes</label>
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="Display" value="0" /> No</label>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <span class="text-sm text-gray-600 font-medium text-right">Approved</span>
+      <div class="col-span-2 flex gap-4">
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="Approved" value="1" checked /> Yes</label>
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="Approved" value="0" /> No</label>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Start</label>
+      <input type="date" name="Start"
+             class="w-44 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Expire</label>
+      <input type="date" name="Expire"
+             class="w-44 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <span class="text-sm text-gray-600 font-medium text-right">Highlight</span>
+      <div class="col-span-2 flex gap-4">
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="Highlight" value="1" /> Yes</label>
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="Highlight" value="0" checked /> No</label>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <span class="text-sm text-gray-600 font-medium text-right">Allow Comments</span>
+      <div class="col-span-2 flex gap-4">
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="Reviewable" value="1" checked /> Yes</label>
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="Reviewable" value="0" /> No</label>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Parameters</label>
+      <input type="text" name="PassParam" maxlength="100"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <!-- Teaser section -->
+    <div class="grid grid-cols-3 gap-3 items-center pt-2">
+      <div class="text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Teaser</div>
+      <div class="col-span-2 border-t border-gray-100"></div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Image</label>
+      <input type="text" name="Sm_Image" maxlength="100" placeholder="Save first to add image"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Text</label>
+      <textarea name="Short_Desc" rows={5}
+                class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400"></textarea>
+    </div>
+
+    <!-- Post section -->
+    <div class="grid grid-cols-3 gap-3 items-center pt-2">
+      <div class="text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Post</div>
+      <div class="col-span-2 border-t border-gray-100"></div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Image</label>
+      <input type="text" name="Lg_Image" maxlength="100" placeholder="Save first to add image"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Content</label>
+      <textarea name="Long_Desc" rows={10}
+                class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400"></textarea>
+    </div>
+
+    <!-- SEO section -->
+    <div class="grid grid-cols-3 gap-3 items-center pt-2">
+      <div class="text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">SEO</div>
+      <div class="col-span-2 border-t border-gray-100"></div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">HTML Title</label>
+      <input type="text" name="TitleTag" maxlength="255"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Meta Description</label>
+      <textarea name="Metadescription" rows={3} maxlength="255"
+                class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"></textarea>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Keywords</label>
+      <textarea name="Keywords" rows={3} maxlength="255"
+                class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"></textarea>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Tag Cloud</label>
+      <textarea name="cloud" rows={2} maxlength="255"
+                class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"></textarea>
+    </div>
+
+    <div class="pt-2">
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">
+        Add Blog
+      </button>
+    </div>
+  </form>
+</AdminLayout>

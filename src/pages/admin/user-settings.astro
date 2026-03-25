@@ -1,0 +1,221 @@
+---
+export const prerender = false;
+import AdminLayout from "../../components/layout/AdminLayout.astro";
+import { getUserSettings, saveUserSettings } from "../../lib/queries/admin-user-settings";
+
+let saved = false;
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g = (k: string) => d.get(k) as string ?? "";
+  const bit = (k: string) => g(k) === "1";
+
+  try {
+    await saveUserSettings({
+      UseRememberMe:       false, // hardcoded off per CF admin
+      EmailAsName:         bit("EmailAsName"),
+      StrictLogins:        bit("StrictLogins"),
+      MaxDailyLogins:      parseInt(g("MaxDailyLogins")) || 0,
+      MaxFailures:         parseInt(g("MaxFailures")) || 0,
+      UseStateList:        bit("UseStateList"),
+      UseStateBox:         bit("UseStateBox"),
+      RequireCounty:       bit("RequireCounty"),
+      UseCountryList:      bit("UseCountryList"),
+      UseResidential:      bit("UseResidential"),
+      UseTaxID:            bit("UseTaxID"),
+      UseCustomerShipping: bit("UseCustomerShipping"),
+      UseGroupCode:        bit("UseGroupCode"),
+      UseBirthdate:        bit("UseBirthdate"),
+      UseTerms:            bit("UseTerms"),
+      TermsText:           g("TermsText").slice(0, 8000),
+      UseCCard:            bit("UseCCard"),
+      UseEmailConf:        bit("UseEmailConf"),
+      UseEmailNotif:       bit("UseEmailNotif"),
+      MemberNotify:        bit("MemberNotify"),
+      AllowAffs:           bit("AllowAffs"),
+      AffPercent:          (parseFloat(g("AffPercent")) || 0) / 100,
+      AllowWholesale:      bit("AllowWholesale"),
+      UseShipTo:           bit("UseShipTo"),
+      UseAccounts:         bit("UseAccounts"),
+      ShowAccount:         bit("ShowAccount"),
+      ShowDirectory:       bit("ShowDirectory"),
+      ShowSubscribe:       bit("ShowSubscribe"),
+      SubscribeCustomer:   bit("SubscribeCustomer"),
+    });
+    return Astro.redirect("/admin/user-settings?saved=1");
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+saved = Astro.url.searchParams.get("saved") === "1";
+const s = await getUserSettings();
+if (!s) throw new Error("UserSettings record not found.");
+
+// AffPercent display: stored as 0.05, display as 5
+const affPctDisplay = (Number(s.AffPercent) * 100).toFixed(2).replace(/\.00$/, "");
+---
+
+<AdminLayout title="User Settings">
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Settings saved.</div>
+  )}
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="space-y-6 max-w-3xl">
+
+    <!-- Login Settings -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+      <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2 mb-4">Login Settings</h2>
+
+      <div class="space-y-3">
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <span class="text-sm text-gray-600 font-medium text-right">Strict Logins</span>
+          <div class="col-span-2 flex gap-4">
+            <label class="flex items-center gap-2 text-sm">
+              <input type="radio" name="StrictLogins" value="1" checked={s.StrictLogins} /> Yes
+            </label>
+            <label class="flex items-center gap-2 text-sm">
+              <input type="radio" name="StrictLogins" value="0" checked={!s.StrictLogins} /> No
+            </label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <label class="text-sm text-gray-600 font-medium text-right" for="MaxDailyLogins">Max Daily Logins</label>
+          <div class="col-span-2">
+            <input type="number" id="MaxDailyLogins" name="MaxDailyLogins" value={s.MaxDailyLogins} min="0"
+                   class="w-24 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="ml-2 text-xs text-gray-400">0 = unlimited</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <label class="text-sm text-gray-600 font-medium text-right" for="MaxFailures">Max Login Failures</label>
+          <div class="col-span-2">
+            <input type="number" id="MaxFailures" name="MaxFailures" value={s.MaxFailures} min="0"
+                   class="w-24 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="ml-2 text-xs text-gray-400">0 = unlimited</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Address Settings -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+      <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2 mb-4">Address Settings</h2>
+
+      <div class="space-y-3">
+        {[
+          { name: "UseStateList",        label: "Use State List (dropdown)" },
+          { name: "UseStateBox",         label: "Use State Text Box" },
+          { name: "RequireCounty",       label: "Require County" },
+          { name: "UseCountryList",      label: "Use Country List" },
+          { name: "UseShipTo",           label: "Allow Ship-To Address" },
+          { name: "UseCustomerShipping", label: "Use Customer Shipping Account" },
+          { name: "UseResidential",      label: "Show Residential Option" },
+          { name: "UseTaxID",            label: "Show Tax ID Field" },
+        ].map(({ name, label }) => (
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <span class="text-sm text-gray-600 font-medium text-right">{label}</span>
+            <div class="col-span-2 flex gap-4">
+              <label class="flex items-center gap-2 text-sm">
+                <input type="radio" name={name} value="1" checked={(s as Record<string, unknown>)[name] as boolean} /> Yes
+              </label>
+              <label class="flex items-center gap-2 text-sm">
+                <input type="radio" name={name} value="0" checked={!((s as Record<string, unknown>)[name] as boolean)} /> No
+              </label>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <!-- Login Accounts -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+      <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2 mb-4">Login Accounts</h2>
+
+      <div class="space-y-3">
+        {[
+          { name: "EmailAsName",       label: "Use Email as Username" },
+          { name: "UseGroupCode",      label: "Use Group Code" },
+          { name: "UseBirthdate",      label: "Collect Birthdate" },
+          { name: "UseCCard",          label: "Store Credit Card on File" },
+          { name: "ShowSubscribe",     label: "Show Newsletter Subscribe" },
+          { name: "SubscribeCustomer", label: "Auto-Subscribe New Customers" },
+          { name: "UseEmailConf",      label: "Send Email Confirmation" },
+          { name: "MemberNotify",      label: "Notify Admin of New Members" },
+          { name: "AllowAffs",         label: "Allow Affiliates" },
+        ].map(({ name, label }) => (
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <span class="text-sm text-gray-600 font-medium text-right">{label}</span>
+            <div class="col-span-2 flex gap-4">
+              <label class="flex items-center gap-2 text-sm">
+                <input type="radio" name={name} value="1" checked={(s as Record<string, unknown>)[name] as boolean} /> Yes
+              </label>
+              <label class="flex items-center gap-2 text-sm">
+                <input type="radio" name={name} value="0" checked={!((s as Record<string, unknown>)[name] as boolean)} /> No
+              </label>
+            </div>
+          </div>
+        ))}
+
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <label class="text-sm text-gray-600 font-medium text-right" for="AffPercent">Affiliate Commission %</label>
+          <div class="col-span-2">
+            <input type="number" id="AffPercent" name="AffPercent" value={affPctDisplay}
+                   min="0" max="100" step="0.01"
+                   class="w-24 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="ml-2 text-xs text-gray-400">%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Business Accounts -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+      <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2 mb-4">Business Accounts</h2>
+
+      <div class="space-y-3">
+        {[
+          { name: "UseAccounts",    label: "Enable Business Accounts" },
+          { name: "AllowWholesale", label: "Allow Wholesale Accounts" },
+          { name: "ShowAccount",    label: "Show Account Number" },
+          { name: "ShowDirectory",  label: "Show Member Directory" },
+          { name: "UseEmailNotif",  label: "Email Admin on Account Request" },
+          { name: "UseTerms",       label: "Require Terms Agreement" },
+        ].map(({ name, label }) => (
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <span class="text-sm text-gray-600 font-medium text-right">{label}</span>
+            <div class="col-span-2 flex gap-4">
+              <label class="flex items-center gap-2 text-sm">
+                <input type="radio" name={name} value="1" checked={(s as Record<string, unknown>)[name] as boolean} /> Yes
+              </label>
+              <label class="flex items-center gap-2 text-sm">
+                <input type="radio" name={name} value="0" checked={!((s as Record<string, unknown>)[name] as boolean)} /> No
+              </label>
+            </div>
+          </div>
+        ))}
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <label class="text-sm text-gray-600 font-medium text-right pt-1" for="TermsText">Terms Text</label>
+          <textarea id="TermsText" name="TermsText" rows={6}
+                    class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">{s.TermsText ?? ""}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">
+        Save Settings
+      </button>
+    </div>
+
+  </form>
+
+</AdminLayout>

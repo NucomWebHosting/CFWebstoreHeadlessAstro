@@ -1,0 +1,183 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import {
+  getGroup, updateGroup, deleteGroup,
+  getGroupDiscounts, getGroupPromotions,
+} from "../../../lib/queries/admin-groups";
+
+const id = parseInt(Astro.params.id ?? "0") || 0;
+if (!id) return new Response(null, { status: 404 });
+
+const ADMIN_GROUP_ID = 1; // cannot be deleted
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g = (k: string) => (d.get(k) as string ?? "").trim();
+  const bit = (k: string) => g(k) === "1";
+  const action = g("_action");
+
+  if (action === "delete") {
+    if (id === ADMIN_GROUP_ID) {
+      error = "The administrator group cannot be deleted.";
+    } else {
+      await deleteGroup(id);
+      return Astro.redirect("/admin/groups?deleted=1");
+    }
+  } else {
+    const selectedDiscounts = (d.getAll("Discounts") as string[])
+      .map(Number).filter(n => n > 0);
+    const selectedPromotions = (d.getAll("Promotions") as string[])
+      .map(Number).filter(n => n > 0);
+
+    try {
+      await updateGroup(id, {
+        Name:        g("Name"),
+        Description: g("Description"),
+        Group_Code:  g("Group_Code"),
+        Wholesale:   bit("Wholesale"),
+        TaxExempt:   bit("TaxExempt"),
+        ShipExempt:  bit("ShipExempt"),
+        discountIds:  selectedDiscounts,
+        promotionIds: selectedPromotions,
+      });
+      return Astro.redirect(`/admin/groups/${id}?saved=1`);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+}
+
+const saved = Astro.url.searchParams.get("saved") === "1";
+const [grp, allDiscounts, allPromotions] = await Promise.all([
+  getGroup(id),
+  getGroupDiscounts(),
+  getGroupPromotions(),
+]);
+
+if (!grp) return new Response(`Group ${id} not found.`, { status: 404, headers: { "content-type": "text/plain" } });
+
+const assignedDiscountSet  = new Set(grp.DiscountIds);
+const assignedPromotionSet = new Set(grp.PromotionIds);
+---
+
+<AdminLayout title={`Group ${id}`}>
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/groups" class="text-sm text-blue-600 hover:underline">← Back to Groups</a>
+  </div>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved.</div>
+  )}
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4 max-w-2xl">
+    <input type="hidden" name="_action" value="update" />
+
+    <div class="flex items-center justify-between border-b border-gray-100 pb-2">
+      <h2 class="text-sm font-semibold text-gray-700">Group #{id}</h2>
+      <a href={`/admin/users?gid=${id}&show=all`} class="text-xs text-blue-500 hover:underline">View users in this group</a>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Name <span class="text-red-500">*</span></label>
+      <input type="text" name="Name" value={grp.Name} maxlength="100" required
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Description</label>
+      <input type="text" name="Description" value={grp.Description ?? ""} maxlength="255"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Group Code</label>
+      <div class="col-span-2">
+        <input type="text" name="Group_Code" value={grp.Group_Code ?? ""} maxlength="20"
+               class="w-48 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <p class="text-xs text-gray-400 mt-0.5">Code entered during registration to auto-assign this group.</p>
+      </div>
+    </div>
+
+    {[
+      { name: "Wholesale",  label: "Wholesale",        val: grp.Wholesale },
+      { name: "TaxExempt",  label: "Tax Exempt",       val: grp.TaxExempt },
+      { name: "ShipExempt", label: "Shipping Exempt",  val: grp.ShipExempt },
+    ].map(({ name, label, val }) => (
+      <div class="grid grid-cols-3 gap-3 items-center">
+        <span class="text-sm text-gray-600 font-medium text-right">{label}</span>
+        <div class="col-span-2 flex gap-4">
+          <label class="flex items-center gap-2 text-sm">
+            <input type="radio" name={name} value="1" checked={val} /> Yes
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="radio" name={name} value="0" checked={!val} /> No
+          </label>
+        </div>
+      </div>
+    ))}
+
+    {allDiscounts.length > 0 && (
+      <div class="grid grid-cols-3 gap-3 items-start">
+        <label class="text-sm text-gray-600 font-medium text-right pt-1">Discounts</label>
+        <div class="col-span-2">
+          <select name="Discounts" multiple
+                  size={Math.min(allDiscounts.length + 1, 6)}
+                  class="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+            {allDiscounts.map(disc => (
+              <option value={disc.Discount_ID}
+                      selected={assignedDiscountSet.has(disc.Discount_ID)}>
+                {disc.Name} (#{disc.Discount_ID})
+              </option>
+            ))}
+          </select>
+          <p class="text-xs text-gray-400 mt-0.5">Hold Ctrl/Cmd to select multiple. Deselect all to remove discounts.</p>
+        </div>
+      </div>
+    )}
+
+    {allPromotions.length > 0 && (
+      <div class="grid grid-cols-3 gap-3 items-start">
+        <label class="text-sm text-gray-600 font-medium text-right pt-1">Promotions</label>
+        <div class="col-span-2">
+          <select name="Promotions" multiple
+                  size={Math.min(allPromotions.length + 1, 6)}
+                  class="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+            {allPromotions.map(promo => (
+              <option value={promo.Promotion_ID}
+                      selected={assignedPromotionSet.has(promo.Promotion_ID)}>
+                {promo.Name} (#{promo.Promotion_ID})
+              </option>
+            ))}
+          </select>
+          <p class="text-xs text-gray-400 mt-0.5">Hold Ctrl/Cmd to select multiple.</p>
+        </div>
+      </div>
+    )}
+
+    <div class="flex items-center gap-3 pt-2">
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">
+        Update Group
+      </button>
+    </div>
+  </form>
+
+  <!-- Delete (not available for group 1) -->
+  {id !== ADMIN_GROUP_ID && (
+    <div class="mt-5 max-w-2xl">
+      <form method="post"
+            onsubmit={`return confirm('Delete Group ${id}? Users in this group will be moved to the default group.')`}>
+        <input type="hidden" name="_action" value="delete" />
+        <button type="submit" class="px-4 py-2 rounded text-sm border border-red-300 text-red-600 hover:bg-red-50">
+          Delete Group
+        </button>
+      </form>
+    </div>
+  )}
+
+</AdminLayout>

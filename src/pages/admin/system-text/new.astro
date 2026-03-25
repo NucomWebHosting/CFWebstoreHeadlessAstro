@@ -1,0 +1,78 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { createSystemText } from "../../../lib/queries/admin-system-text";
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g = (k: string) => (d.get(k) as string ?? "").trim();
+  const bit = (k: string) => g(k) === "1";
+
+  try {
+    const newId = await createSystemText({
+      Text_Name:   g("Text_Name"),
+      CallAction:  g("CallAction"),
+      System_Text: g("System_Text"),
+      Display:     bit("Display"),
+    });
+    return Astro.redirect(`/admin/system-text/${newId}?saved=1`);
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+---
+
+<AdminLayout title="New System Text">
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/system-text" class="text-sm text-blue-600 hover:underline">← Back to System Text</a>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4 max-w-2xl">
+    <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">New Template</h2>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Text Name <span class="text-red-500">*</span></label>
+      <input type="text" name="Text_Name" value="" required maxlength="50"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">System Name</label>
+      <div class="col-span-2">
+        <input type="text" name="CallAction" value="" maxlength="50"
+               class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <p class="text-xs text-gray-400 mt-0.5">Internal identifier used to call this template from code.</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <span class="text-sm text-gray-600 font-medium text-right">Display</span>
+      <div class="col-span-2 flex gap-4">
+        <label class="flex items-center gap-2 text-sm">
+          <input type="radio" name="Display" value="1" checked /> Yes
+        </label>
+        <label class="flex items-center gap-2 text-sm">
+          <input type="radio" name="Display" value="0" /> No
+        </label>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Text</label>
+      <textarea name="System_Text" rows={12}
+                class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 font-mono"></textarea>
+    </div>
+
+    <div class="pt-2">
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">
+        Add Template
+      </button>
+    </div>
+  </form>
+</AdminLayout>

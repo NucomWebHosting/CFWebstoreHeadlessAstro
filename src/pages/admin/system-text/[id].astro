@@ -1,0 +1,120 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import {
+  getSystemText, updateSystemText, deleteSystemText,
+} from "../../../lib/queries/admin-system-text";
+
+const id = parseInt(Astro.params.id ?? "0") || 0;
+if (!id) return new Response(null, { status: 404 });
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g = (k: string) => (d.get(k) as string ?? "").trim();
+  const bit = (k: string) => g(k) === "1";
+  const action = g("_action");
+
+  if (action === "delete") {
+    await deleteSystemText(id);
+    return Astro.redirect("/admin/system-text?deleted=1");
+  } else {
+    try {
+      await updateSystemText(id, {
+        Text_Name:   g("Text_Name"),
+        CallAction:  g("CallAction"),
+        System_Text: g("System_Text"),
+        Display:     bit("Display"),
+      });
+      return Astro.redirect(`/admin/system-text/${id}?saved=1`);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+}
+
+const saved = Astro.url.searchParams.get("saved") === "1";
+const rec = await getSystemText(id);
+if (!rec) return new Response(`System text ${id} not found.`, { status: 404, headers: { "content-type": "text/plain" } });
+---
+
+<AdminLayout title={`System Text ${id}`}>
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/system-text" class="text-sm text-blue-600 hover:underline">← Back to System Text</a>
+  </div>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved.</div>
+  )}
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4 max-w-2xl">
+    <input type="hidden" name="_action" value="update" />
+
+    <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Template #{id}</h2>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Text Name <span class="text-red-500">*</span></label>
+      <input type="text" name="Text_Name" value={rec.Text_Name} required maxlength="50"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">System Name</label>
+      <div class="col-span-2">
+        <input type="text" name="CallAction" value={rec.CallAction ?? ""} maxlength="50"
+               class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <p class="text-xs text-gray-400 mt-0.5">Internal identifier used to call this template from code.</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <span class="text-sm text-gray-600 font-medium text-right pt-1">Display</span>
+      <div class="col-span-2">
+        <div class="flex gap-4">
+          <label class="flex items-center gap-2 text-sm">
+            <input type="radio" name="Display" value="1" checked={rec.Display} /> Yes
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="radio" name="Display" value="0" checked={!rec.Display} /> No
+          </label>
+        </div>
+        <p class="text-xs text-gray-400 mt-0.5">Only applicable for specific system text messages.</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Text</label>
+      <textarea name="System_Text" rows={16}
+                class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 font-mono">{rec.System_Text ?? ""}</textarea>
+    </div>
+
+    {rec.MergeCodes && (
+      <div class="grid grid-cols-3 gap-3 items-start">
+        <span class="text-sm text-gray-600 font-medium text-right pt-1">Merge Codes</span>
+        <p class="col-span-2 text-xs text-gray-500 font-mono bg-gray-50 border border-gray-200 rounded px-3 py-2">{rec.MergeCodes}</p>
+      </div>
+    )}
+
+    <div class="pt-2">
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">
+        Update Template
+      </button>
+    </div>
+  </form>
+
+  <!-- Delete -->
+  <div class="mt-5 max-w-2xl">
+    <form method="post"
+          onsubmit={`return confirm('Delete System Text #${id}?')`}>
+      <input type="hidden" name="_action" value="delete" />
+      <button type="submit" class="px-4 py-2 rounded text-sm border border-red-300 text-red-600 hover:bg-red-50">
+        Delete Template
+      </button>
+    </form>
+  </div>
+
+</AdminLayout>

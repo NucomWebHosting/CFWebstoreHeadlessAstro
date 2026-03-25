@@ -1,0 +1,195 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { findUserByUsername, createAccount } from "../../../lib/queries/admin-accounts";
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g = (k: string) => (d.get(k) as string ?? "").trim();
+  const bit = (k: string) => g(k) === "1";
+
+  const username = g("Username");
+  const userId = await findUserByUsername(username);
+  if (userId === null) {
+    error = `Cannot add account: "${username}" is not a valid user.`;
+  } else {
+    try {
+      const newId = await createAccount({
+        User_ID:   userId,
+        Customer_ID: parseInt(g("Customer_ID")) || 0,
+        Account_Name: g("Account_Name"),
+        Type1:       g("Type1"),
+        Description: g("Description"),
+        Policy:      g("Policy"),
+        Logo:        g("Logo"),
+        Rep:         g("Rep"),
+        Web_url:     g("Web_url"),
+        Map_url:     g("Map_url"),
+        Terms:       g("Terms"),
+        Dropship_email: g("Dropship_email"),
+        PO_text:     g("PO_text"),
+        Directory_Live: bit("Directory_Live"),
+        Hold_map:    bit("Hold_map"),
+        Sold_by_Amazon: bit("Sold_by_Amazon"),
+        Sold_by_manufactorer_on_amazon: bit("Sold_by_manufactorer_on_amazon"),
+        LTSPManfID:  parseInt(g("LTSPManfID")) || 0,
+        Easypost_Carrier_Account_id: g("Easypost_Carrier_Account_id"),
+      });
+      return Astro.redirect(`/admin/accounts/${newId}?saved=1`);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+}
+
+const defaults = {
+  Username: "", Customer_ID: "", Account_Name: "", Type1: "manufacturer",
+  Description: "", Policy: "", Logo: "", Rep: "", Web_url: "http://", Map_url: "",
+  Terms: "", Dropship_email: "", PO_text: "",
+  Directory_Live: false, Hold_map: false, Sold_by_Amazon: false,
+  Sold_by_manufactorer_on_amazon: false, LTSPManfID: 0,
+  Easypost_Carrier_Account_id: "",
+};
+---
+
+<AdminLayout title="New Account">
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/accounts" class="text-sm text-blue-600 hover:underline">← Back to Accounts</a>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4 max-w-2xl">
+    <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">New Account</h2>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Username</label>
+      <input type="text" name="Username" value={defaults.Username} maxlength="50"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+             placeholder="leave blank for no user" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Account Name <span class="text-red-500">*</span></label>
+      <input type="text" name="Account_Name" value={defaults.Account_Name} maxlength="100" required
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Type <span class="text-red-500">*</span></label>
+      <select name="Type1" required
+              class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-48">
+        {["manufacturer","vendor","retailer"].map(t => (
+          <option value={t} selected={defaults.Type1 === t}>{t}</option>
+        ))}
+      </select>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Address ID</label>
+      <div class="col-span-2">
+        <input type="number" name="Customer_ID" value={defaults.Customer_ID} min="0"
+               class="w-32 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span class="ml-2 text-xs text-gray-400">Customer address record ID</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Description</label>
+      <textarea name="Description" rows={4}
+                class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">{defaults.Description}</textarea>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Policy</label>
+      <textarea name="Policy" rows={3}
+                class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">{defaults.Policy}</textarea>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Logo filename</label>
+      <input type="text" name="Logo" value={defaults.Logo} maxlength="100"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Rep</label>
+      <input type="text" name="Rep" value={defaults.Rep} maxlength="100"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Company URL</label>
+      <input type="text" name="Web_url" value={defaults.Web_url} maxlength="100"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Store Map</label>
+      <textarea name="Map_url" rows={2} placeholder="Google Map embed code"
+                class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">{defaults.Map_url}</textarea>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Terms</label>
+      <input type="text" name="Terms" value={defaults.Terms} maxlength="50"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Dropship Email</label>
+      <input type="email" name="Dropship_email" value={defaults.Dropship_email} maxlength="100"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">P.O. Note</label>
+      <input type="text" name="PO_text" value={defaults.PO_text} maxlength="50"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Easypost Carrier Account ID</label>
+      <div class="col-span-2">
+        <input type="text" name="Easypost_Carrier_Account_id" value={defaults.Easypost_Carrier_Account_id} maxlength="100"
+               class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <p class="text-xs text-gray-400 mt-0.5">Comma-delimited list</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Lightspeed Mfg ID</label>
+      <input type="number" name="LTSPManfID" value={defaults.LTSPManfID} min="0"
+             class="col-span-2 w-32 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    {[
+      { name: "Directory_Live",                   label: "Directory Live",               val: defaults.Directory_Live },
+      { name: "Hold_map",                         label: "Hold MAP Pricing",             val: defaults.Hold_map },
+      { name: "Sold_by_Amazon",                   label: "Already Sold by Amazon",       val: defaults.Sold_by_Amazon },
+      { name: "Sold_by_manufactorer_on_amazon",   label: "Sold by Mfr on Amazon",        val: defaults.Sold_by_manufactorer_on_amazon },
+    ].map(({ name, label, val }) => (
+      <div class="grid grid-cols-3 gap-3 items-center">
+        <span class="text-sm text-gray-600 font-medium text-right">{label}</span>
+        <div class="col-span-2 flex gap-4">
+          <label class="flex items-center gap-2 text-sm">
+            <input type="radio" name={name} value="1" checked={val} /> Yes
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="radio" name={name} value="0" checked={!val} /> No
+          </label>
+        </div>
+      </div>
+    ))}
+
+    <div class="pt-2">
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">
+        Add Account
+      </button>
+    </div>
+  </form>
+</AdminLayout>

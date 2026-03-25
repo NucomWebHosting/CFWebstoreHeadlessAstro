@@ -1,0 +1,222 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../components/layout/AdminLayout.astro";
+import {
+  getList, getListQuestions, getListCategories,
+  createListQuestion, updateListQuestion, deleteListQuestion,
+  normalizePriority, displayPriority,
+} from "../../../../lib/queries/admin-list-manager";
+
+const id = parseInt(Astro.params.id ?? "0") || 0;
+if (!id) return new Response(null, { status: 404 });
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g = (k: string) => (d.get(k) as string ?? "").trim();
+  const bit = (k: string) => g(k) === "1";
+  const action = g("_action");
+  const qid = parseInt(g("_qid")) || 0;
+
+  try {
+    if (action === "add") {
+      await createListQuestion({
+        list_id:     id,
+        question:    g("question"),
+        answer:      g("answer"),
+        category_id: parseInt(g("category_id")) || 0,
+        display:     bit("display"),
+        priority:    normalizePriority(g("priority")),
+      });
+    } else if (action === "update" && qid) {
+      await updateListQuestion(qid, {
+        question:    g("question"),
+        answer:      g("answer"),
+        category_id: parseInt(g("category_id")) || 0,
+        display:     bit("display"),
+        priority:    normalizePriority(g("priority")),
+      });
+    } else if (action === "delete" && qid) {
+      await deleteListQuestion(qid);
+    }
+    return Astro.redirect(`/admin/list-manager/${id}/questions?saved=1`);
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+const saved = Astro.url.searchParams.get("saved") === "1";
+
+const [rec, questions, categories] = await Promise.all([
+  getList(id),
+  getListQuestions(id),
+  getListCategories(),
+]);
+
+if (!rec) return new Response(`List ${id} not found.`, { status: 404, headers: { "content-type": "text/plain" } });
+
+// Group questions by category for display
+type QGroup = { catName: string | null; questions: typeof questions };
+const groups: QGroup[] = [];
+const seen = new Map<string, QGroup>();
+for (const q of questions) {
+  const key = q.catName ?? "";
+  if (!seen.has(key)) {
+    const g: QGroup = { catName: q.catName, questions: [] };
+    groups.push(g);
+    seen.set(key, g);
+  }
+  seen.get(key)!.questions.push(q);
+}
+---
+
+<AdminLayout title={`Questions — ${rec.name}`}>
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/list-manager" class="text-sm text-blue-600 hover:underline">← Back to Lists</a>
+    <span class="text-gray-400">/</span>
+    <a href={`/admin/list-manager/${id}`} class="text-sm text-blue-600 hover:underline">List #{id}</a>
+  </div>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved.</div>
+  )}
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <!-- Add form -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4 max-w-2xl mb-8">
+    <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Add Question</h2>
+
+    <form method="post" class="space-y-4">
+      <input type="hidden" name="_action" value="add" />
+
+      <div class="grid grid-cols-3 gap-3 items-center">
+        <label class="text-sm text-gray-600 font-medium text-right">Question <span class="text-red-500">*</span></label>
+        <input type="text" name="question" value="" required maxlength="3000"
+               class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+
+      <div class="grid grid-cols-3 gap-3 items-start">
+        <label class="text-sm text-gray-600 font-medium text-right pt-1">Answer <span class="text-red-500">*</span></label>
+        <textarea name="answer" rows={5} required
+                  class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"></textarea>
+      </div>
+
+      <div class="grid grid-cols-3 gap-3 items-center">
+        <span class="text-sm text-gray-600 font-medium text-right">Display</span>
+        <div class="col-span-2 flex gap-4">
+          <label class="flex items-center gap-2 text-sm"><input type="radio" name="display" value="1" required checked /> Yes</label>
+          <label class="flex items-center gap-2 text-sm"><input type="radio" name="display" value="0" /> No</label>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-3 items-center">
+        <label class="text-sm text-gray-600 font-medium text-right">Category</label>
+        <select name="category_id"
+                class="col-span-2 w-56 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          <option value="0">— none —</option>
+          {categories.map(c => (
+            <option value={c.Category_ID}>{c.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <div class="grid grid-cols-3 gap-3 items-center">
+        <label class="text-sm text-gray-600 font-medium text-right">Priority</label>
+        <div class="col-span-2 flex items-center gap-2">
+          <input type="number" name="priority" value="0" min="0" max="9999"
+                 class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          <span class="text-xs text-gray-400">1 = highest, 0 = none</span>
+        </div>
+      </div>
+
+      <div class="pt-1">
+        <button type="submit" class="bg-blue-600 text-white px-5 py-1.5 rounded text-sm hover:bg-blue-700">
+          Add Question
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Existing questions grouped by category -->
+  {questions.length === 0 ? (
+    <p class="text-sm text-gray-400">No questions yet.</p>
+  ) : (
+    groups.map(group => (
+      <div class="mb-8 max-w-2xl">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="text-sm font-semibold text-gray-700">{group.catName ?? "Uncategorized"}</span>
+          <div class="flex-1 border-t border-gray-200"></div>
+        </div>
+
+        {group.questions.map(q => (
+          <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-4">
+            <form method="post" class="space-y-3">
+              <input type="hidden" name="_action" value="update" />
+              <input type="hidden" name="_qid" value={q.ID} />
+
+              <div class="grid grid-cols-3 gap-3 items-center">
+                <label class="text-sm text-gray-600 font-medium text-right">Question <span class="text-red-500">*</span></label>
+                <input type="text" name="question" value={q.question} required maxlength="3000"
+                       class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+
+              <div class="grid grid-cols-3 gap-3 items-start">
+                <label class="text-sm text-gray-600 font-medium text-right pt-1">Answer <span class="text-red-500">*</span></label>
+                <textarea name="answer" rows={5} required
+                          class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">{q.answer ?? ""}</textarea>
+              </div>
+
+              <div class="grid grid-cols-3 gap-3 items-center">
+                <span class="text-sm text-gray-600 font-medium text-right">Display</span>
+                <div class="col-span-2 flex gap-4">
+                  <label class="flex items-center gap-2 text-sm"><input type="radio" name="display" value="1" required checked={q.display} /> Yes</label>
+                  <label class="flex items-center gap-2 text-sm"><input type="radio" name="display" value="0" checked={!q.display} /> No</label>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-3 gap-3 items-center">
+                <label class="text-sm text-gray-600 font-medium text-right">Category</label>
+                <select name="category_id"
+                        class="col-span-2 w-56 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                  <option value="0" selected={!q.category_id}>— none —</option>
+                  {categories.map(c => (
+                    <option value={c.Category_ID} selected={q.category_id === c.Category_ID}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div class="grid grid-cols-3 gap-3 items-center">
+                <label class="text-sm text-gray-600 font-medium text-right">Priority</label>
+                <div class="col-span-2 flex items-center gap-2">
+                  <input type="number" name="priority" value={displayPriority(q.priority)} min="0" max="9999"
+                         class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  <span class="text-xs text-gray-400">1 = highest, 0 = none</span>
+                </div>
+              </div>
+
+              <div class="flex gap-2 pt-1">
+                <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+                  Update
+                </button>
+              </div>
+            </form>
+
+            <!-- Delete (separate form) -->
+            <div class="mt-3 pt-3 border-t border-gray-100">
+              <form method="post"
+                    onsubmit="return confirm('Delete this question?')">
+                <input type="hidden" name="_action" value="delete" />
+                <input type="hidden" name="_qid" value={q.ID} />
+                <button type="submit" class="text-xs text-red-500 hover:underline">Delete</button>
+              </form>
+            </div>
+          </div>
+        ))}
+      </div>
+    ))
+  )}
+
+</AdminLayout>

@@ -1,0 +1,234 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import {
+  getAccount, findUserByUsername, updateAccount,
+  checkAccountInUse, deleteAccount,
+} from "../../../lib/queries/admin-accounts";
+
+const id = parseInt(Astro.params.id ?? "0") || 0;
+if (!id) return new Response(null, { status: 404 });
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g = (k: string) => (d.get(k) as string ?? "").trim();
+  const bit = (k: string) => g(k) === "1";
+  const action = g("_action");
+
+  if (action === "delete") {
+    const inUse = await checkAccountInUse(id);
+    if (inUse) {
+      error = `Cannot delete: ${inUse}`;
+    } else {
+      await deleteAccount(id);
+      return Astro.redirect("/admin/accounts?deleted=1");
+    }
+  } else {
+    // update
+    const username = g("Username");
+    const userId = await findUserByUsername(username);
+    if (userId === null) {
+      error = `Cannot update: "${username}" is not a valid user.`;
+    } else {
+      try {
+        await updateAccount(id, {
+          User_ID:   userId,
+          Customer_ID: parseInt(g("Customer_ID")) || 0,
+          Account_Name: g("Account_Name"),
+          Type1:       g("Type1"),
+          Description: g("Description"),
+          Policy:      g("Policy"),
+          Logo:        g("Logo"),
+          Rep:         g("Rep"),
+          Web_url:     g("Web_url"),
+          Map_url:     g("Map_url"),
+          Terms:       g("Terms"),
+          Dropship_email: g("Dropship_email"),
+          PO_text:     g("PO_text"),
+          Directory_Live: bit("Directory_Live"),
+          Hold_map:    bit("Hold_map"),
+          Sold_by_Amazon: bit("Sold_by_Amazon"),
+          Sold_by_manufactorer_on_amazon: bit("Sold_by_manufactorer_on_amazon"),
+          LTSPManfID:  parseInt(g("LTSPManfID")) || 0,
+          Easypost_Carrier_Account_id: g("Easypost_Carrier_Account_id"),
+        });
+        return Astro.redirect(`/admin/accounts/${id}?saved=1`);
+      } catch (e: unknown) {
+        error = e instanceof Error ? e.message : String(e);
+      }
+    }
+  }
+}
+
+const saved = Astro.url.searchParams.get("saved") === "1";
+const a = await getAccount(id);
+if (!a) return new Response(`Account ${id} not found.`, { status: 404, headers: { "content-type": "text/plain" } });
+---
+
+<AdminLayout title={`Account ${id}`}>
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/accounts" class="text-sm text-blue-600 hover:underline">← Back to Accounts</a>
+  </div>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved.</div>
+  )}
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4 max-w-2xl">
+    <input type="hidden" name="_action" value="update" />
+
+    <div class="flex items-center justify-between border-b border-gray-100 pb-2">
+      <h2 class="text-sm font-semibold text-gray-700">Account #{id}</h2>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Username</label>
+      <input type="text" name="Username" value={a.Username ?? ""} maxlength="50"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+             placeholder="leave blank for no user" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Account Name <span class="text-red-500">*</span></label>
+      <input type="text" name="Account_Name" value={a.Account_Name} maxlength="100" required
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Type <span class="text-red-500">*</span></label>
+      {(a.Type1 === "manufacturer" || a.Type1 === "vendor") ? (
+        <div class="col-span-2 flex items-center gap-3">
+          <span class="text-sm text-gray-700">{a.Type1}</span>
+          <input type="hidden" name="Type1" value={a.Type1} />
+        </div>
+      ) : (
+        <select name="Type1" required
+                class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-48">
+          {["manufacturer","vendor","retailer"].map(t => (
+            <option value={t} selected={a.Type1 === t}>{t}</option>
+          ))}
+        </select>
+      )}
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Address ID</label>
+      <div class="col-span-2">
+        <input type="number" name="Customer_ID" value={a.Customer_ID ?? 0} min="0"
+               class="w-32 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span class="ml-2 text-xs text-gray-400">Customer address record ID</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Description</label>
+      <textarea name="Description" rows={4}
+                class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">{a.Description ?? ""}</textarea>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Policy</label>
+      <textarea name="Policy" rows={3}
+                class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">{a.Policy ?? ""}</textarea>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Logo filename</label>
+      <input type="text" name="Logo" value={a.Logo ?? ""} maxlength="100"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Rep</label>
+      <input type="text" name="Rep" value={a.Rep ?? ""} maxlength="100"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Company URL</label>
+      <input type="text" name="Web_url" value={a.Web_url ?? ""} maxlength="100"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Store Map</label>
+      <textarea name="Map_url" rows={2} placeholder="Google Map embed code"
+                class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">{a.Map_url ?? ""}</textarea>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Terms</label>
+      <input type="text" name="Terms" value={a.Terms ?? ""} maxlength="50"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Dropship Email</label>
+      <input type="email" name="Dropship_email" value={a.Dropship_email ?? ""} maxlength="100"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">P.O. Note</label>
+      <input type="text" name="PO_text" value={a.PO_text ?? ""} maxlength="50"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Easypost Carrier Account ID</label>
+      <div class="col-span-2">
+        <input type="text" name="Easypost_Carrier_Account_id" value={a.Easypost_Carrier_Account_id ?? ""} maxlength="100"
+               class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <p class="text-xs text-gray-400 mt-0.5">Comma-delimited list</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Lightspeed Mfg ID</label>
+      <input type="number" name="LTSPManfID" value={a.LTSPManfID ?? 0} min="0"
+             class="col-span-2 w-32 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    {[
+      { name: "Directory_Live",                   label: "Directory Live",           val: a.Directory_Live },
+      { name: "Hold_map",                         label: "Hold MAP Pricing",         val: a.Hold_map },
+      { name: "Sold_by_Amazon",                   label: "Already Sold by Amazon",   val: a.Sold_by_Amazon },
+      { name: "Sold_by_manufactorer_on_amazon",   label: "Sold by Mfr on Amazon",    val: a.Sold_by_manufactorer_on_amazon },
+    ].map(({ name, label, val }) => (
+      <div class="grid grid-cols-3 gap-3 items-center">
+        <span class="text-sm text-gray-600 font-medium text-right">{label}</span>
+        <div class="col-span-2 flex gap-4">
+          <label class="flex items-center gap-2 text-sm">
+            <input type="radio" name={name} value="1" checked={val} /> Yes
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="radio" name={name} value="0" checked={!val} /> No
+          </label>
+        </div>
+      </div>
+    ))}
+
+    <div class="flex items-center gap-3 pt-2">
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">
+        Update Account
+      </button>
+    </div>
+  </form>
+
+  <!-- Delete -->
+  <div class="mt-5 max-w-2xl">
+    <form method="post"
+          onsubmit="return confirm('Are you sure you want to delete Account #{id}? This cannot be undone.')">
+      <input type="hidden" name="_action" value="delete" />
+      <button type="submit" class="px-4 py-2 rounded text-sm border border-red-300 text-red-600 hover:bg-red-50">
+        Delete Account
+      </button>
+    </form>
+  </div>
+
+</AdminLayout>

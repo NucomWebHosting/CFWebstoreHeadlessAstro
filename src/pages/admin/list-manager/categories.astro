@@ -1,0 +1,156 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import {
+  getListCategories, getListCategory,
+  createListCategory, updateListCategory, deleteListCategory,
+  displayPriority,
+} from "../../../lib/queries/admin-list-manager";
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g = (k: string) => (d.get(k) as string ?? "").trim();
+  const action = g("_action");
+  const catId  = parseInt(g("Category_ID")) || 0;
+  const name   = g("name");
+  const priority = parseInt(g("priority")) || 0;
+
+  try {
+    if (action === "add") {
+      await createListCategory(name, priority);
+      return Astro.redirect("/admin/list-manager/categories?saved=1");
+    } else if (action === "update" && catId) {
+      await updateListCategory(catId, name, priority);
+      return Astro.redirect("/admin/list-manager/categories?saved=1");
+    } else if (action === "delete" && catId) {
+      await deleteListCategory(catId);
+      return Astro.redirect("/admin/list-manager/categories?deleted=1");
+    }
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+const saved   = Astro.url.searchParams.get("saved") === "1";
+const deleted = Astro.url.searchParams.get("deleted") === "1";
+const editId  = parseInt(Astro.url.searchParams.get("edit") ?? "0") || 0;
+
+const [categories, editCat] = await Promise.all([
+  getListCategories(),
+  editId ? getListCategory(editId) : Promise.resolve(null),
+]);
+---
+
+<AdminLayout title="List Categories">
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/list-manager" class="text-sm text-blue-600 hover:underline">← Back to Lists</a>
+  </div>
+
+  <!-- Sub-nav -->
+  <div class="flex gap-2 mb-5 text-sm">
+    <a href="/admin/list-manager" class="px-3 py-1.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white">Lists</a>
+    <a href="/admin/list-manager/categories" class="px-3 py-1.5 rounded bg-slate-700 text-white font-medium">Categories</a>
+  </div>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved.</div>
+  )}
+  {deleted && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Category deleted.</div>
+  )}
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <div class="grid grid-cols-1 gap-6 max-w-2xl lg:grid-cols-2">
+
+    <!-- Add / Edit form -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+      <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2 mb-4">
+        {editCat ? `Edit Category #${editCat.Category_ID}` : "New Category"}
+      </h2>
+
+      <form method="post" class="space-y-3">
+        <input type="hidden" name="_action" value={editCat ? "update" : "add"} />
+        {editCat && <input type="hidden" name="Category_ID" value={editCat.Category_ID} />}
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Name <span class="text-red-500">*</span></label>
+          <input type="text" name="name" value={editCat?.name ?? ""} required maxlength="100"
+                 class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Priority</label>
+          <div class="flex items-center gap-2">
+            <input type="number" name="priority"
+                   value={editCat ? displayPriority(editCat.priority) : 0}
+                   min="0" max="9999"
+                   class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="text-xs text-gray-400">1 = highest, 0 = none</span>
+          </div>
+        </div>
+
+        <div class="flex gap-2 pt-1">
+          <button type="submit"
+                  class="bg-blue-600 text-white px-5 py-1.5 rounded text-sm hover:bg-blue-700">
+            {editCat ? "Update" : "Add Category"}
+          </button>
+          {editCat && (
+            <a href="/admin/list-manager/categories"
+               class="px-4 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+              Cancel
+            </a>
+          )}
+        </div>
+      </form>
+    </div>
+
+    <!-- Category list -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-4 py-3 border-b border-gray-100">
+        <span class="text-sm font-semibold text-gray-700">
+          {categories.length} categor{categories.length !== 1 ? "ies" : "y"}
+        </span>
+      </div>
+      {categories.length === 0 ? (
+        <p class="px-4 py-6 text-sm text-gray-400">No categories yet.</p>
+      ) : (
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th class="px-4 py-2 text-left font-medium text-gray-600 text-xs">ID</th>
+              <th class="px-4 py-2 text-left font-medium text-gray-600 text-xs">Name</th>
+              <th class="px-4 py-2 text-left font-medium text-gray-600 text-xs">Priority</th>
+              <th class="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {categories.map(c => (
+              <tr class={`hover:bg-gray-50 ${editId === c.Category_ID ? "bg-blue-50" : ""}`}>
+                <td class="px-4 py-2 text-xs text-gray-400 font-mono">{c.Category_ID}</td>
+                <td class="px-4 py-2 text-gray-800">{c.name}</td>
+                <td class="px-4 py-2 text-gray-500 text-xs">{displayPriority(c.priority) || "—"}</td>
+                <td class="px-4 py-2 text-right">
+                  <div class="flex items-center justify-end gap-2">
+                    <a href={`/admin/list-manager/categories?edit=${c.Category_ID}`}
+                       class="text-xs text-blue-600 hover:underline">Edit</a>
+                    <form method="post" class="inline"
+                          onsubmit={`return confirm('Delete category "${c.name}"?')`}>
+                      <input type="hidden" name="_action" value="delete" />
+                      <input type="hidden" name="Category_ID" value={c.Category_ID} />
+                      <button type="submit" class="text-xs text-red-500 hover:underline">Delete</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+
+  </div>
+</AdminLayout>
