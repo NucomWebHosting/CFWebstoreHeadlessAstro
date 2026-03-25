@@ -1,0 +1,329 @@
+---
+export const prerender = false;
+import AdminLayout from "../../components/layout/AdminLayout.astro";
+import { getCartSettings, saveCartSettings } from "../../lib/queries/admin-cart-settings";
+
+// ── POST ───────────────────────────────────────────────────────────────────────
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g  = (k: string) => ((d.get(k) as string) ?? "").trim();
+  const b  = (k: string) => g(k) === "1";
+  const n  = (k: string) => parseInt(g(k)) || 0;
+
+  // Build required-fields lists from checkboxes
+  const textReqList   = [1,2,3].filter(i => d.get(`Require_Text${i}`) === "1")
+                                .map(i => `CustomText${i}`).join(",");
+  const selectReqList = [1,2].filter(i => d.get(`Require_Select${i}`) === "1")
+                              .map(i => `CustomSelect${i}`).join(",");
+
+  try {
+    await saveCartSettings({
+      ShowBasket:    b("ShowBasket"),   ShowSFL:    b("ShowSFL"),   ShowRAC: b("ShowRAC"),
+      GiftWrap:      b("GiftWrap"),     Coupons:    b("Coupons"),   GiftCard: b("GiftCard"),
+      Delivery:      b("Delivery"),     Backorders: b("Backorders"),
+      GiftRegistry:  b("GiftRegistry"), Wishlists:  b("Wishlists"),
+      MinTotal:             n("MinTotal"),
+      MinTotal_Wholesale:   n("MinTotal_Wholesale"),
+      AllowInt:             b("AllowInt"),
+      SkipAddressForm:      b("SkipAddressForm"),
+      NoGuests:             b("NoGuests"),
+      BaseOrderNum:         n("BaseOrderNum"),
+      AllowGoogleAutocomplete:    b("AllowGoogleAutocomplete"),
+      AllowGoogleValidateAddress: b("AllowGoogleValidateAddress"),
+      AllowBadAddress:            b("AllowBadAddress"),
+      ShowTermsInCheckout:  b("ShowTermsInCheckout"),
+      AgreeTerms:           g("AgreeTerms") || null,
+      CustomText1:    g("CustomText1")   || null,
+      CustomText2:    g("CustomText2")   || null,
+      CustomText3:    g("CustomText3")   || null,
+      CustomSelect1:  g("CustomSelect1") || null, CustomChoices1: g("CustomChoices1") || null,
+      CustomSelect2:  g("CustomSelect2") || null, CustomChoices2: g("CustomChoices2") || null,
+      CustomText_Req:   textReqList   || null,
+      CustomSelect_Req: selectReqList || null,
+      EmailUser:   b("EmailUser"),  EmailAdmin: b("EmailAdmin"),
+      EmailAffs:   b("EmailAffs"),  EmailDrop:  b("EmailDrop"),
+      EmailDropWhen: g("EmailDropWhen") || "Placed",
+      OrderEmail:  g("OrderEmail") || null,
+      DropEmail:   g("DropEmail")  || null,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return new Response(`Save error: ${msg}`, { status: 500, headers: { "content-type": "text/plain" } });
+  }
+  return Astro.redirect("/admin/cart-settings?saved=1");
+}
+
+// ── Fetch ──────────────────────────────────────────────────────────────────────
+let s = await getCartSettings();
+if (!s) return new Response("Cart settings not found.", { status: 404, headers: { "content-type": "text/plain" } });
+
+const saved = Astro.url.searchParams.get("saved") === "1";
+
+// Helper: is a custom field required?
+function isTextReq(n: number)   { return (s!.CustomText_Req   ?? "").split(",").includes(`CustomText${n}`); }
+function isSelectReq(n: number) { return (s!.CustomSelect_Req ?? "").split(",").includes(`CustomSelect${n}`); }
+
+// Radios helper
+type RadioProps = { name: string; val: boolean; labels?: [string, string] };
+---
+
+<AdminLayout title="Cart &amp; Checkout Settings">
+
+  {saved && (
+    <div class="mb-5 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+      Settings saved successfully.
+    </div>
+  )}
+
+  <form method="post" class="space-y-10 max-w-2xl">
+
+    <!-- ── Shopping Options ───────────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 pb-2 mb-4">
+        Shopping Options
+      </h2>
+      <div class="space-y-3">
+        {[
+          { name: "ShowBasket",   val: s.ShowBasket,   label: "Show Cart Between Orders" },
+          { name: "ShowSFL",      val: s.ShowSFL,      label: "Show Save for Later" },
+          { name: "ShowRAC",      val: s.ShowRAC,      label: "Show Register After Checkout" },
+          { name: "GiftRegistry", val: s.GiftRegistry, label: "Use Gift Registry" },
+          { name: "Wishlists",    val: s.Wishlists,    label: "Use Wish Lists" },
+          { name: "GiftWrap",     val: s.GiftWrap,     label: "Offer Gift Wrapping" },
+          { name: "Coupons",      val: s.Coupons,      label: "Use Coupons / Certificates" },
+          { name: "GiftCard",     val: s.GiftCard,     label: "Use Gift Cards" },
+          { name: "Backorders",   val: s.Backorders,   label: "Allow Backorders" },
+          { name: "Delivery",     val: s.Delivery,     label: "Use Delivery Date" },
+        ].map(f => (
+          <div class="flex items-center gap-8">
+            <span class="w-56 text-sm text-gray-600 text-right shrink-0">{f.label}</span>
+            <div class="flex gap-4">
+              <label class="flex items-center gap-1.5 text-sm">
+                <input type="radio" name={f.name} value="1" checked={f.val} /> Yes
+              </label>
+              <label class="flex items-center gap-1.5 text-sm">
+                <input type="radio" name={f.name} value="0" checked={!f.val} /> No
+              </label>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <!-- ── Checkout Options ───────────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 pb-2 mb-4">
+        Checkout Options
+      </h2>
+      <div class="space-y-3">
+        <div class="flex items-center gap-8">
+          <label class="w-56 text-sm text-gray-600 text-right shrink-0">Min. Order Total</label>
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-400">$</span>
+            <input type="number" name="MinTotal" value={s.MinTotal} min="0" step="1"
+                   class="w-24 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="text-xs text-gray-400">Checkout blocked below this amount</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-8">
+          <label class="w-56 text-sm text-gray-600 text-right shrink-0">Min. Order (Wholesale)</label>
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-400">$</span>
+            <input type="number" name="MinTotal_Wholesale" value={s.MinTotal_Wholesale} min="0" step="1"
+                   class="w-24 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+
+        {[
+          { name: "AllowInt",        val: s.AllowInt,        label: "International Orders",      note: "Ship outside home country." },
+          { name: "SkipAddressForm", val: s.SkipAddressForm, label: "Skip Address Form",         note: "Skip if user has default addresses. Disable for PayPal Express." },
+          { name: "NoGuests",        val: s.NoGuests,        label: "Require Login to Checkout", note: "Off = allow guest checkout." },
+        ].map(f => (
+          <div class="flex items-start gap-8">
+            <span class="w-56 text-sm text-gray-600 text-right shrink-0 pt-1">{f.label}</span>
+            <div>
+              <div class="flex gap-4">
+                <label class="flex items-center gap-1.5 text-sm"><input type="radio" name={f.name} value="1" checked={f.val} /> Yes</label>
+                <label class="flex items-center gap-1.5 text-sm"><input type="radio" name={f.name} value="0" checked={!f.val} /> No</label>
+              </div>
+              {f.note && <p class="text-xs text-gray-400 mt-0.5">{f.note}</p>}
+            </div>
+          </div>
+        ))}
+
+        <div class="flex items-center gap-8">
+          <label class="w-56 text-sm text-gray-600 text-right shrink-0">Base Order Number</label>
+          <input type="number" name="BaseOrderNum" value={s.BaseOrderNum} min="0"
+                 class="w-32 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Google Address ─────────────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 pb-2 mb-4">
+        Google Address Verification
+      </h2>
+      <div class="space-y-3">
+        {[
+          { name: "AllowGoogleAutocomplete",    val: s.AllowGoogleAutocomplete,    label: "Use Google Autocomplete" },
+          { name: "AllowGoogleValidateAddress", val: s.AllowGoogleValidateAddress, label: "Use Google Validate Address" },
+          { name: "AllowBadAddress",            val: s.AllowBadAddress,            label: "Allow Bad Address",
+            note: "Yes = bounce once, then allow. No = must have verified address." },
+        ].map(f => (
+          <div class="flex items-start gap-8">
+            <span class="w-56 text-sm text-gray-600 text-right shrink-0 pt-1">{f.label}</span>
+            <div>
+              <div class="flex gap-4">
+                <label class="flex items-center gap-1.5 text-sm"><input type="radio" name={f.name} value="1" checked={f.val} /> Yes</label>
+                <label class="flex items-center gap-1.5 text-sm"><input type="radio" name={f.name} value="0" checked={!f.val} /> No</label>
+              </div>
+              {"note" in f && f.note && <p class="text-xs text-gray-400 mt-0.5">{f.note}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <!-- ── Terms Agreement ────────────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 pb-2 mb-4">
+        Terms Agreement
+      </h2>
+      <div class="space-y-3">
+        <div class="flex items-center gap-8">
+          <span class="w-56 text-sm text-gray-600 text-right shrink-0">Show in Checkout</span>
+          <div class="flex gap-4">
+            <label class="flex items-center gap-1.5 text-sm"><input type="radio" name="ShowTermsInCheckout" value="1" checked={s.ShowTermsInCheckout} /> Yes</label>
+            <label class="flex items-center gap-1.5 text-sm"><input type="radio" name="ShowTermsInCheckout" value="0" checked={!s.ShowTermsInCheckout} /> No</label>
+          </div>
+        </div>
+        <div class="flex items-start gap-8">
+          <label class="w-56 text-sm text-gray-600 text-right shrink-0 pt-1">Terms Text</label>
+          <div class="flex-1">
+            <textarea name="AgreeTerms" rows="4"
+                      class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 resize-y"
+            >{s.AgreeTerms ?? ""}</textarea>
+            <p class="text-xs text-gray-400 mt-0.5">User must agree to this text to complete checkout.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Custom Checkout Fields ─────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 pb-2 mb-4">
+        Custom Checkout Fields
+      </h2>
+      <p class="text-xs text-gray-400 mb-4">Prompt customers for extra info at checkout (e.g. "How did you hear about us?"). Leave label blank to hide the field.</p>
+
+      <div class="space-y-3">
+        <!-- Text fields -->
+        {[1,2,3].map(num => {
+          const val = (s as any)[`CustomText${num}`] ?? "";
+          return (
+            <div class="flex items-center gap-8">
+              <label class="w-56 text-sm text-gray-600 text-right shrink-0">Text Field {num} Label</label>
+              <div class="flex items-center gap-3 flex-1">
+                <input type="text" name={`CustomText${num}`} value={val} maxlength="255"
+                       class="flex-1 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                <label class="flex items-center gap-1.5 text-xs text-gray-500 whitespace-nowrap">
+                  <input type="checkbox" name={`Require_Text${num}`} value="1" checked={isTextReq(num)} />
+                  Required
+                </label>
+              </div>
+            </div>
+          );
+        })}
+
+        <!-- Select boxes -->
+        {[1,2].map(num => {
+          const lbl  = (s as any)[`CustomSelect${num}`]  ?? "";
+          const chcs = (s as any)[`CustomChoices${num}`] ?? "";
+          return (
+            <>
+              <div class="flex items-center gap-8">
+                <label class="w-56 text-sm text-gray-600 text-right shrink-0">Selectbox {num} Label</label>
+                <div class="flex items-center gap-3 flex-1">
+                  <input type="text" name={`CustomSelect${num}`} value={lbl} maxlength="100"
+                         class="flex-1 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  <label class="flex items-center gap-1.5 text-xs text-gray-500 whitespace-nowrap">
+                    <input type="checkbox" name={`Require_Select${num}`} value="1" checked={isSelectReq(num)} />
+                    Required
+                  </label>
+                </div>
+              </div>
+              <div class="flex items-start gap-8">
+                <label class="w-56 text-sm text-gray-600 text-right shrink-0 pt-1">Selectbox {num} Choices</label>
+                <div class="flex-1">
+                  <textarea name={`CustomChoices${num}`} rows="2"
+                            class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 resize-y"
+                  >{chcs}</textarea>
+                  <p class="text-xs text-gray-400">Comma-separated list of choices</p>
+                </div>
+              </div>
+            </>
+          );
+        })}
+      </div>
+    </section>
+
+    <!-- ── Email Confirmations ────────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 pb-2 mb-4">
+        Email Confirmations
+      </h2>
+      <div class="space-y-3">
+        {[
+          { name: "EmailUser",  val: s.EmailUser,  label: "User Confirmation" },
+          { name: "EmailAdmin", val: s.EmailAdmin, label: "Merchant Confirmation" },
+          { name: "EmailAffs",  val: s.EmailAffs,  label: "Affiliate Confirmation" },
+          { name: "EmailDrop",  val: s.EmailDrop,  label: "Drop-Shipper Emails" },
+        ].map(f => (
+          <div class="flex items-center gap-8">
+            <span class="w-56 text-sm text-gray-600 text-right shrink-0">{f.label}</span>
+            <div class="flex gap-4">
+              <label class="flex items-center gap-1.5 text-sm"><input type="radio" name={f.name} value="1" checked={f.val} /> Yes</label>
+              <label class="flex items-center gap-1.5 text-sm"><input type="radio" name={f.name} value="0" checked={!f.val} /> No</label>
+            </div>
+          </div>
+        ))}
+
+        <div class="flex items-center gap-8">
+          <span class="w-56 text-sm text-gray-600 text-right shrink-0">Email Drop-Shipper When</span>
+          <div class="flex gap-4">
+            {["Placed","Processed","Filled"].map(opt => (
+              <label class="flex items-center gap-1.5 text-sm">
+                <input type="radio" name="EmailDropWhen" value={opt}
+                       checked={(s.EmailDropWhen ?? "Placed") === opt} />
+                {opt}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div class="flex items-center gap-8">
+          <label class="w-56 text-sm text-gray-600 text-right shrink-0">Order Email</label>
+          <input type="email" name="OrderEmail" value={s.OrderEmail ?? ""} maxlength="250"
+                 class="flex-1 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+        <div class="flex items-center gap-8">
+          <label class="w-56 text-sm text-gray-600 text-right shrink-0">Drop-Shipper Email</label>
+          <input type="email" name="DropEmail" value={s.DropEmail ?? ""} maxlength="250"
+                 class="flex-1 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+      </div>
+    </section>
+
+    <!-- Submit -->
+    <div class="flex gap-3 pt-2 border-t border-gray-200">
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">
+        Save Changes
+      </button>
+      <a href="/admin" class="px-5 py-2 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+        Cancel
+      </a>
+    </div>
+
+  </form>
+</AdminLayout>
