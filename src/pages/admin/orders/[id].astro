@@ -19,8 +19,15 @@ if (Astro.request.method === "POST") {
 }
 
 // ── Fetch data ────────────────────────────────────────────────────────────────
-const { order, items, billing, shipping, payments, shipments } = await getOrderDetail(id);
-if (!order) return new Response(null, { status: 404 });
+let detailResult: Awaited<ReturnType<typeof getOrderDetail>>;
+try {
+  detailResult = await getOrderDetail(id);
+} catch (e) {
+  const msg = e instanceof Error ? e.message : String(e);
+  return new Response(`Query error on order ${id}: ${msg}`, { status: 500, headers: { "content-type": "text/plain" } });
+}
+const { order, items, billing, shipping, payments, shipments } = detailResult;
+if (!order) return new Response(`Order ${id} not found in database.`, { status: 404, headers: { "content-type": "text/plain" } });
 
 const saved = Astro.url.searchParams.get("saved") === "1";
 const returnTab = order.Filled ? "filled" : order.Process ? "process" : "pending";
