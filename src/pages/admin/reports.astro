@@ -1,0 +1,411 @@
+---
+export const prerender = false;
+import AdminLayout from "../../components/layout/AdminLayout.astro";
+import {
+  defaultDateRange,
+  getSalesSummary,
+  getSalesByItem,
+  getTopCustomers,
+  getPaymentsByMethod,
+} from "../../lib/queries/admin-reports";
+
+const sp = Astro.url.searchParams;
+const report    = sp.get("report") ?? "summary";
+const filledOnly = sp.get("filled") === "1";
+
+const defaults = defaultDateRange();
+const startDate = sp.get("start") || defaults.startDate;
+const toDate    = sp.get("end")   || defaults.toDate;
+
+// Quick-date presets
+const now = new Date();
+const y = now.getFullYear();
+const m = now.getMonth() + 1;
+const pad = (n: number) => String(n).padStart(2, "0");
+const today = now.toISOString().slice(0, 10);
+const presets = [
+  { label: "This Month",  start: `${y}-${pad(m)}-01`,      end: today },
+  { label: "Last Month",  start: `${y}-${pad(m === 1 ? 12 : m-1)}-01`,
+                          end:   `${m === 1 ? y-1 : y}-${pad(m === 1 ? 12 : m-1)}-${pad(new Date(y, m === 1 ? 11 : m-1, 0).getDate())}` },
+  { label: "This Year",   start: `${y}-01-01`,              end: today },
+  { label: "Last Year",   start: `${y-1}-01-01`,            end: `${y-1}-12-31` },
+];
+
+function qsFor(r: string, extra: Record<string, string> = {}) {
+  const p = new URLSearchParams({ report: r, start: startDate, end: toDate });
+  if (filledOnly) p.set("filled", "1");
+  for (const [k, v] of Object.entries(extra)) p.set(k, v);
+  return `?${p}`;
+}
+function presetQS(s: string, e: string) {
+  const p = new URLSearchParams({ report, start: s, end: e });
+  if (filledOnly) p.set("filled", "1");
+  return `?${p}`;
+}
+
+// ── Run query for active report ────────────────────────────────────────────────
+let summaryData:   Awaited<ReturnType<typeof getSalesSummary>>   | null = null;
+let itemsData:     Awaited<ReturnType<typeof getSalesByItem>>    | null = null;
+let customersData: Awaited<ReturnType<typeof getTopCustomers>>   | null = null;
+let paymentsData:  Awaited<ReturnType<typeof getPaymentsByMethod>>| null = null;
+let reportError = "";
+
+try {
+  if (report === "summary")   summaryData   = await getSalesSummary(startDate, toDate, filledOnly);
+  if (report === "items")     itemsData     = await getSalesByItem(startDate, toDate, filledOnly);
+  if (report === "customers") customersData = await getTopCustomers(startDate, toDate);
+  if (report === "payments")  paymentsData  = await getPaymentsByMethod(startDate, toDate);
+} catch (e) {
+  reportError = e instanceof Error ? e.message : String(e);
+}
+
+function fmt(n: number) {
+  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+function fmtNum(n: number) {
+  return n.toLocaleString("en-US");
+}
+
+const tabs = [
+  { key: "summary",   label: "Sales Summary" },
+  { key: "items",     label: "By Item" },
+  { key: "customers", label: "Top Customers" },
+  { key: "payments",  label: "Payments by Method" },
+];
+
+// Derived summary values
+const s = summaryData?.summary;
+const totalShipping = (s?.TotalShipping ?? 0) + (s?.TotalFreight ?? 0);
+const productSales  = (s?.TotalSales ?? 0) - (s?.TotalTax ?? 0) - totalShipping;
+const totalCosts    = (s?.TotalCredits ?? 0) + (s?.TotalAdminCredit ?? 0) + (s?.TotalDisc ?? 0);
+const grossProfit   = (s?.TotalSales ?? 0) - (s?.TotalTax ?? 0) - totalShipping - totalCosts;
+const gpp = s && s.TotalSales > 0 ? (grossProfit / s.TotalSales * 100) : 0;
+---
+
+<AdminLayout title="Sales Reports">
+
+  <!-- Date range + report filters -->
+  <form method="get" action="/admin/reports" class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
+    <input type="hidden" name="report" value={report} />
+    <div class="flex flex-wrap items-end gap-3">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Start Date</label>
+        <input type="date" name="start" value={startDate}
+               class="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Through Date</label>
+        <input type="date" name="end" value={toDate}
+               class="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      {(report === "summary" || report === "items") && (
+        <div class="flex items-end pb-0.5">
+          <label class="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer">
+            <input type="checkbox" name="filled" value="1" checked={filledOnly}
+                   class="rounded" />
+            Filled &amp; Paid only
+          </label>
+        </div>
+      )}
+      <button type="submit"
+              class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+        Run Report
+      </button>
+    </div>
+    <!-- Quick presets -->
+    <div class="flex flex-wrap gap-1.5 mt-2">
+      {presets.map(p => (
+        <a href={presetQS(p.start, p.end)}
+           class={`text-xs px-2.5 py-1 rounded border ${startDate === p.start && toDate === p.end ? "bg-blue-600 text-white border-blue-600" : "border-gray-300 text-gray-500 hover:bg-gray-50"}`}>
+          {p.label}
+        </a>
+      ))}
+    </div>
+  </form>
+
+  <!-- Report tabs -->
+  <div class="flex gap-1 mb-4 border-b border-gray-200">
+    {tabs.map(t => (
+      <a href={qsFor(t.key)}
+         class={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+           report === t.key
+             ? "border-blue-600 text-blue-600"
+             : "border-transparent text-gray-500 hover:text-gray-700"
+         }`}>
+        {t.label}
+      </a>
+    ))}
+  </div>
+
+  <!-- Date range display -->
+  <div class="text-xs text-gray-400 mb-4">
+    {new Date(startDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+    {" — "}
+    {new Date(toDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+    {filledOnly && <span class="ml-2 text-yellow-600">(filled &amp; paid orders only)</span>}
+  </div>
+
+  {reportError && (
+    <div class="bg-red-50 border border-red-200 text-red-700 rounded px-4 py-3 text-sm mb-4">
+      Query error: {reportError}
+    </div>
+  )}
+
+  <!-- ── Sales Summary ────────────────────────────────────────────────────── -->
+  {report === "summary" && (
+    <div class="max-w-lg">
+      {!s || s.NumOrders === 0 ? (
+        <p class="text-gray-400 text-sm py-8 text-center">No orders found for this date range.</p>
+      ) : (
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div class="px-5 py-3 border-b border-gray-100">
+            <h3 class="text-sm font-semibold text-gray-700">
+              Sales Summary — {fmtNum(s.NumOrders)} order{s.NumOrders !== 1 ? "s" : ""}
+            </h3>
+          </div>
+          <table class="w-full text-sm">
+            <tbody>
+              <!-- Revenue section -->
+              <tr class="bg-blue-50">
+                <td class="px-5 py-2 font-medium text-gray-700">Product Sales</td>
+                <td class="px-5 py-2 text-right font-medium text-gray-800">{fmt(productSales)}</td>
+              </tr>
+              <tr class="bg-blue-50">
+                <td class="px-5 py-2 text-gray-600 pl-8">Tax Collected</td>
+                <td class="px-5 py-2 text-right text-gray-600">{fmt(s.TotalTax)}</td>
+              </tr>
+              <tr class="bg-blue-50 border-b border-blue-100">
+                <td class="px-5 py-2 text-gray-600 pl-8">Shipping Collected</td>
+                <td class="px-5 py-2 text-right text-gray-600">{fmt(totalShipping)}</td>
+              </tr>
+              <tr class="bg-blue-50 border-b-2 border-blue-200">
+                <td class="px-5 py-2.5 font-semibold text-gray-800">Order Total</td>
+                <td class="px-5 py-2.5 text-right font-semibold text-gray-800">{fmt(s.TotalSales)}</td>
+              </tr>
+
+              <!-- Spacer -->
+              <tr><td colspan="2" class="py-1"></td></tr>
+
+              <!-- Costs section -->
+              {(s.TotalDisc > 0) && (
+                <tr class="bg-red-50">
+                  <td class="px-5 py-2 text-gray-600 pl-8">Order Discounts</td>
+                  <td class="px-5 py-2 text-right text-gray-600">−{fmt(s.TotalDisc)}</td>
+                </tr>
+              )}
+              {(s.TotalCredits > 0) && (
+                <tr class="bg-red-50">
+                  <td class="px-5 py-2 text-gray-600 pl-8">Credits Given</td>
+                  <td class="px-5 py-2 text-right text-gray-600">−{fmt(s.TotalCredits)}</td>
+                </tr>
+              )}
+              {(s.TotalAdminCredit > 0) && (
+                <tr class="bg-red-50">
+                  <td class="px-5 py-2 text-gray-600 pl-8">Admin Credits</td>
+                  <td class="px-5 py-2 text-right text-gray-600">−{fmt(s.TotalAdminCredit)}</td>
+                </tr>
+              )}
+              {totalCosts > 0 && (
+                <tr class="bg-red-50 border-b-2 border-red-200">
+                  <td class="px-5 py-2.5 font-medium text-gray-700">Total Reductions</td>
+                  <td class="px-5 py-2.5 text-right font-medium text-gray-700">−{fmt(totalCosts)}</td>
+                </tr>
+              )}
+
+              <!-- Spacer -->
+              <tr><td colspan="2" class="py-1"></td></tr>
+
+              <!-- Gross profit -->
+              <tr class="bg-gray-50">
+                <td class="px-5 py-2.5 font-semibold text-gray-800">Gross Profit</td>
+                <td class={`px-5 py-2.5 text-right font-semibold ${grossProfit >= 0 ? "text-green-700" : "text-red-600"}`}>
+                  {fmt(grossProfit)}
+                </td>
+              </tr>
+              <tr class="bg-gray-50 border-b border-gray-100">
+                <td class="px-5 py-1.5 text-xs text-gray-400 pl-8">
+                  (sales − tax − shipping − reductions)
+                </td>
+                <td class="px-5 py-1.5 text-right text-xs text-gray-400">
+                  {gpp.toFixed(1)}%
+                </td>
+              </tr>
+
+              <!-- Payments -->
+              {summaryData?.payments && (summaryData.payments.TotalPayments > 0) && (
+                <>
+                  <tr><td colspan="2" class="py-1"></td></tr>
+                  <tr class="border-t border-gray-100">
+                    <td class="px-5 py-2 text-gray-500 text-xs">Total Payments Received</td>
+                    <td class="px-5 py-2 text-right text-xs text-gray-500">
+                      {fmt(summaryData.payments.TotalPayments)}
+                      <span class="text-gray-400 ml-1">({fmtNum(summaryData.payments.NumPayments)} txn)</span>
+                    </td>
+                  </tr>
+                </>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )}
+
+  <!-- ── Sales by Item ─────────────────────────────────────────────────────── -->
+  {report === "items" && (
+    <div>
+      {!itemsData || itemsData.length === 0 ? (
+        <p class="text-gray-400 text-sm py-8 text-center">No items sold in this date range.</p>
+      ) : (
+        <>
+          <div class="text-xs text-gray-400 mb-2">
+            {itemsData.length} product{itemsData.length !== 1 ? "s" : ""} sold
+            &nbsp;·&nbsp;
+            {fmtNum(itemsData.reduce((a, r) => a + r.UnitsSold, 0))} total units
+            &nbsp;·&nbsp;
+            {fmt(itemsData.reduce((a, r) => a + r.TotalRevenue, 0))} total revenue
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                  <th class="px-4 py-2.5 text-left w-16">ID</th>
+                  <th class="px-4 py-2.5 text-left">Name</th>
+                  <th class="px-4 py-2.5 text-left w-32">SKU</th>
+                  <th class="px-4 py-2.5 text-right w-24">Units Sold</th>
+                  <th class="px-4 py-2.5 text-right w-28">Revenue</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                {itemsData.map(row => (
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2 text-xs text-gray-400">{row.Product_ID}</td>
+                    <td class="px-4 py-2">
+                      <a href={`/admin/products/${row.Product_ID}`}
+                         class="text-gray-800 hover:text-blue-600">
+                        {row.Name}
+                      </a>
+                    </td>
+                    <td class="px-4 py-2 text-xs text-gray-500 font-mono">{row.SKU ?? "—"}</td>
+                    <td class="px-4 py-2 text-right text-xs font-medium">{fmtNum(row.UnitsSold)}</td>
+                    <td class="px-4 py-2 text-right text-xs font-medium">{fmt(row.TotalRevenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot class="bg-gray-50 border-t-2 border-gray-200">
+                <tr>
+                  <td colspan="3" class="px-4 py-2 text-xs font-semibold text-gray-600">Totals</td>
+                  <td class="px-4 py-2 text-right text-xs font-semibold">
+                    {fmtNum(itemsData.reduce((a, r) => a + r.UnitsSold, 0))}
+                  </td>
+                  <td class="px-4 py-2 text-right text-xs font-semibold">
+                    {fmt(itemsData.reduce((a, r) => a + r.TotalRevenue, 0))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  )}
+
+  <!-- ── Top Customers ─────────────────────────────────────────────────────── -->
+  {report === "customers" && (
+    <div>
+      {!customersData || customersData.length === 0 ? (
+        <p class="text-gray-400 text-sm py-8 text-center">No customer orders in this date range.</p>
+      ) : (
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+              <tr>
+                <th class="px-4 py-2.5 text-left w-8">#</th>
+                <th class="px-4 py-2.5 text-left">Customer</th>
+                <th class="px-4 py-2.5 text-left">Username / Email</th>
+                <th class="px-4 py-2.5 text-right w-24">Orders</th>
+                <th class="px-4 py-2.5 text-right w-28">Total Sales</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              {customersData.map((row, i) => (
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-2 text-xs text-gray-300">{i + 1}</td>
+                  <td class="px-4 py-2">
+                    <a href={`/admin/users/${row.User_ID}`} class="text-gray-800 hover:text-blue-600 text-xs">
+                      {[row.Company, row.FirstName, row.LastName].filter(Boolean).join(" ") || "—"}
+                    </a>
+                  </td>
+                  <td class="px-4 py-2 text-xs text-gray-500">{row.Email}</td>
+                  <td class="px-4 py-2 text-right text-xs font-medium">{fmtNum(row.OrderCount)}</td>
+                  <td class="px-4 py-2 text-right text-xs font-semibold">{fmt(row.TotalSales)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )}
+
+  <!-- ── Payments by Method ────────────────────────────────────────────────── -->
+  {report === "payments" && (
+    <div class="max-w-md">
+      {!paymentsData || paymentsData.length === 0 ? (
+        <p class="text-gray-400 text-sm py-8 text-center">No payments in this date range.</p>
+      ) : (
+        <>
+          <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                  <th class="px-4 py-2.5 text-left">Payment Method</th>
+                  <th class="px-4 py-2.5 text-right w-24">Count</th>
+                  <th class="px-4 py-2.5 text-right w-28">Amount</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                {paymentsData.map(row => (
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2.5 font-medium text-gray-700">{row.PayMethod}</td>
+                    <td class="px-4 py-2.5 text-right text-xs text-gray-500">{fmtNum(row.NumPayments)}</td>
+                    <td class="px-4 py-2.5 text-right text-sm font-semibold">{fmt(row.TotalAmount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot class="bg-gray-50 border-t-2 border-gray-200">
+                <tr>
+                  <td class="px-4 py-2.5 text-xs font-semibold text-gray-600">Total</td>
+                  <td class="px-4 py-2.5 text-right text-xs font-semibold">
+                    {fmtNum(paymentsData.reduce((a, r) => a + r.NumPayments, 0))}
+                  </td>
+                  <td class="px-4 py-2.5 text-right text-sm font-semibold">
+                    {fmt(paymentsData.reduce((a, r) => a + r.TotalAmount, 0))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <!-- Visual bar chart -->
+          <div class="mt-4 space-y-2">
+            {(() => {
+              const max = Math.max(...paymentsData.map(r => r.TotalAmount));
+              return paymentsData.map(row => (
+                <div>
+                  <div class="flex justify-between text-xs mb-0.5">
+                    <span class="text-gray-600">{row.PayMethod}</span>
+                    <span class="text-gray-500">{(row.TotalAmount / (paymentsData.reduce((a, r) => a + r.TotalAmount, 0)) * 100).toFixed(1)}%</span>
+                  </div>
+                  <div class="h-4 bg-gray-100 rounded overflow-hidden">
+                    <div class="h-full bg-blue-400 rounded" style={`width:${(row.TotalAmount / max * 100).toFixed(1)}%`}></div>
+                  </div>
+                </div>
+              ));
+            })()}
+          </div>
+        </>
+      )}
+    </div>
+  )}
+
+</AdminLayout>
