@@ -1,0 +1,598 @@
+---
+export const prerender = false;
+import AdminLayout from "../../components/layout/AdminLayout.astro";
+import {
+  getPaymentOptions, savePaymentOptions,
+  getGatewaySettings, saveGatewaySettings,
+} from "../../lib/queries/admin-payment";
+
+const tab = Astro.url.searchParams.get("tab") ?? "options";
+
+// ── POST ─────────────────────────────────────────────────────────────────
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g  = (k: string) => (d.get(k) as string) ?? "";
+  const gb = (k: string) => g(k) === "1";
+  const gi = (k: string) => parseInt(g(k)) || 0;
+
+  if (tab === "options") {
+    const selectedIds = d.getAll("CreditCards").map(Number).filter(Boolean);
+    await savePaymentOptions(
+      {
+        AllowOffline:  gb("AllowOffline"),
+        OfflineMessage: g("OfflineMessage") || null,
+        AllowPO:       gi("AllowPO"),
+        AllowQuote:    gi("AllowQuote"),
+        UsePayPal:     gb("UsePayPal"),
+        PaypalClientID: g("PaypalClientID") || null,
+        PaypalSecret:  g("PaypalSecret") || null,
+        PayPalServer:  g("PayPalServer") || "sandbox",
+        PayPalLog:     gb("PayPalLog"),
+        OnlyOffline:   gb("OnlyOffline"),
+        CCProcess:     g("CCProcess") || "None",
+        UseCVV2:       gb("UseCVV2"),
+        StoreCardInfo: gb("StoreCardInfo"),
+        UseACH:        gb("UseACH"),
+        TaxMethod:     gi("TaxMethod"),
+      },
+      selectedIds
+    );
+    return Astro.redirect("/admin/payment-settings?tab=options&saved=1");
+  }
+
+  if (tab === "gateway") {
+    // Square uses AppID/AppToken fields mapped to Username/Password
+    const username = g("AppID") || g("Username");
+    const password = g("AppToken") || g("Password");
+    const gatewayList = d.getAll("paymentgatewaylist").join(",");
+    await saveGatewaySettings({
+      Username:          username || null,
+      Password:          password || null,
+      Transtype:         g("Transtype") || null,
+      Setting1:          g("Setting1") || null,
+      Setting2:          g("Setting2") || null,
+      Setting3:          g("Setting3") || null,
+      CCServer:          g("CCServer") || null,
+      Use_token:         gb("use_token"),
+      paymentgatewaylist: gatewayList || null,
+      useApplePay:       d.has("useApplePay"),
+      useGooglePay:      d.has("useGooglePay"),
+      useAfterPay:       d.has("useAfterPay"),
+      NucomClientKey:    g("nucomClientkey") || null,
+      NucomClientSecret: g("nucomClientSecret") || null,
+      NucomAPIKey:       g("nucomApiKey") || null,
+      CFWebstoreURL:     g("cfWebstoreUrl") || null,
+      NucomServicesURL:  g("NucomServicesURL") || null,
+      NucomAccessToken:  null,
+    });
+    return Astro.redirect("/admin/payment-settings?tab=gateway&saved=1");
+  }
+}
+
+// ── GET ──────────────────────────────────────────────────────────────────
+const [{ options, cards }, gw] = await Promise.all([
+  getPaymentOptions(),
+  getGatewaySettings(),
+]);
+
+const saved = Astro.url.searchParams.get("saved") === "1";
+const o = options;
+const ccProcess = o?.CCProcess ?? "None";
+
+const BRAINTREE_GATEWAYS = ["Hosted", "Paypal", "PayLater", "Venmo", "GooglePay", "ApplePay"];
+---
+
+<AdminLayout title="Payment Settings">
+
+  <!-- Tabs -->
+  <div class="flex gap-1 mb-6 border-b border-gray-200">
+    {[["options","Payment Options"],["gateway","Gateway Settings"]].map(([t,label]) => (
+      <a
+        href={`/admin/payment-settings?tab=${t}`}
+        class={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+          tab === t
+            ? "border-blue-600 text-blue-600"
+            : "border-transparent text-gray-500 hover:text-gray-700"
+        }`}
+      >{label}</a>
+    ))}
+  </div>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved.</div>
+  )}
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- TAB: Payment Options                                          -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  {tab === "options" && o && (
+    <form method="post" class="space-y-8 max-w-3xl">
+
+      {/* ── Offline Orders ── */}
+      <section class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
+        <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Offline Orders</h2>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Allow Offline Orders</span>
+          <div class="col-span-2 flex gap-4 pt-1">
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="AllowOffline" value="1" checked={o.AllowOffline} /> Yes</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="AllowOffline" value="0" checked={!o.AllowOffline} /> No</label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <label class="text-sm text-gray-600 font-medium text-right pt-1">Offline Receipt Message</label>
+          <textarea name="OfflineMessage" rows={4}
+                    class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">{o.OfflineMessage ?? ""}</textarea>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Purchase Orders</span>
+          <div class="col-span-2 space-y-1 pt-1">
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="AllowPO" value="0" checked={o.AllowPO === 0} /> No</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="AllowPO" value="1" checked={o.AllowPO === 1} /> Yes for all</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="AllowPO" value="2" checked={o.AllowPO === 2} /> Must be approved</label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Allow Quotes</span>
+          <div class="col-span-2 space-y-1 pt-1">
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="AllowQuote" value="0" checked={o.AllowQuote === 0} /> No</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="AllowQuote" value="1" checked={o.AllowQuote === 1} /> Show as Payment Option</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="AllowQuote" value="2" checked={o.AllowQuote === 2} /> Show on Basket &amp; Payment Option</label>
+          </div>
+        </div>
+      </section>
+
+      {/* ── PayPal Standard ── */}
+      <section class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
+        <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">PayPal Standard</h2>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Use PayPal Standard</span>
+          <div class="col-span-2 flex gap-4 pt-1">
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="UsePayPal" value="1" checked={o.UsePayPal} /> Yes</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="UsePayPal" value="0" checked={!o.UsePayPal} /> No</label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <label class="text-sm text-gray-600 font-medium text-right">PayPal Client ID</label>
+          <input type="text" name="PaypalClientID" value={o.PaypalClientID ?? ""} maxlength="100"
+                 class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <label class="text-sm text-gray-600 font-medium text-right">PayPal Secret</label>
+          <input type="text" name="PaypalSecret" value={o.PaypalSecret ?? ""} maxlength="100"
+                 class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">PayPal Server</span>
+          <div class="col-span-2 flex gap-4 pt-1">
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="PayPalServer" value="sandbox" checked={o.PayPalServer === "sandbox"} /> Sandbox</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="PayPalServer" value="live" checked={o.PayPalServer === "live"} /> Live</label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Log Messages</span>
+          <div class="col-span-2 flex gap-4 pt-1">
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="PayPalLog" value="1" checked={o.PayPalLog} /> Yes</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="PayPalLog" value="0" checked={!o.PayPalLog} /> No</label>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Credit Cards ── */}
+      <section class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
+        <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Credit Cards</h2>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Use Credit Cards</span>
+          <div class="col-span-2 flex gap-4 pt-1">
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="OnlyOffline" value="0" checked={!o.OnlyOffline} /> Yes</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="OnlyOffline" value="1" checked={o.OnlyOffline} /> No</label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <label class="text-sm text-gray-600 font-medium text-right">Online Processor</label>
+          <select name="CCProcess"
+                  class="col-span-2 w-auto border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+            <option value="None"           selected={o.CCProcess === "None"}>None (demo mode)</option>
+            <option value="AuthorizeHosted" selected={o.CCProcess === "AuthorizeHosted"}>Authorize.Net Hosted</option>
+            <option value="AuthorizeRest"  selected={o.CCProcess === "AuthorizeRest"}>Authorize.Net REST API</option>
+            <option value="AuthorizeNet3"  selected={o.CCProcess === "AuthorizeNet3"}>Authorize.Net (Legacy)</option>
+            <option value="PayPalRest"     selected={o.CCProcess === "PayPalRest"}>PayPal REST API</option>
+            <option value="Braintree"      selected={o.CCProcess === "Braintree"}>Braintree Hosted Gateway</option>
+            <option value="SquareHosted"   selected={o.CCProcess === "SquareHosted"}>Square Hosted</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Cards Accepted</span>
+          <div class="col-span-2 space-y-1 pt-1">
+            {cards.map(c => (
+              <label class="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="CreditCards" value={String(c.ID)} checked={c.Used} />
+                {c.CardName}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Use CVV2</span>
+          <div class="col-span-2 flex gap-4 pt-1">
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="UseCVV2" value="1" checked={o.UseCVV2} /> Yes</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="UseCVV2" value="0" checked={!o.UseCVV2} /> No</label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Save Card Tokens</span>
+          <div class="col-span-2 flex gap-4 pt-1">
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="StoreCardInfo" value="1" checked={o.StoreCardInfo} /> Yes</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="StoreCardInfo" value="0" checked={!o.StoreCardInfo} /> No</label>
+          </div>
+        </div>
+      </section>
+
+      {/* ── ACH ── */}
+      <section class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
+        <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">ACH <span class="text-xs font-normal text-gray-400">(Square only)</span></h2>
+
+        <div class="grid grid-cols-3 gap-3 items-start">
+          <span class="text-sm text-gray-600 font-medium text-right pt-1">Use ACH</span>
+          <div class="col-span-2 flex gap-4 pt-1">
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="UseACH" value="1" checked={o.UseACH} /> Yes</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="UseACH" value="0" checked={!o.UseACH} /> No</label>
+          </div>
+        </div>
+      </section>
+
+      <input type="hidden" name="TaxMethod" value={String(o.TaxMethod)} />
+      <input type="hidden" name="UseBilling" value="0" />
+
+      <div class="flex gap-3">
+        <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded text-sm hover:bg-blue-700">Save Changes</button>
+      </div>
+    </form>
+  )}
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- TAB: Gateway Settings                                         -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  {tab === "gateway" && (
+    <div>
+      {ccProcess === "None" && (
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-8 max-w-xl text-center text-sm text-gray-500">
+          Credit card processing is turned off. Select a processor on the Payment Options tab first.
+        </div>
+      )}
+
+      {ccProcess !== "None" && gw && (
+        <form method="post" class="space-y-6 max-w-3xl">
+          <section class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
+
+            {/* ── Authorize.Net Legacy ── */}
+            {(ccProcess === "AuthorizeNet3" || ccProcess === "AuthorizeHosted") && (
+              <>
+                <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">
+                  {ccProcess === "AuthorizeNet3" ? "Authorize.Net (Legacy)" : "Authorize.Net Hosted Payment"}
+                </h2>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">API Login ID</label>
+                  <input type="text" name="Username" value={gw.Username ?? ""} maxlength="50" required
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Transaction Key</label>
+                  <input type="password" name="Password" value={gw.Password ?? ""} maxlength="75" autocomplete="off" required
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Transaction Type</label>
+                  <select name="Transtype" class="col-span-2 w-auto border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                    <option value="AUTH_CAPTURE" selected={gw.Transtype === "AUTH_CAPTURE"}>NA (Normal Authorization)</option>
+                    <option value="AUTH_ONLY"    selected={gw.Transtype === "AUTH_ONLY"}>AO (Authorization Only)</option>
+                  </select>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Server</label>
+                  <select name="Setting1" class="col-span-2 w-auto border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                    <option value="LIVE" selected={gw.Setting1 === "LIVE"}>Live</option>
+                    <option value="TEST" selected={gw.Setting1 === "TEST"}>Test</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            {/* ── Authorize.Net REST ── */}
+            {ccProcess === "AuthorizeRest" && (
+              <>
+                <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Authorize.Net REST API</h2>
+
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Authorize Keys</p>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">API Login ID</label>
+                  <input type="text" name="Username" value={gw.Username ?? ""} maxlength="50" required
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Transaction Key</label>
+                  <input type="password" name="Password" value={gw.Password ?? ""} maxlength="75" autocomplete="off" required
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Transaction Type</label>
+                  <select name="Transtype" class="col-span-2 w-auto border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                    <option value="AUTH_CAPTURE" selected={gw.Transtype === "AUTH_CAPTURE"}>NA (Normal Authorization)</option>
+                    <option value="AUTH_ONLY"    selected={gw.Transtype === "AUTH_ONLY"}>AO (Authorization Only)</option>
+                  </select>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Server</label>
+                  <select name="Setting1" class="col-span-2 w-auto border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                    <option value="LIVE" selected={gw.Setting1 === "LIVE"}>Live</option>
+                    <option value="TEST" selected={gw.Setting1 === "TEST"}>Test</option>
+                  </select>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-start">
+                  <span class="text-sm text-gray-600 font-medium text-right pt-1">Use CIM</span>
+                  <div class="col-span-2 flex gap-4 pt-1">
+                    <label class="flex items-center gap-2 text-sm"><input type="radio" name="use_token" value="1" checked={gw.Use_token} /> Yes</label>
+                    <label class="flex items-center gap-2 text-sm"><input type="radio" name="use_token" value="0" checked={!gw.Use_token} /> No</label>
+                  </div>
+                </div>
+
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-2">Nucom Keys</p>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Nucom Services URL</label>
+                  <input type="text" name="NucomServicesURL" value={gw.NucomServicesURL ?? ""} maxlength="250"
+                         placeholder="https://www.nucomwebhosting.com"
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Nucom Client Key</label>
+                  <input type="text" name="nucomClientkey" value={gw.NucomClientKey ?? ""} maxlength="100"
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Nucom Client Secret</label>
+                  <input type="text" name="nucomClientSecret" value={gw.NucomClientSecret ?? ""} maxlength="100"
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Nucom API Key</label>
+                  <input type="text" name="nucomApiKey" value={gw.NucomAPIKey ?? ""} maxlength="100"
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">CFWebstore URL</label>
+                  <input type="url" name="cfWebstoreUrl" value={gw.CFWebstoreURL ?? ""} maxlength="100"
+                         placeholder="https://www.mydomain.com"
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <input type="hidden" name="Setting3" value="1" />
+              </>
+            )}
+
+            {/* ── PayPal REST ── */}
+            {ccProcess === "PayPalRest" && (
+              <>
+                <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">PayPal REST API</h2>
+
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">PayPal Keys</p>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Client ID</label>
+                  <input type="text" name="Username" value={gw.Username ?? ""} required
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Client Secret</label>
+                  <input type="text" name="Password" value={gw.Password ?? ""} required
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Live / Test</label>
+                  <select name="Setting1" class="col-span-2 w-auto border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                    <option value="Live" selected={gw.Setting1 === "Live"}>Live</option>
+                    <option value="Test" selected={gw.Setting1 === "Test"}>Test</option>
+                  </select>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-start">
+                  <span class="text-sm text-gray-600 font-medium text-right pt-1">Use Vault</span>
+                  <div class="col-span-2 flex gap-4 pt-1">
+                    <label class="flex items-center gap-2 text-sm"><input type="radio" name="use_token" value="1" checked={gw.Use_token} /> Yes</label>
+                    <label class="flex items-center gap-2 text-sm"><input type="radio" name="use_token" value="0" checked={!gw.Use_token} /> No</label>
+                  </div>
+                </div>
+
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-2">Nucom Keys</p>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Nucom Services URL</label>
+                  <input type="text" name="NucomServicesURL" value={gw.NucomServicesURL ?? ""} maxlength="250"
+                         placeholder="https://www.nucomwebhosting.com"
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Nucom Client Key</label>
+                  <input type="text" name="nucomClientkey" value={gw.NucomClientKey ?? ""} maxlength="100"
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Nucom Client Secret</label>
+                  <input type="text" name="nucomClientSecret" value={gw.NucomClientSecret ?? ""} maxlength="100"
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Nucom API Key</label>
+                  <input type="text" name="nucomApiKey" value={gw.NucomAPIKey ?? ""} maxlength="100"
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">CFWebstore URL</label>
+                  <input type="url" name="cfWebstoreUrl" value={gw.CFWebstoreURL ?? ""} maxlength="100"
+                         placeholder="https://www.mydomain.com"
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <input type="hidden" name="Setting3" value="1" />
+              </>
+            )}
+
+            {/* ── Braintree ── */}
+            {ccProcess === "Braintree" && (
+              <>
+                <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Braintree Services</h2>
+
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Braintree Keys</p>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Public Key</label>
+                  <input type="text" name="Username" value={gw.Username ?? ""} required
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Private Key</label>
+                  <input type="password" name="Password" value={gw.Password ?? ""} autocomplete="off" required
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Tokenization Key</label>
+                  <input type="password" name="Setting2" value={gw.Setting2 ?? ""} autocomplete="off" required
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Live / Test</label>
+                  <select name="Setting1" class="col-span-2 w-auto border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                    <option value="https://payments.braintree-api.com/graphql"         selected={gw.Setting1 === "https://payments.braintree-api.com/graphql"}>Live</option>
+                    <option value="https://payments.sandbox.braintree-api.com/graphql" selected={gw.Setting1 === "https://payments.sandbox.braintree-api.com/graphql"}>Test (Sandbox)</option>
+                  </select>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-start">
+                  <span class="text-sm text-gray-600 font-medium text-right pt-1">Use Vault</span>
+                  <div class="col-span-2 flex gap-4 pt-1">
+                    <label class="flex items-center gap-2 text-sm"><input type="radio" name="use_token" value="1" checked={gw.Use_token} /> Yes</label>
+                    <label class="flex items-center gap-2 text-sm"><input type="radio" name="use_token" value="0" checked={!gw.Use_token} /> No</label>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-start">
+                  <span class="text-sm text-gray-600 font-medium text-right pt-1">Payment Gateways</span>
+                  <div class="col-span-2 flex flex-wrap gap-3 pt-1">
+                    {BRAINTREE_GATEWAYS.map(gway => (
+                      <label class="flex items-center gap-2 text-sm">
+                        <input type="checkbox" name="paymentgatewaylist" value={gway}
+                               checked={(gw.paymentgatewaylist ?? "").split(",").includes(gway)} />
+                        {gway}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <input type="hidden" name="Setting3" value="0" />
+              </>
+            )}
+
+            {/* ── Square Hosted ── */}
+            {ccProcess === "SquareHosted" && (
+              <>
+                <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Square Hosted Payments</h2>
+
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Square Keys</p>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Access URL</label>
+                  <select name="Setting2" class="col-span-2 w-auto border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                    <option value="https://connect.squareup.com/v2"        selected={gw.Setting2 === "https://connect.squareup.com/v2"}>Production</option>
+                    <option value="https://connect.squareupsandbox.com/v2" selected={gw.Setting2 === "https://connect.squareupsandbox.com/v2"}>Sandbox</option>
+                  </select>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Application ID</label>
+                  <input type="text" name="AppID" value={gw.Username ?? ""} required
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Access Token</label>
+                  <input type="password" name="AppToken" value={gw.Password ?? ""} autocomplete="off" required
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Transaction Type</label>
+                  <select name="Transtype" class="col-span-2 w-auto border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                    <option value="Sale" selected={gw.Transtype === "Sale"}>Sale and Capture</option>
+                    <option value="Auth" selected={gw.Transtype === "Auth"}>Authorization Only</option>
+                  </select>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-center">
+                  <label class="text-sm text-gray-600 font-medium text-right">Location ID</label>
+                  <input type="text" name="Setting1" value={gw.Setting1 ?? ""} required
+                         class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 items-start">
+                  <span class="text-sm text-gray-600 font-medium text-right pt-1">Extra Pay Methods</span>
+                  <div class="col-span-2 space-y-1 pt-1">
+                    <label class="flex items-center gap-2 text-sm">
+                      <input type="checkbox" name="useApplePay"  value="1" checked={gw.useApplePay}  /> Apple Pay
+                    </label>
+                    <label class="flex items-center gap-2 text-sm">
+                      <input type="checkbox" name="useGooglePay" value="1" checked={gw.useGooglePay} /> Google Pay
+                    </label>
+                    <label class="flex items-center gap-2 text-sm">
+                      <input type="checkbox" name="useAfterPay"  value="1" checked={gw.useAfterPay}  /> AfterPay
+                    </label>
+                  </div>
+                </div>
+              </>
+            )}
+
+          </section>
+
+          <div class="flex gap-3">
+            <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded text-sm hover:bg-blue-700">Save Changes</button>
+          </div>
+        </form>
+      )}
+    </div>
+  )}
+
+</AdminLayout>
