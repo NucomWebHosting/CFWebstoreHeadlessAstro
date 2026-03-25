@@ -1,15 +1,25 @@
 import { useState, useEffect, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 
-interface ImageItem {
+type MediaType = "image" | "video" | "doc";
+
+interface MediaFile {
   filename: string;
   url: string;
   thumbUrl: string | null;
   size: number;
+  mediaType: MediaType;
   width: number | null;
   height: number | null;
   created: string;
 }
+
+interface MediaFolder {
+  name: string;
+  path: string;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -23,76 +33,172 @@ function fmtDate(iso: string): string {
   });
 }
 
-export default function MediaManager() {
-  const [images, setImages]       = useState<ImageItem[]>([]);
-  const [selected, setSelected]   = useState<ImageItem | null>(null);
-  const [search, setSearch]       = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress]   = useState<string[]>([]);
-  const [copied, setCopied]       = useState(false);
-  const [loading, setLoading]     = useState(true);
+function fileExt(filename: string): string {
+  return (filename.split(".").pop() ?? "").toUpperCase();
+}
 
-  async function loadImages() {
+function docColors(ext: string): string {
+  const e = ext.toLowerCase();
+  if (e === "pdf")                    return "bg-red-100 text-red-600";
+  if (["xlsx","xls","csv"].includes(e)) return "bg-green-100 text-green-600";
+  if (["docx","doc"].includes(e))     return "bg-blue-100 text-blue-600";
+  return "bg-gray-100 text-gray-600";
+}
+
+// ── SVG icons ──────────────────────────────────────────────────────────────
+
+function IconFolder({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+    </svg>
+  );
+}
+
+function IconPlay({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M8 5v14l11-7z"/>
+    </svg>
+  );
+}
+
+function IconFile({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+    </svg>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────
+
+export default function MediaManager() {
+  const [currentFolder, setCurrentFolder] = useState("");
+  const [files, setFiles]                 = useState<MediaFile[]>([]);
+  const [subfolders, setSubfolders]       = useState<MediaFolder[]>([]);
+  const [selected, setSelected]           = useState<MediaFile | null>(null);
+  const [search, setSearch]               = useState("");
+  const [uploading, setUploading]         = useState(false);
+  const [progress, setProgress]           = useState<{ msg: string; ok: boolean } | null>(null);
+  const [loading, setLoading]             = useState(true);
+  const [copied, setCopied]               = useState(false);
+  const [showNewFolder, setShowNewFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+
+  async function loadMedia(folder: string) {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/images");
-      const data = await res.json();
-      setImages(data.images ?? []);
+      const qs  = folder ? `?folder=${encodeURIComponent(folder)}` : "";
+      const res = await fetch(`/api/admin/images${qs}`);
+      const d   = await res.json();
+      setFiles(d.files ?? []);
+      setSubfolders(d.folders ?? []);
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { loadImages(); }, []);
+  useEffect(() => { loadMedia(currentFolder); }, [currentFolder]);
+
+  function navigateTo(path: string) {
+    setCurrentFolder(path);
+    setSelected(null);
+    setSearch("");
+  }
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!acceptedFiles.length) return;
     setUploading(true);
-    setProgress([`Uploading ${acceptedFiles.length} file${acceptedFiles.length > 1 ? "s" : ""}…`]);
+    setProgress({ msg: `Uploading ${acceptedFiles.length} file${acceptedFiles.length !== 1 ? "s" : ""}…`, ok: true });
 
     const formData = new FormData();
-    acceptedFiles.forEach((file, i) => formData.append(`files[${i}]`, file));
+    acceptedFiles.forEach((f, i) => formData.append(`files[${i}]`, f));
+    if (currentFolder) formData.append("folder", currentFolder);
 
     try {
       const res = await fetch("/api/admin/upload", { method: "POST", body: formData });
-      const data = await res.json();
-      if (data.success) {
-        setProgress([`Uploaded ${data.data.files.length} file${data.data.files.length !== 1 ? "s" : ""}`]);
-        await loadImages();
-        setTimeout(() => setProgress([]), 3000);
+      const d   = await res.json();
+      if (d.success) {
+        const n = d.data.files.length;
+        const warn = d.data.messages?.length ? ` (${d.data.messages.length} error${d.data.messages.length !== 1 ? "s" : ""})` : "";
+        setProgress({ msg: `Uploaded ${n} file${n !== 1 ? "s" : ""}${warn}`, ok: true });
+        await loadMedia(currentFolder);
+        setTimeout(() => setProgress(null), 4000);
       } else {
-        setProgress(data.data?.messages ?? ["Upload failed"]);
+        setProgress({ msg: (d.data?.messages ?? ["Upload failed"]).join(" · "), ok: false });
       }
     } catch {
-      setProgress(["Network error during upload"]);
+      setProgress({ msg: "Network error during upload", ok: false });
     } finally {
       setUploading(false);
     }
-  }, []);
+  }, [currentFolder]);
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop,
     accept: {
-      "image/jpeg":   [".jpg", ".jpeg"],
-      "image/png":    [".png"],
-      "image/gif":    [".gif"],
-      "image/webp":   [".webp"],
-      "image/avif":   [".avif"],
-      "image/svg+xml":[".svg"],
-      "image/heic":   [".heic"],
-      "image/heif":   [".heif"],
+      "image/jpeg":    [".jpg", ".jpeg"],
+      "image/png":     [".png"],
+      "image/gif":     [".gif"],
+      "image/webp":    [".webp"],
+      "image/avif":    [".avif"],
+      "image/svg+xml": [".svg"],
+      "image/heic":    [".heic"],
+      "image/heif":    [".heif"],
+      "video/mp4":               [".mp4"],
+      "video/webm":              [".webm"],
+      "video/quicktime":         [".mov"],
+      "video/x-msvideo":         [".avi"],
+      "application/pdf":         [".pdf"],
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+      "application/vnd.ms-excel":                [".xls"],
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+      "application/msword":      [".doc"],
+      "text/plain":              [".txt"],
+      "text/csv":                [".csv"],
     },
     noClick: true,
     noKeyboard: true,
   });
 
-  async function handleDelete(img: ImageItem) {
-    if (!confirm(`Delete "${img.filename}"? This cannot be undone.`)) return;
-    await fetch(`/api/admin/images?filename=${encodeURIComponent(img.filename)}`, {
-      method: "DELETE",
+  async function handleDelete(file: MediaFile) {
+    if (!confirm(`Delete "${file.filename}"? This cannot be undone.`)) return;
+    const params = new URLSearchParams({ filename: file.filename });
+    if (currentFolder) params.set("folder", currentFolder);
+    await fetch(`/api/admin/images?${params}`, { method: "DELETE" });
+    if (selected?.filename === file.filename) setSelected(null);
+    await loadMedia(currentFolder);
+  }
+
+  async function handleCreateFolder() {
+    const name = newFolderName.trim().replace(/[^a-zA-Z0-9_-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    if (!name) return;
+    const path = currentFolder ? `${currentFolder}/${name}` : name;
+    const res  = await fetch("/api/admin/folders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folder: path }),
     });
-    if (selected?.filename === img.filename) setSelected(null);
-    await loadImages();
+    if (res.ok) {
+      setShowNewFolder(false);
+      setNewFolderName("");
+      await loadMedia(currentFolder);
+    } else {
+      const d = await res.json();
+      setProgress({ msg: d.error ?? "Failed to create folder", ok: false });
+    }
+  }
+
+  async function handleDeleteFolder(folderPath: string, folderName: string) {
+    if (!confirm(`Delete folder "${folderName}"? It must be empty.`)) return;
+    const res = await fetch(`/api/admin/folders?folder=${encodeURIComponent(folderPath)}`, { method: "DELETE" });
+    if (res.ok) {
+      await loadMedia(currentFolder);
+    } else {
+      const d = await res.json();
+      setProgress({ msg: d.error ?? "Failed to delete folder", ok: false });
+    }
   }
 
   function copyUrl(url: string) {
@@ -101,16 +207,29 @@ export default function MediaManager() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  const filtered = images.filter((img) =>
-    img.filename.toLowerCase().includes(search.toLowerCase())
-  );
+  // Breadcrumbs
+  const crumbs = currentFolder
+    ? currentFolder.split("/").map((part, i, arr) => ({
+        label: part,
+        path:  arr.slice(0, i + 1).join("/"),
+      }))
+    : [];
+
+  const lc              = search.toLowerCase();
+  const filteredFolders = subfolders.filter(f => !search || f.name.toLowerCase().includes(lc));
+  const filteredFiles   = files.filter(f => !search || f.filename.toLowerCase().includes(lc));
+  const hasContent      = filteredFolders.length > 0 || filteredFiles.length > 0;
+  const isEmpty         = !loading && subfolders.length === 0 && files.length === 0;
+  const noResults       = !loading && !isEmpty && !hasContent && !!search;
+
+  const gridCols = selected
+    ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
+    : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6";
 
   return (
     <div
       {...getRootProps()}
-      className={`relative min-h-[60vh] transition-colors rounded-xl ${
-        isDragActive ? "bg-blue-50 ring-2 ring-blue-400" : ""
-      }`}
+      className={`relative min-h-[60vh] transition-colors rounded-xl ${isDragActive ? "bg-blue-50 ring-2 ring-blue-400" : ""}`}
     >
       <input {...getInputProps()} />
 
@@ -118,49 +237,103 @@ export default function MediaManager() {
       {isDragActive && (
         <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-blue-50/80 border-2 border-dashed border-blue-400 pointer-events-none">
           <div className="text-center">
-            <div className="text-4xl mb-2">🖼️</div>
-            <p className="text-blue-700 font-semibold">Drop images here</p>
+            <div className="text-4xl mb-2">📁</div>
+            <p className="text-blue-700 font-semibold">Drop files here</p>
           </div>
         </div>
       )}
 
       {/* Toolbar */}
-      <div className="flex items-center gap-3 mb-5">
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
         <button
           onClick={open}
           disabled={uploading}
           className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
         >
-          {uploading ? "Uploading…" : "Upload Images"}
+          {uploading ? "Uploading…" : "Upload Files"}
+        </button>
+        <button
+          onClick={() => { setShowNewFolder(v => !v); setNewFolderName(""); }}
+          className="px-4 py-2 rounded text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50"
+        >
+          New Folder
         </button>
         <input
           type="text"
           placeholder="Search…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="border border-gray-300 rounded px-3 py-2 text-sm w-56 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          onChange={e => setSearch(e.target.value)}
+          className="border border-gray-300 rounded px-3 py-2 text-sm w-52 focus:outline-none focus:ring-1 focus:ring-blue-400"
         />
         <span className="text-sm text-gray-400 ml-auto">
-          {filtered.length} image{filtered.length !== 1 ? "s" : ""}
+          {filteredFolders.length + filteredFiles.length} item{filteredFolders.length + filteredFiles.length !== 1 ? "s" : ""}
           {search && ` matching "${search}"`}
         </span>
       </div>
 
-      {/* Upload feedback */}
-      {progress.length > 0 && (
-        <div className={`mb-4 rounded-lg px-4 py-3 text-sm ${
-          progress[0].startsWith("Uploaded") ? "bg-green-50 border border-green-200 text-green-700"
-          : "bg-red-50 border border-red-200 text-red-700"
-        }`}>
-          {progress.join(" · ")}
+      {/* Breadcrumbs */}
+      {crumbs.length > 0 && (
+        <nav className="flex items-center gap-1 text-sm mb-4 flex-wrap">
+          <button onClick={() => navigateTo("")} className="text-blue-600 hover:underline">Root</button>
+          {crumbs.map((c, i) => (
+            <span key={c.path} className="flex items-center gap-1">
+              <span className="text-gray-400">/</span>
+              {i === crumbs.length - 1 ? (
+                <span className="text-gray-700 font-medium">{c.label}</span>
+              ) : (
+                <button onClick={() => navigateTo(c.path)} className="text-blue-600 hover:underline">{c.label}</button>
+              )}
+            </span>
+          ))}
+        </nav>
+      )}
+
+      {/* New folder inline form */}
+      {showNewFolder && (
+        <div className="flex items-center gap-2 mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+          <input
+            type="text"
+            value={newFolderName}
+            onChange={e => setNewFolderName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter") handleCreateFolder();
+              if (e.key === "Escape") setShowNewFolder(false);
+            }}
+            placeholder="Folder name"
+            autoFocus
+            className="border border-gray-300 rounded px-3 py-1.5 text-sm w-48 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+          <button
+            onClick={handleCreateFolder}
+            className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700"
+          >
+            Create
+          </button>
+          <button
+            onClick={() => setShowNewFolder(false)}
+            className="px-3 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
         </div>
       )}
 
-      {/* Empty upload prompt */}
-      {!loading && images.length === 0 && (
+      {/* Progress / error */}
+      {progress && (
+        <div className={`mb-4 rounded-lg px-4 py-3 text-sm ${
+          progress.ok
+            ? "bg-green-50 border border-green-200 text-green-700"
+            : "bg-red-50 border border-red-200 text-red-700"
+        }`}>
+          {progress.msg}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {isEmpty && (
         <div className="border-2 border-dashed border-gray-300 rounded-xl py-20 text-center text-gray-400">
           <div className="text-4xl mb-3">📁</div>
-          <p className="font-medium">No images yet</p>
+          <p className="font-medium">Empty {currentFolder ? "folder" : "media library"}</p>
           <p className="text-sm mt-1">Click Upload or drag files here</p>
         </div>
       )}
@@ -169,34 +342,75 @@ export default function MediaManager() {
         <div className="text-center py-20 text-sm text-gray-400">Loading…</div>
       )}
 
-      {/* Main layout: grid + detail panel */}
-      {!loading && images.length > 0 && (
+      {/* No search results */}
+      {noResults && (
+        <p className="text-sm text-gray-400 py-10 text-center">
+          No files match &ldquo;{search}&rdquo;
+        </p>
+      )}
+
+      {/* Grid + detail panel */}
+      {!loading && hasContent && (
         <div className={`flex gap-5 ${selected ? "items-start" : ""}`}>
 
           {/* Grid */}
-          <div className={`grid gap-3 flex-1 ${
-            selected
-              ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
-              : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
-          }`}>
-            {filtered.map((img) => (
+          <div className={`grid gap-3 flex-1 ${gridCols}`}>
+
+            {/* Folder cards */}
+            {filteredFolders.map(folder => (
+              <div key={folder.path} className="group relative">
+                <button
+                  onClick={() => navigateTo(folder.path)}
+                  className="w-full aspect-square rounded-xl border-2 border-transparent hover:border-yellow-400 bg-yellow-50 hover:bg-yellow-100 flex flex-col items-center justify-center gap-2 transition-all focus:outline-none"
+                >
+                  <IconFolder className="w-10 h-10 text-yellow-500" />
+                  <span className="text-xs font-medium text-gray-700 px-2 truncate w-full text-center leading-tight">
+                    {folder.name}
+                  </span>
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); handleDeleteFolder(folder.path, folder.name); }}
+                  className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded bg-white/90 border border-gray-200 text-red-400 hover:text-red-600 text-xs transition-opacity leading-none"
+                  title="Delete folder (must be empty)"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+
+            {/* File cards */}
+            {filteredFiles.map(file => (
               <button
-                key={img.filename}
-                onClick={() => setSelected(selected?.filename === img.filename ? null : img)}
+                key={file.filename}
+                onClick={() => setSelected(selected?.filename === file.filename ? null : file)}
                 className={`group relative rounded-xl overflow-hidden border-2 bg-gray-50 aspect-square focus:outline-none transition-all ${
-                  selected?.filename === img.filename
+                  selected?.filename === file.filename
                     ? "border-blue-500 shadow-md"
                     : "border-transparent hover:border-gray-300"
                 }`}
               >
-                <img
-                  src={img.thumbUrl ?? img.url}
-                  alt={img.filename}
-                  className="w-full h-full object-cover"
-                  loading="lazy"
-                />
+                {file.mediaType === "image" ? (
+                  <img
+                    src={file.thumbUrl ?? file.url}
+                    alt={file.filename}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                ) : file.mediaType === "video" ? (
+                  <div className="w-full h-full bg-gray-800 flex flex-col items-center justify-center gap-1.5">
+                    <IconPlay className="w-10 h-10 text-white/70" />
+                    <span className="text-xs text-gray-400 font-medium tracking-wide">
+                      {fileExt(file.filename)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className={`w-full h-full flex flex-col items-center justify-center gap-1.5 ${docColors(fileExt(file.filename))}`}>
+                    <IconFile className="w-8 h-8 opacity-50" />
+                    <span className="text-sm font-bold">{fileExt(file.filename)}</span>
+                  </div>
+                )}
                 <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <p className="text-white text-xs truncate">{img.filename}</p>
+                  <p className="text-white text-xs truncate">{file.filename}</p>
                 </div>
               </button>
             ))}
@@ -205,13 +419,23 @@ export default function MediaManager() {
           {/* Detail panel */}
           {selected && (
             <div className="w-72 shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-4 sticky top-4">
+
               {/* Preview */}
-              <div className="aspect-video rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
-                <img
-                  src={selected.url}
-                  alt={selected.filename}
-                  className="max-w-full max-h-full object-contain"
-                />
+              <div className="rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+                {selected.mediaType === "image" ? (
+                  <img
+                    src={selected.url}
+                    alt={selected.filename}
+                    className="max-w-full max-h-48 object-contain"
+                  />
+                ) : selected.mediaType === "video" ? (
+                  <video src={selected.url} controls className="w-full max-h-48" />
+                ) : (
+                  <div className={`w-full py-10 flex flex-col items-center justify-center gap-2 ${docColors(fileExt(selected.filename))}`}>
+                    <IconFile className="w-12 h-12 opacity-50" />
+                    <span className="text-2xl font-bold">{fileExt(selected.filename)}</span>
+                  </div>
+                )}
               </div>
 
               {/* Meta */}
@@ -236,9 +460,7 @@ export default function MediaManager() {
                   <button
                     onClick={() => copyUrl(selected.url)}
                     className={`shrink-0 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                      copied
-                        ? "bg-green-100 text-green-700"
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      copied ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                     }`}
                   >
                     {copied ? "Copied!" : "Copy"}
@@ -254,7 +476,7 @@ export default function MediaManager() {
                   rel="noopener"
                   className="flex-1 text-center px-3 py-1.5 rounded text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50"
                 >
-                  Open
+                  {selected.mediaType === "doc" ? "Download" : "Open"}
                 </a>
                 <button
                   onClick={() => handleDelete(selected)}
@@ -275,21 +497,17 @@ export default function MediaManager() {
         </div>
       )}
 
-      {/* No search results */}
-      {!loading && images.length > 0 && filtered.length === 0 && (
-        <p className="text-sm text-gray-400 py-10 text-center">
-          No images match &ldquo;{search}&rdquo;
-        </p>
-      )}
-
-      {/* Drop hint */}
+      {/* Footer hints */}
       {!isDragActive && (
         <div className="text-center mt-6 space-y-1">
           <p className="text-xs text-gray-400">
-            You can also drag &amp; drop images anywhere on this page
+            Drag &amp; drop files anywhere on this page to upload to the current folder
           </p>
           <p className="text-xs text-gray-300">
-            Accepted: JPG, PNG, GIF, WebP, AVIF, SVG, HEIC &mdash; max 10 MB &middot; HEIC files are converted to WebP automatically
+            Images: JPG PNG GIF WebP AVIF SVG HEIC &nbsp;·&nbsp;
+            Videos: MP4 WebM MOV AVI &nbsp;·&nbsp;
+            Docs: PDF XLSX XLS DOCX DOC TXT CSV &nbsp;·&nbsp;
+            20 MB max (videos 200 MB) &nbsp;·&nbsp; HEIC auto-converted to WebP
           </p>
         </div>
       )}
