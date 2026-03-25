@@ -190,3 +190,168 @@ export async function getOrdersAdmin(
 
   return { rows, total: counts[0]?.total ?? 0 };
 }
+
+// ── Order Detail ───────────────────────────────────────────────────────────────
+
+export interface OrderDetailHeader {
+  Order_No: number;
+  Customer_ID: number;
+  ShipTo: number;
+  User_ID: number;
+  DateOrdered: Date;
+  DateFilled: Date | null;
+  Process: boolean;
+  Filled: boolean;
+  Paid: boolean;
+  Void: boolean;
+  Status: string | null;
+  ShipType: string | null;
+  Source: string | null;
+  OfflinePayment: string | null;
+  Notes: string | null;
+  OrderTotal: number;
+  Tax: number;
+  Shipping: number;
+  Freight: number;
+  Credits: number;
+  AdminCredit: number;
+  AdminCreditText: string | null;
+  OrderDisc: number;
+  AddonTotal: number;
+  PO_Number: string | null;
+  Affiliate: number | null;
+  AmountPaid: number;
+}
+
+export interface OrderItem {
+  Item_ID: number;
+  Product_ID: number;
+  Name: string;
+  SKU: string | null;
+  Quantity: number;
+  Price: number;
+  OptPrice: number;
+  AddonMultP: number;
+  Options: string | null;
+  Addons: string | null;
+}
+
+export interface OrderCustomer {
+  Customer_ID: number;
+  FirstName: string | null;
+  LastName: string | null;
+  Company: string | null;
+  Address: string | null;
+  Address2: string | null;
+  City: string | null;
+  State: string | null;
+  Zip: string | null;
+  Country: string | null;
+  Phone: string | null;
+  Email: string | null;
+}
+
+export interface OrderPayment {
+  Payment_ID: number;
+  PaymentDateTime: Date;
+  Amount: number;
+  OfflinePayment: string | null;
+  CardType: string | null;
+  NameOnCard: string | null;
+  CardNumber: string | null;
+  AuthNumber: string | null;
+  TransactNum: string | null;
+}
+
+export interface OrderShipment {
+  Shipment_ID: number;
+  ShipMethod: string | null;
+  Tracking: string | null;
+  ShipCost: number | null;
+  Weight: number | null;
+  DateShipped: Date | null;
+}
+
+export async function getOrderDetail(orderNo: number): Promise<{
+  order: OrderDetailHeader | null;
+  items: OrderItem[];
+  billing: OrderCustomer | null;
+  shipping: OrderCustomer | null;
+  payments: OrderPayment[];
+  shipments: OrderShipment[];
+}> {
+  const [orders, items, payments, shipments] = await Promise.all([
+    query<OrderDetailHeader>(
+      `SELECT O.*,
+         COALESCE((SELECT SUM(P.Amount) FROM Payment P WHERE P.Order_No = O.Order_No), 0) AS AmountPaid
+       FROM Order_No O
+       WHERE O.Order_No = @orderNo`,
+      { orderNo }
+    ),
+    query<OrderItem>(
+      `SELECT Item_ID, Product_ID, Name, SKU, Quantity, Price,
+         ISNULL(OptPrice, 0) AS OptPrice, ISNULL(AddonMultP, 0) AS AddonMultP,
+         Options, Addons
+       FROM Order_Items
+       WHERE Order_No = @orderNo
+       ORDER BY Item_ID`,
+      { orderNo }
+    ),
+    query<OrderPayment>(
+      `SELECT P.Payment_ID, P.PaymentDateTime, P.Amount, P.OfflinePayment,
+         C.CardType, C.NameOnCard, C.CardNumber, P.AuthNumber, P.TransactNum
+       FROM Payment P
+       LEFT JOIN CardData C ON P.CardData_ID = C.ID
+       WHERE P.Order_No = @orderNo
+       ORDER BY P.Payment_ID DESC`,
+      { orderNo }
+    ),
+    query<OrderShipment>(
+      `SELECT Shipment_ID, ShipMethod, Tracking, ShipCost, Weight, DateShipped
+       FROM Shipment
+       WHERE Order_No = @orderNo
+       ORDER BY Shipment_ID DESC`,
+      { orderNo }
+    ),
+  ]);
+
+  const order = orders[0] ?? null;
+  if (!order) return { order: null, items: [], billing: null, shipping: null, payments: [], shipments: [] };
+
+  // Fetch billing + (optionally different) shipping customer records
+  const ids = [order.Customer_ID];
+  if (order.ShipTo && order.ShipTo !== order.Customer_ID) ids.push(order.ShipTo);
+
+  const customers = await query<OrderCustomer>(
+    `SELECT Customer_ID, FirstName, LastName, Company, Address, Address2,
+            City, State, Zip, Country, Phone, Email
+     FROM Customers
+     WHERE Customer_ID IN (${ids.map((_, i) => `@cid${i}`).join(",")})`,
+    Object.fromEntries(ids.map((id, i) => [`cid${i}`, id]))
+  );
+
+  const billing  = customers.find(c => c.Customer_ID === order.Customer_ID) ?? null;
+  const shipping = order.ShipTo && order.ShipTo !== order.Customer_ID
+    ? customers.find(c => c.Customer_ID === order.ShipTo) ?? null
+    : null;
+
+  return { order, items, billing, shipping, payments, shipments };
+}
+
+export async function updateOrderStatus(orderNo: number, action: string): Promise<void> {
+  const allowed = ["mark_paid","mark_unpaid","mark_process","mark_filled","mark_void","mark_unvoid"];
+  if (!allowed.includes(action)) return;
+  const sqls: Record<string, string> = {
+    mark_paid:     "UPDATE Order_No SET Paid=1    WHERE Order_No=@orderNo",
+    mark_unpaid:   "UPDATE Order_No SET Paid=0    WHERE Order_No=@orderNo",
+    mark_process:  "UPDATE Order_No SET Process=1 WHERE Order_No=@orderNo",
+    mark_filled:   "UPDATE Order_No SET Filled=1, DateFilled=GETDATE() WHERE Order_No=@orderNo",
+    mark_void:     "UPDATE Order_No SET Void=1    WHERE Order_No=@orderNo",
+    mark_unvoid:   "UPDATE Order_No SET Void=0    WHERE Order_No=@orderNo",
+  };
+  await query(sqls[action]!, { orderNo });
+}
+
+export async function saveOrderNotes(orderNo: number, notes: string): Promise<void> {
+  await query("UPDATE Order_No SET Notes=@notes WHERE Order_No=@orderNo", { orderNo, notes });
+}

@@ -1,0 +1,443 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getOrderDetail, updateOrderStatus, saveOrderNotes } from "../../../lib/queries/admin-orders";
+
+const id = Number(Astro.params.id);
+if (!id) return new Response(null, { status: 404 });
+
+// ── POST actions ──────────────────────────────────────────────────────────────
+if (Astro.request.method === "POST") {
+  const data = await Astro.request.formData();
+  const action = data.get("_action") as string;
+  if (action === "save_notes") {
+    await saveOrderNotes(id, (data.get("notes") as string) ?? "");
+  } else {
+    await updateOrderStatus(id, action);
+  }
+  return Astro.redirect(`/admin/orders/${id}?saved=1`);
+}
+
+// ── Fetch data ────────────────────────────────────────────────────────────────
+const { order, items, billing, shipping, payments, shipments } = await getOrderDetail(id);
+if (!order) return new Response(null, { status: 404 });
+
+const saved = Astro.url.searchParams.get("saved") === "1";
+const returnTab = order.Filled ? "filled" : order.Process ? "process" : "pending";
+
+// ── Derived values ────────────────────────────────────────────────────────────
+const amountPaid = order.AmountPaid ?? 0;
+const balance    = order.OrderTotal - amountPaid;
+
+const statusLabel = order.Void     ? "Void"
+                  : order.Filled   ? "Filled"
+                  : order.Process  ? "In Process"
+                  : "Pending";
+
+const statusColor = order.Void     ? "bg-red-100 text-red-700"
+                  : order.Filled   ? "bg-green-100 text-green-700"
+                  : order.Process  ? "bg-blue-100 text-blue-700"
+                  : "bg-yellow-100 text-yellow-700";
+
+// Compute item-level extended prices and subtotal
+type LineItem = typeof items[0] & { itemPrice: number; ext: number };
+let subTotal = 0;
+const lines: LineItem[] = items.map(item => {
+  const itemPrice = item.Price + item.OptPrice + item.AddonMultP;
+  const ext = itemPrice * item.Quantity;
+  subTotal += ext;
+  return { ...item, itemPrice, ext };
+});
+
+function fmt(n: number) {
+  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+function fmtDate(d: Date | null | undefined) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit" });
+}
+function fmtDateTime(d: Date | null | undefined) {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+function addrLines(c: typeof billing) {
+  if (!c) return [];
+  const lines = [];
+  if (c.Company)  lines.push(c.Company);
+  lines.push(`${c.FirstName ?? ""} ${c.LastName ?? ""}`.trim());
+  if (c.Address)  lines.push(c.Address);
+  if (c.Address2) lines.push(c.Address2);
+  if (c.City || c.State || c.Zip)
+    lines.push([c.City, c.State, c.Zip].filter(Boolean).join(", "));
+  if (c.Country && c.Country.toLowerCase() !== "us" && c.Country.toLowerCase() !== "usa" && c.Country !== "")
+    lines.push(c.Country);
+  if (c.Phone) lines.push(c.Phone);
+  if (c.Email) lines.push(c.Email);
+  return lines;
+}
+
+function paymentLabel(p: typeof payments[0]) {
+  if (!p.OfflinePayment || p.OfflinePayment === "CreditCard" || p.OfflinePayment === "Online")
+    return p.CardType ?? "Credit Card";
+  return p.OfflinePayment;
+}
+---
+
+<AdminLayout title={`Order #${order.Order_No}`}>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+      Saved successfully.
+    </div>
+  )}
+
+  <!-- Header -->
+  <div class="flex flex-wrap items-center gap-3 mb-4">
+    <a href={`/admin/orders?tab=${returnTab}`} class="text-sm text-blue-600 hover:underline">
+      ← Back to Orders
+    </a>
+    <div class="flex items-center gap-2 flex-wrap">
+      <h2 class="text-lg font-semibold text-gray-800">Order #{order.Order_No}</h2>
+      <span class="text-xs text-gray-400">{fmtDate(order.DateOrdered)}</span>
+      <span class={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor}`}>{statusLabel}</span>
+      {order.Paid
+        ? <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">Paid</span>
+        : <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700">Unpaid</span>}
+      {order.Source && (
+        <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{order.Source}</span>
+      )}
+    </div>
+  </div>
+
+  <!-- Status actions -->
+  <div class="flex flex-wrap gap-2 mb-5">
+    {!order.Process && !order.Filled && !order.Void && (
+      <form method="post">
+        <input type="hidden" name="_action" value="mark_process" />
+        <button class="px-3 py-1.5 text-xs rounded border border-blue-400 text-blue-600 hover:bg-blue-50">
+          Mark In Process
+        </button>
+      </form>
+    )}
+    {!order.Filled && !order.Void && (
+      <form method="post">
+        <input type="hidden" name="_action" value="mark_filled" />
+        <button class="px-3 py-1.5 text-xs rounded border border-green-400 text-green-600 hover:bg-green-50">
+          Mark Filled
+        </button>
+      </form>
+    )}
+    {!order.Paid && (
+      <form method="post">
+        <input type="hidden" name="_action" value="mark_paid" />
+        <button class="px-3 py-1.5 text-xs rounded border border-green-400 text-green-600 hover:bg-green-50">
+          Mark Paid
+        </button>
+      </form>
+    )}
+    {order.Paid && (
+      <form method="post">
+        <input type="hidden" name="_action" value="mark_unpaid" />
+        <button class="px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-500 hover:bg-gray-50">
+          Mark Unpaid
+        </button>
+      </form>
+    )}
+    {!order.Void && (
+      <form method="post" onsubmit="return confirm('Void this order?')">
+        <input type="hidden" name="_action" value="mark_void" />
+        <button class="px-3 py-1.5 text-xs rounded border border-red-300 text-red-500 hover:bg-red-50">
+          Void Order
+        </button>
+      </form>
+    )}
+    {order.Void && (
+      <form method="post">
+        <input type="hidden" name="_action" value="mark_unvoid" />
+        <button class="px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-500 hover:bg-gray-50">
+          Un-Void
+        </button>
+      </form>
+    )}
+  </div>
+
+  <!-- Two-column layout -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+    <!-- LEFT: main content -->
+    <div class="lg:col-span-2 flex flex-col gap-5">
+
+      <!-- Order Items -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-100">
+          <h3 class="text-sm font-semibold text-gray-700">Order Items</h3>
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="px-4 py-2 text-center w-12">Qty</th>
+              <th class="px-4 py-2 text-left">Item</th>
+              <th class="px-4 py-2 text-left w-28">SKU</th>
+              <th class="px-4 py-2 text-right w-24">Price</th>
+              <th class="px-4 py-2 text-right w-24">Ext.</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {lines.length === 0 && (
+              <tr><td colspan="5" class="px-5 py-6 text-center text-gray-400 text-sm">No items on this order.</td></tr>
+            )}
+            {lines.map(line => (
+              <tr class="hover:bg-gray-50">
+                <td class="px-4 py-2 text-center text-xs">{line.Quantity}</td>
+                <td class="px-4 py-2">
+                  <a href={`/admin/products/${line.Product_ID}`} class="font-medium text-gray-800 hover:text-blue-600">
+                    {line.Name}
+                  </a>
+                  {line.Options && (
+                    <div class="text-xs text-gray-400 italic">Options: {line.Options}</div>
+                  )}
+                  {line.Addons && (
+                    <div class="text-xs text-gray-400 italic">{line.Addons}</div>
+                  )}
+                </td>
+                <td class="px-4 py-2 text-xs text-gray-500">{line.SKU ?? "—"}</td>
+                <td class="px-4 py-2 text-right text-xs">{fmt(line.itemPrice)}</td>
+                <td class="px-4 py-2 text-right text-xs font-medium">{fmt(line.ext)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <!-- Totals -->
+        <div class="border-t border-gray-100 px-5 py-3 space-y-1 text-sm">
+          {order.OrderDisc > 0 && (
+            <div class="flex justify-between text-gray-600">
+              <span>Discounts</span><span>−{fmt(order.OrderDisc)}</span>
+            </div>
+          )}
+          {order.AddonTotal > 0 && (
+            <div class="flex justify-between text-gray-600">
+              <span>Additional Items</span><span>+{fmt(order.AddonTotal)}</span>
+            </div>
+          )}
+          <div class="flex justify-between text-gray-600">
+            <span>Subtotal</span>
+            <span>{fmt(subTotal + (order.AddonTotal ?? 0) - (order.OrderDisc ?? 0))}</span>
+          </div>
+          {order.Tax > 0 && (
+            <div class="flex justify-between text-gray-600">
+              <span>Tax</span><span>{fmt(order.Tax)}</span>
+            </div>
+          )}
+          {(order.Shipping > 0 || order.Freight > 0) && (
+            <div class="flex justify-between text-gray-600">
+              <span>Shipping{order.ShipType ? ` (${order.ShipType})` : ""}</span>
+              <span>{fmt((order.Shipping ?? 0) + (order.Freight ?? 0))}</span>
+            </div>
+          )}
+          {order.Credits > 0 && (
+            <div class="flex justify-between text-gray-600">
+              <span>Credits</span><span>−{fmt(order.Credits)}</span>
+            </div>
+          )}
+          {order.AdminCredit > 0 && (
+            <div class="flex justify-between text-gray-600">
+              <span>{order.AdminCreditText || "Store Credit"}</span>
+              <span>−{fmt(order.AdminCredit)}</span>
+            </div>
+          )}
+          <div class="flex justify-between font-semibold text-gray-800 pt-1 border-t border-gray-100">
+            <span>Order Total</span><span>{fmt(order.OrderTotal)}</span>
+          </div>
+          <div class="flex justify-between text-gray-600">
+            <span>Amount Paid</span><span>{fmt(amountPaid)}</span>
+          </div>
+          <div class={`flex justify-between font-semibold ${balance > 0.005 ? "text-red-600" : "text-green-600"}`}>
+            <span>Balance Due</span><span>{fmt(balance)}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Payments -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-100">
+          <h3 class="text-sm font-semibold text-gray-700">Payments</h3>
+        </div>
+        {payments.length === 0
+          ? <p class="px-5 py-4 text-sm text-gray-400">No payments recorded.</p>
+          : (
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                  <th class="px-4 py-2 text-left">Date</th>
+                  <th class="px-4 py-2 text-right w-28">Amount</th>
+                  <th class="px-4 py-2 text-left">Type</th>
+                  <th class="px-4 py-2 text-left">Name on Card</th>
+                  <th class="px-4 py-2 text-left">Auth #</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                {payments.map(p => (
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2 text-xs text-gray-600">{fmtDateTime(p.PaymentDateTime)}</td>
+                    <td class={`px-4 py-2 text-right text-xs font-medium ${p.Amount < 0 ? "text-red-600" : ""}`}>
+                      {fmt(p.Amount)}
+                    </td>
+                    <td class="px-4 py-2 text-xs text-gray-600">{paymentLabel(p)}</td>
+                    <td class="px-4 py-2 text-xs text-gray-600">{p.NameOnCard ?? "—"}</td>
+                    <td class="px-4 py-2 text-xs text-gray-400 font-mono">{p.AuthNumber ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
+        }
+      </div>
+
+      <!-- Shipments -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-100">
+          <h3 class="text-sm font-semibold text-gray-700">Shipments</h3>
+        </div>
+        {shipments.length === 0
+          ? <p class="px-5 py-4 text-sm text-gray-400">No shipments recorded.</p>
+          : (
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                  <th class="px-4 py-2 text-left">Date</th>
+                  <th class="px-4 py-2 text-left">Method</th>
+                  <th class="px-4 py-2 text-left">Tracking</th>
+                  <th class="px-4 py-2 text-right w-20">Weight</th>
+                  <th class="px-4 py-2 text-right w-24">Cost</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                {shipments.map(s => (
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2 text-xs text-gray-600">{fmtDate(s.DateShipped)}</td>
+                    <td class="px-4 py-2 text-xs text-gray-600">{s.ShipMethod ?? "—"}</td>
+                    <td class="px-4 py-2 text-xs font-mono text-blue-600">
+                      {s.Tracking ?? "—"}
+                    </td>
+                    <td class="px-4 py-2 text-right text-xs text-gray-500">
+                      {s.Weight != null ? `${s.Weight} lbs` : "—"}
+                    </td>
+                    <td class="px-4 py-2 text-right text-xs">
+                      {s.ShipCost != null ? fmt(s.ShipCost) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
+        }
+      </div>
+
+      <!-- Notes -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-100">
+          <h3 class="text-sm font-semibold text-gray-700">Admin Notes</h3>
+        </div>
+        <form method="post" class="p-4">
+          <input type="hidden" name="_action" value="save_notes" />
+          <textarea
+            name="notes"
+            rows="4"
+            class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 resize-y"
+          >{order.Notes ?? ""}</textarea>
+          <div class="mt-2 flex justify-end">
+            <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+              Save Notes
+            </button>
+          </div>
+        </form>
+        {order.PO_Number && (
+          <div class="px-5 pb-3 text-xs text-gray-500">
+            <strong>PO Number:</strong> {order.PO_Number}
+          </div>
+        )}
+      </div>
+
+    </div>
+
+    <!-- RIGHT: sidebar -->
+    <div class="flex flex-col gap-5">
+
+      <!-- Order Summary -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Order Summary</h3>
+        <dl class="text-sm space-y-1.5">
+          <div class="flex justify-between">
+            <dt class="text-gray-500">Ordered</dt>
+            <dd class="text-gray-800 font-medium">{fmtDate(order.DateOrdered)}</dd>
+          </div>
+          {order.DateFilled && (
+            <div class="flex justify-between">
+              <dt class="text-gray-500">Filled</dt>
+              <dd class="text-gray-800">{fmtDate(order.DateFilled)}</dd>
+            </div>
+          )}
+          <div class="flex justify-between">
+            <dt class="text-gray-500">Status</dt>
+            <dd><span class={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor}`}>{statusLabel}</span></dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-gray-500">Paid</dt>
+            <dd class={order.Paid ? "text-green-600 font-medium" : "text-red-500"}>
+              {order.Paid ? "Yes" : "No"}
+            </dd>
+          </div>
+          {order.ShipType && (
+            <div class="flex justify-between">
+              <dt class="text-gray-500">Shipping</dt>
+              <dd class="text-gray-800">{order.ShipType}</dd>
+            </div>
+          )}
+          {order.Source && (
+            <div class="flex justify-between">
+              <dt class="text-gray-500">Source</dt>
+              <dd class="text-gray-800">{order.Source}</dd>
+            </div>
+          )}
+          {order.OfflinePayment && (
+            <div class="flex justify-between">
+              <dt class="text-gray-500">Payment</dt>
+              <dd class="text-gray-800">{order.OfflinePayment}</dd>
+            </div>
+          )}
+        </dl>
+      </div>
+
+      <!-- Billing Address -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Bill To</h3>
+        {billing
+          ? (
+            <address class="not-italic text-sm text-gray-700 space-y-0.5">
+              {addrLines(billing).map(line => <div>{line}</div>)}
+            </address>
+          )
+          : <p class="text-sm text-gray-400">No billing address.</p>
+        }
+      </div>
+
+      <!-- Shipping Address -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Ship To</h3>
+        {shipping
+          ? (
+            <address class="not-italic text-sm text-gray-700 space-y-0.5">
+              {addrLines(shipping).map(line => <div>{line}</div>)}
+            </address>
+          )
+          : (
+            <p class="text-sm text-gray-500 italic">Same as billing</p>
+          )
+        }
+      </div>
+
+    </div>
+  </div>
+
+</AdminLayout>
