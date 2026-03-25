@@ -23,6 +23,8 @@ jobs:
           ssh "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash << 'ENDSSH'
             set -e
             cd /var/www/frontend.nucomwebhosting.com
+            # Discard any local changes that would block the pull
+            git reset --hard HEAD
             git pull origin main
             npm ci
             npm run build
