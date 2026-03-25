@@ -5,13 +5,12 @@ import {
   createDealer, getDealerSettings, getDealerCategories,
   geocodeAddress, normalizeWebsite, normalizePriority,
 } from "../../../lib/queries/admin-dealers";
-import { getStates, getCountries } from "../../../lib/queries/admin-customers";
+import { getStates } from "../../../lib/queries/admin-customers";
 
-const [settings, categories, states, countries] = await Promise.all([
+const [settings, categories, states] = await Promise.all([
   getDealerSettings(),
   getDealerCategories(),
   getStates(),
-  getCountries(),
 ]);
 
 let error = "";
@@ -45,7 +44,6 @@ if (Astro.request.method === "POST") {
       city,
       state,
       zip,
-      country:     g("country"),
       phone:       g("phone"),
       fax:         g("fax"),
       email:       g("email"),
@@ -133,19 +131,6 @@ if (Astro.request.method === "POST") {
       <label class="text-sm text-gray-600 font-medium text-right">Zip <span class="text-red-500">*</span></label>
       <input type="text" name="zip" value="" required
              class="col-span-2 w-36 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
-    </div>
-
-    <div class="grid grid-cols-3 gap-3 items-center">
-      <label class="text-sm text-gray-600 font-medium text-right">Country</label>
-      <select name="country"
-              class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-64">
-        <option value="US^United States">United States</option>
-        <option value="US^United States">───────────────</option>
-        {countries.map(c => {
-          const val = `${c.Abbrev}^${c.Country}`;
-          return <option value={val}>{c.Country}</option>;
-        })}
-      </select>
     </div>
 
     <div class="grid grid-cols-3 gap-3 items-center">

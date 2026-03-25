@@ -2,7 +2,7 @@
 export const prerender = false;
 import AdminLayout from "../../../components/layout/AdminLayout.astro";
 import { getDealers, PAGE_SIZE } from "../../../lib/queries/admin-dealers";
-import { getStates, getCountries } from "../../../lib/queries/admin-customers";
+import { getStates } from "../../../lib/queries/admin-customers";
 
 const p = Astro.url.searchParams;
 
@@ -10,15 +10,13 @@ const opts = {
   name:    p.get("name")    ?? "",
   contact: p.get("contact") ?? "",
   state:   p.get("state")   ?? "",
-  country: p.get("country") ?? "",
   page:    parseInt(p.get("page") ?? "1") || 1,
 };
 
 const deleted = p.get("deleted") === "1";
-const [{ rows, total }, states, countries] = await Promise.all([
+const [{ rows, total }, states] = await Promise.all([
   getDealers(opts),
   getStates(),
-  getCountries(),
 ]);
 const totalPages = Math.ceil(total / PAGE_SIZE);
 
@@ -36,12 +34,6 @@ const halfW = Math.floor(windowSize / 2);
 let winStart = Math.max(1, opts.page - halfW);
 let winEnd   = Math.min(totalPages, winStart + windowSize - 1);
 if (winEnd - winStart < windowSize - 1) winStart = Math.max(1, winEnd - windowSize + 1);
-
-function countryLabel(raw: string | null) {
-  if (!raw) return "";
-  const parts = raw.split("^");
-  return parts[1] ?? parts[0] ?? "";
-}
 ---
 
 <AdminLayout title="Dealers">
@@ -79,18 +71,6 @@ function countryLabel(raw: string | null) {
           {states.map(s => (
             <option value={s.Abb} selected={opts.state === s.Abb}>{s.Name} ({s.Abb})</option>
           ))}
-        </select>
-      </div>
-      <div>
-        <label class="block text-xs text-gray-500 mb-1">Country</label>
-        <select name="country"
-                class="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
-          <option value="">All</option>
-          <option value="US^United States" selected={opts.country === "US^United States"}>United States</option>
-          {countries.map(c => {
-            const val = `${c.Abbrev}^${c.Country}`;
-            return <option value={val} selected={opts.country === val}>{c.Country}</option>;
-          })}
         </select>
       </div>
       <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Search</button>
@@ -135,13 +115,12 @@ function countryLabel(raw: string | null) {
           <th class="px-4 py-2.5 text-left font-medium text-gray-600">Email</th>
           <th class="px-4 py-2.5 text-left font-medium text-gray-600">Website</th>
           <th class="px-4 py-2.5 text-left font-medium text-gray-600">State</th>
-          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Country</th>
           <th class="px-4 py-2.5 text-center font-medium text-gray-600">Geocoded</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
         {rows.length === 0 && (
-          <tr><td colspan="10" class="px-4 py-8 text-center text-gray-400">No records found.</td></tr>
+          <tr><td colspan="9" class="px-4 py-8 text-center text-gray-400">No records found.</td></tr>
         )}
         {rows.map(r => (
           <tr class="hover:bg-gray-50">
@@ -166,7 +145,6 @@ function countryLabel(raw: string | null) {
                 : "—"}
             </td>
             <td class="px-4 py-2.5 text-gray-500 text-xs">{r.state ?? "—"}</td>
-            <td class="px-4 py-2.5 text-gray-500 text-xs">{countryLabel(r.country)}</td>
             <td class="px-4 py-2.5 text-center">
               {r.dealer_latitude
                 ? <span class="text-xs text-green-600">✓</span>

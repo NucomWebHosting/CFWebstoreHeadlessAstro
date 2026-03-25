@@ -6,7 +6,7 @@ import {
   getDealerSettings, getDealerCategories,
   geocodeAddress, normalizeWebsite, normalizePriority, displayPriority,
 } from "../../../lib/queries/admin-dealers";
-import { getStates, getCountries } from "../../../lib/queries/admin-customers";
+import { getStates } from "../../../lib/queries/admin-customers";
 
 const id = parseInt(Astro.params.id ?? "0") || 0;
 if (!id) return new Response(null, { status: 404 });
@@ -50,7 +50,6 @@ if (Astro.request.method === "POST") {
         city,
         state,
         zip,
-        country:     g("country"),
         phone:       g("phone"),
         fax:         g("fax"),
         email:       g("email"),
@@ -71,12 +70,11 @@ if (Astro.request.method === "POST") {
 const saved    = Astro.url.searchParams.get("saved") === "1";
 const geowarn  = Astro.url.searchParams.get("geowarn") === "1";
 
-const [dealer, settings, categories, states, countries] = await Promise.all([
+const [dealer, settings, categories, states] = await Promise.all([
   getDealer(id),
   getDealerSettings(),
   getDealerCategories(),
   getStates(),
-  getCountries(),
 ]);
 
 if (!dealer) return new Response(`Dealer ${id} not found.`, { status: 404, headers: { "content-type": "text/plain" } });
@@ -175,19 +173,6 @@ const websiteDisplay = dealer.website
       <label class="text-sm text-gray-600 font-medium text-right">Zip <span class="text-red-500">*</span></label>
       <input type="text" name="zip" value={dealer.zip ?? ""} required
              class="col-span-2 w-36 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
-    </div>
-
-    <div class="grid grid-cols-3 gap-3 items-center">
-      <label class="text-sm text-gray-600 font-medium text-right">Country</label>
-      <select name="country"
-              class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-64">
-        <option value="US^United States" selected={dealer.country === "US^United States" || !dealer.country}>United States</option>
-        <option value="US^United States">───────────────</option>
-        {countries.map(c => {
-          const val = `${c.Abbrev}^${c.Country}`;
-          return <option value={val} selected={dealer.country === val}>{c.Country}</option>;
-        })}
-      </select>
     </div>
 
     <div class="grid grid-cols-3 gap-3 items-center">

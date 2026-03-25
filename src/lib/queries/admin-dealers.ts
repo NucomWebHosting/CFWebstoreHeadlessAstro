@@ -125,7 +125,6 @@ export interface DealerListRow {
   email: string | null;
   website: string | null;
   state: string | null;
-  country: string | null;
   dealer_latitude: string | null;
 }
 
@@ -133,7 +132,6 @@ export interface DealerListOptions {
   name?: string;
   contact?: string;
   state?: string;
-  country?: string;
   page?: number;
 }
 
@@ -155,11 +153,6 @@ export async function getDealers(
     conditions.push(`state = @state`);
     params.state = opts.state.trim();
   }
-  if (opts.country?.trim()) {
-    conditions.push(`country = @country`);
-    params.country = opts.country.trim();
-  }
-
   const where = conditions.join(" AND ");
 
   const countRows = await query<{ cnt: number }>(
@@ -173,7 +166,7 @@ export async function getDealers(
 
   const rows = await query<DealerListRow>(
     `SELECT dealer_ID, name, account_id, contact, phone, email, website,
-            state, country, dealer_latitude
+            state, dealer_latitude
      FROM Dealer
      WHERE ${where}
      ORDER BY name ASC
@@ -198,7 +191,6 @@ export interface DealerDetail {
   city: string | null;
   state: string | null;
   zip: string | null;
-  country: string | null;
   phone: string | null;
   fax: string | null;
   email: string | null;
@@ -214,7 +206,7 @@ export interface DealerDetail {
 export async function getDealer(id: number): Promise<DealerDetail | null> {
   const rows = await query<DealerDetail>(
     `SELECT dealer_ID, name, logo, website, priority, contact, address1, address2,
-            city, state, zip, country, phone, fax, email, category_id, short_desc,
+            city, state, zip, phone, fax, email, category_id, short_desc,
             display, account_id, dealer_latitude, dealer_longitude, start_date
      FROM Dealer WHERE dealer_ID = @id`,
     { id }
@@ -227,7 +219,7 @@ export async function getDealer(id: number): Promise<DealerDetail | null> {
 export interface DealerData {
   name: string; logo: string; website: string; priority: number;
   contact: string; address1: string; address2: string; city: string;
-  state: string; zip: string; country: string; phone: string; fax: string;
+  state: string; zip: string; phone: string; fax: string;
   email: string; category_id: number; short_desc: string; display: boolean;
   account_id: number; dealer_latitude: string; dealer_longitude: string;
 }
@@ -236,12 +228,12 @@ export async function createDealer(data: DealerData): Promise<number> {
   const rows = await query<{ dealer_ID: number }>(
     `INSERT INTO Dealer
        (name, logo, website, priority, contact, address1, address2, city, state, zip,
-        country, phone, fax, email, category_id, short_desc, display, account_id,
+        phone, fax, email, category_id, short_desc, display, account_id,
         dealer_latitude, dealer_longitude, start_date)
      OUTPUT INSERTED.dealer_ID
      VALUES
        (@name, @logo, @website, @priority, @contact, @address1, @address2, @city,
-        @state, @zip, @country, @phone, @fax, @email, @category_id, @short_desc,
+        @state, @zip, @phone, @fax, @email, @category_id, @short_desc,
         @display, @account_id, @dealer_latitude, @dealer_longitude, GETDATE())`,
     data
   );
@@ -263,7 +255,6 @@ export async function updateDealer(id: number, data: DealerData): Promise<void> 
        city             = @city,
        state            = @state,
        zip              = @zip,
-       country          = @country,
        phone            = @phone,
        fax              = @fax,
        email            = @email,
