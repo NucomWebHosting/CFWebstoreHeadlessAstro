@@ -322,8 +322,10 @@ function paymentLabel(p: typeof payments[0]) {
               <tbody class="divide-y divide-gray-100">
                 {shipments.map(s => (
                   <tr class="hover:bg-gray-50">
-                    <td class="px-4 py-2 text-xs text-gray-600">{fmtDate(s.DateShipped)}</td>
-                    <td class="px-4 py-2 text-xs text-gray-600">{s.ShipMethod ?? "—"}</td>
+                    <td class="px-4 py-2 text-xs text-gray-600">{fmtDate(s.DateEntered)}</td>
+                    <td class="px-4 py-2 text-xs text-gray-600">
+                      {[s.Shipper, s.ShipType].filter(Boolean).join(" / ") || "—"}
+                    </td>
                     <td class="px-4 py-2 text-xs font-mono text-blue-600">
                       {s.Tracking ?? "—"}
                     </td>
@@ -331,7 +333,7 @@ function paymentLabel(p: typeof payments[0]) {
                       {s.Weight != null ? `${s.Weight} lbs` : "—"}
                     </td>
                     <td class="px-4 py-2 text-right text-xs">
-                      {s.ShipCost != null ? fmt(s.ShipCost) : "—"}
+                      {s.Actual_Shipping != null ? fmt(s.Actual_Shipping) : "—"}
                     </td>
                   </tr>
                 ))}

@@ -265,11 +265,12 @@ export interface OrderPayment {
 
 export interface OrderShipment {
   Shipment_ID: number;
-  ShipMethod: string | null;
+  Shipper: string | null;
+  ShipType: string | null;
   Tracking: string | null;
-  ShipCost: number | null;
+  Actual_Shipping: number | null;
   Weight: number | null;
-  DateShipped: Date | null;
+  DateEntered: Date | null;
 }
 
 export async function getOrderDetail(orderNo: number): Promise<{
@@ -307,7 +308,7 @@ export async function getOrderDetail(orderNo: number): Promise<{
       { orderNo }
     ),
     query<OrderShipment>(
-      `SELECT Shipment_ID, ShipMethod, Tracking, ShipCost, Weight, DateShipped
+      `SELECT Shipment_ID, Shipper, ShipType, Tracking, Actual_Shipping, Weight, DateEntered
        FROM Shipment
        WHERE Order_No = @orderNo
        ORDER BY Shipment_ID DESC`,
