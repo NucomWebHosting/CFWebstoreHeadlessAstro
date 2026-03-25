@@ -7,8 +7,17 @@
 }
 
 :80 {
-    # Proxy all requests to the Astro SSR Node.js process
-    reverse_proxy 127.0.0.1:4321
+    # Serve uploaded images directly from disk (bypasses Node)
+    handle /images/* {
+        uri strip_prefix /images
+        root * /var/www/frontend.nucomwebhosting.com/images
+        file_server
+    }
+
+    # Proxy all other requests to the Astro SSR Node.js process
+    handle {
+        reverse_proxy 127.0.0.1:4321
+    }
 
     # Compression
     encode gzip zstd

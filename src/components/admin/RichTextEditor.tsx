@@ -27,6 +27,19 @@ export default function RichTextEditor({ name, value = "" }: Props) {
         "hr", "eraser", "copyformat", "|",
         "source",
       ],
+      uploader: {
+        url: "/api/admin/upload",
+        format: "json",
+        filesVariableName: (i: number) => `files[${i}]`,
+        isSuccess: (resp: { success: boolean }) => resp.success,
+        getMessage: (resp: { data?: { messages?: string[] } }) =>
+          resp.data?.messages?.join("\n") ?? "",
+        process: (resp: { data?: { files?: string[]; baseurl?: string } }) => ({
+          files: resp.data?.files ?? [],
+          baseurl: resp.data?.baseurl ?? "",
+          isImages: (resp.data?.files ?? []).map(() => true),
+        }),
+      },
     }),
     []
   );

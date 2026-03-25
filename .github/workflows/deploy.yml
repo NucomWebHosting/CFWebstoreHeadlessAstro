@@ -26,6 +26,8 @@ jobs:
             git pull origin main
             npm ci
             npm run build
+            # Persist uploaded images outside dist/ — survives rebuilds
+            mkdir -p /var/www/frontend.nucomwebhosting.com/images
             pm2 delete astro-app 2>/dev/null || true
             pm2 start ecosystem.config.cjs
             pm2 save
