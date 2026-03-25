@@ -241,7 +241,7 @@ export interface OrderCustomer {
   FirstName: string | null;
   LastName: string | null;
   Company: string | null;
-  Address: string | null;
+  Address1: string | null;
   Address2: string | null;
   City: string | null;
   State: string | null;
@@ -324,7 +324,7 @@ export async function getOrderDetail(orderNo: number): Promise<{
   if (order.ShipTo && order.ShipTo !== order.Customer_ID) ids.push(order.ShipTo);
 
   const customers = await query<OrderCustomer>(
-    `SELECT Customer_ID, FirstName, LastName, Company, Address, Address2,
+    `SELECT Customer_ID, FirstName, LastName, Company, Address1, Address2,
             City, State, Zip, Country, Phone, Email
      FROM Customers
      WHERE Customer_ID IN (${ids.map((_, i) => `@cid${i}`).join(",")})`,

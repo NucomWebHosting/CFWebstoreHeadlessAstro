@@ -72,7 +72,7 @@ function addrLines(c: typeof billing) {
   const lines = [];
   if (c.Company)  lines.push(c.Company);
   lines.push(`${c.FirstName ?? ""} ${c.LastName ?? ""}`.trim());
-  if (c.Address)  lines.push(c.Address);
+  if (c.Address1) lines.push(c.Address1);
   if (c.Address2) lines.push(c.Address2);
   if (c.City || c.State || c.Zip)
     lines.push([c.City, c.State, c.Zip].filter(Boolean).join(", "));
