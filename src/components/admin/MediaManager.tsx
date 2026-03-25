@@ -72,7 +72,16 @@ export default function MediaManager() {
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop,
-    accept: { "image/*": [] },
+    accept: {
+      "image/jpeg":   [".jpg", ".jpeg"],
+      "image/png":    [".png"],
+      "image/gif":    [".gif"],
+      "image/webp":   [".webp"],
+      "image/avif":   [".avif"],
+      "image/svg+xml":[".svg"],
+      "image/heic":   [".heic"],
+      "image/heif":   [".heif"],
+    },
     noClick: true,
     noKeyboard: true,
   });
@@ -275,9 +284,14 @@ export default function MediaManager() {
 
       {/* Drop hint */}
       {!isDragActive && (
-        <p className="text-xs text-gray-400 text-center mt-6">
-          You can also drag &amp; drop images anywhere on this page
-        </p>
+        <div className="text-center mt-6 space-y-1">
+          <p className="text-xs text-gray-400">
+            You can also drag &amp; drop images anywhere on this page
+          </p>
+          <p className="text-xs text-gray-300">
+            Accepted: JPG, PNG, GIF, WebP, AVIF, SVG, HEIC &mdash; max 10 MB &middot; HEIC files are converted to WebP automatically
+          </p>
+        </div>
       )}
     </div>
   );

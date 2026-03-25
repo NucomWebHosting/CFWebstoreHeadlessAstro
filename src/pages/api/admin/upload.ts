@@ -17,7 +17,11 @@ const ALLOWED_TYPES = new Set([
   "image/webp",
   "image/svg+xml",
   "image/avif",
+  "image/heic",
+  "image/heif",
 ]);
+
+const HEIC_TYPES = new Set(["image/heic", "image/heif"]);
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -55,7 +59,8 @@ export const POST: APIRoute = async ({ request }) => {
       continue;
     }
 
-    const ext = extname(file.name).toLowerCase() || ".jpg";
+    const isHeic = HEIC_TYPES.has(file.type);
+    const ext = isHeic ? ".webp" : (extname(file.name).toLowerCase() || ".jpg");
     const stem = `${Date.now()}-${randomBytes(6).toString("hex")}`;
     const filename = `${stem}${ext}`;
     const filePath = join(UPLOAD_DIR, filename);
@@ -67,14 +72,13 @@ export const POST: APIRoute = async ({ request }) => {
       const canProcessWithSharp = file.type !== SVG_TYPE && file.type !== GIF_TYPE;
 
       if (canProcessWithSharp) {
-        // Resize if too wide, otherwise write as-is
-        const img = sharp(buffer);
-        const meta = await img.metadata();
-        if ((meta.width ?? 0) > MAX_DIMENSION) {
-          await img.resize(MAX_DIMENSION, undefined, { withoutEnlargement: true }).toFile(filePath);
-        } else {
-          await writeFile(filePath, buffer);
-        }
+        // Read dimensions from a fresh instance, then build the output pipeline
+        const meta = await sharp(buffer).metadata();
+        const needsResize = (meta.width ?? 0) > MAX_DIMENSION;
+        let pipeline = sharp(buffer);
+        if (needsResize) pipeline = pipeline.resize(MAX_DIMENSION, undefined, { withoutEnlargement: true }) as typeof pipeline;
+        if (isHeic) pipeline = pipeline.webp({ quality: 90 }) as typeof pipeline;
+        await pipeline.toFile(filePath);
 
         // Generate thumbnail
         const thumbDir = join(UPLOAD_DIR, "thumbs");
