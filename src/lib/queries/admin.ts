@@ -11,7 +11,7 @@ export interface DashboardStats {
 }
 
 export interface ContactFormRow {
-  ContactForm_ID: number;
+  ID: number;
   FirstName: string | null;
   LastName: string | null;
   FromEmail: string | null;
@@ -34,7 +34,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
 export async function getRecentContacts(limit = 10): Promise<ContactFormRow[]> {
   return query<ContactFormRow>(
-    `SELECT TOP (@limit) ContactForm_ID, FirstName, LastName, FromEmail, Subject, Message, DateCreated, ReadStatus
+    `SELECT TOP (@limit) ID, FirstName, LastName, FromEmail, Subject, Message, DateCreated, ReadStatus
      FROM ContactForms ORDER BY DateCreated DESC`,
     { limit }
   );
