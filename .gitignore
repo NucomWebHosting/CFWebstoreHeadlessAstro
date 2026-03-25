@@ -10,6 +10,9 @@ dist/
 .env.*
 !.env.example
 
+# PM2 ecosystem file (contains DB credentials — managed on server only)
+ecosystem.config.cjs
+
 # OS files
 .DS_Store
 Thumbs.db
