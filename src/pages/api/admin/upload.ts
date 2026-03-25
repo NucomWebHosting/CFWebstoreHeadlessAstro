@@ -21,7 +21,8 @@ const ALLOWED_TYPES = new Set([
   "image/heif",
 ]);
 
-const HEIC_TYPES = new Set(["image/heic", "image/heif"]);
+const HEIC_TYPES  = new Set(["image/heic", "image/heif"]);
+const HEIC_EXTS   = new Set([".heic", ".heif"]);
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -48,7 +49,13 @@ export const POST: APIRoute = async ({ request }) => {
     if (!file) break;
     if (!(file instanceof File)) { i++; continue; }
 
-    if (!ALLOWED_TYPES.has(file.type)) {
+    // Browsers (especially non-Apple) often send HEIC files with a blank or
+    // generic MIME type — fall back to extension detection in that case.
+    const fileExt = extname(file.name).toLowerCase();
+    const isHeic  = HEIC_TYPES.has(file.type) || HEIC_EXTS.has(fileExt);
+    const mimeOk  = ALLOWED_TYPES.has(file.type) || isHeic;
+
+    if (!mimeOk) {
       errors.push(`${file.name}: unsupported file type`);
       i++;
       continue;
@@ -58,9 +65,7 @@ export const POST: APIRoute = async ({ request }) => {
       i++;
       continue;
     }
-
-    const isHeic = HEIC_TYPES.has(file.type);
-    const ext = isHeic ? ".webp" : (extname(file.name).toLowerCase() || ".jpg");
+    const ext = isHeic ? ".webp" : (fileExt || ".jpg");
     const stem = `${Date.now()}-${randomBytes(6).toString("hex")}`;
     const filename = `${stem}${ext}`;
     const filePath = join(UPLOAD_DIR, filename);
@@ -69,7 +74,9 @@ export const POST: APIRoute = async ({ request }) => {
       await mkdir(UPLOAD_DIR, { recursive: true });
       const buffer = Buffer.from(await file.arrayBuffer());
 
-      const canProcessWithSharp = file.type !== SVG_TYPE && file.type !== GIF_TYPE;
+      const isSvg = file.type === SVG_TYPE || fileExt === ".svg";
+      const isGif = file.type === GIF_TYPE || fileExt === ".gif";
+      const canProcessWithSharp = !isSvg && !isGif;
 
       if (canProcessWithSharp) {
         // Read dimensions from a fresh instance, then build the output pipeline
