@@ -1,0 +1,130 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { saveTaxCode } from "../../../lib/queries/admin-tax";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g = (k: string) => (d.get(k) as string) ?? "";
+  try {
+    await saveTaxCode(0, {
+      CodeName:    g("CodeName"),
+      DisplayName: g("DisplayName"),
+      TaxAll:      g("TaxAll")      === "1",
+      ShowonProds: g("ShowonProds") === "1",
+      TaxRate:     (parseFloat(g("TaxRate")) || 0) / 100,
+      TaxShipping: g("TaxShipping") === "1",
+      TaxAddress:  g("TaxAddress")  || "Billing",
+      CalcOrder:   parseInt(g("CalcOrder"))   || 0,
+      Cumulative:  g("Cumulative")  === "1",
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return new Response(`Save error: ${msg}`, { status: 500, headers: { "content-type": "text/plain" } });
+  }
+  return Astro.redirect("/admin/tax?saved=1");
+}
+
+const c = { CodeName: "", DisplayName: "", TaxAll: false, ShowonProds: false,
+             TaxRate: 0, TaxShipping: false, TaxAddress: "Billing", CalcOrder: 1, Cumulative: false };
+---
+
+<AdminLayout title="New Tax Code">
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/tax" class="text-sm text-blue-600 hover:underline">← Back to Tax Codes</a>
+  </div>
+
+  <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 max-w-2xl space-y-4">
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Code Name <span class="text-red-500">*</span></label>
+      <input type="text" name="CodeName" value={c.CodeName} required maxlength="50"
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Display Name <span class="text-red-500">*</span></label>
+      <div class="col-span-2">
+        <input type="text" name="DisplayName" value={c.DisplayName} required maxlength="50"
+               class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <p class="text-xs text-gray-400 mt-1">Shown to customers. Codes with the same display name appear as one line item.</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <span class="text-sm text-gray-600 font-medium text-right pt-1">Tax All Users?</span>
+      <div class="col-span-2 space-y-1 pt-1">
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="TaxAll" value="1" checked={c.TaxAll} /> Yes</label>
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="TaxAll" value="0" checked={!c.TaxAll} /> No</label>
+        <p class="text-xs text-gray-400">If No, set rates per location under Rates.</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <span class="text-sm text-gray-600 font-medium text-right pt-1">Show on Products?</span>
+      <div class="col-span-2 space-y-1 pt-1">
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="ShowonProds" value="1" checked={c.ShowonProds} /> Yes</label>
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="ShowonProds" value="0" checked={!c.ShowonProds} /> No</label>
+        <p class="text-xs text-gray-400">Displays price with tax included/excluded (VAT).</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Tax Amount</label>
+      <div class="col-span-2">
+        <div class="flex items-center gap-1.5">
+          <input type="number" name="TaxRate" value={c.TaxRate * 100 || ""} step="any" min="0" max="99"
+                 class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          <span class="text-sm text-gray-500">%</span>
+        </div>
+        <p class="text-xs text-gray-400 mt-1">For "Tax All" or product display price. Set by location under Rates otherwise.</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <span class="text-sm text-gray-600 font-medium text-right pt-1">Tax Shipping?</span>
+      <div class="col-span-2 flex gap-4 pt-1">
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="TaxShipping" value="1" checked={c.TaxShipping} /> Yes</label>
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="TaxShipping" value="0" checked={!c.TaxShipping} /> No</label>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Address for Tax</label>
+      <select name="TaxAddress"
+              class="col-span-2 w-auto border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+        <option value="Billing"  selected={c.TaxAddress === "Billing"}>Billing Address</option>
+        <option value="Shipping" selected={c.TaxAddress === "Shipping"}>Shipping Address</option>
+      </select>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Calc Order</label>
+      <div class="col-span-2">
+        <input type="number" name="CalcOrder" value={c.CalcOrder} min="0" max="99"
+               class="w-20 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <p class="text-xs text-gray-400 mt-1">Lowest calculated first. First code is default for all products.</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <span class="text-sm text-gray-600 font-medium text-right pt-1">Cumulative?</span>
+      <div class="col-span-2 flex gap-4 pt-1">
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="Cumulative" value="1" checked={c.Cumulative} /> Yes</label>
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="Cumulative" value="0" checked={!c.Cumulative} /> No</label>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 pt-2">
+      <div></div>
+      <div class="col-span-2 flex gap-3">
+        <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded text-sm hover:bg-blue-700">
+          Create Tax Code
+        </button>
+        <a href="/admin/tax" class="px-5 py-2 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+          Cancel
+        </a>
+      </div>
+    </div>
+  </form>
+</AdminLayout>
