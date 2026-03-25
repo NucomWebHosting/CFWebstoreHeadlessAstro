@@ -1,0 +1,484 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import {
+  getDiscount, updateDiscount, deleteDiscount,
+  getDiscountProducts, addDiscountProduct, removeDiscountProduct,
+  getDiscountCategories, addDiscountCategory, removeDiscountCategory,
+  getDiscountGroups, addDiscountGroup, removeDiscountGroup,
+  getAllGroups, searchProducts, searchCategories,
+  TYPE3_LABELS,
+} from "../../../lib/queries/admin-discounts";
+
+const { id } = Astro.params;
+const discountId = parseInt(id ?? "0") || 0;
+if (!discountId) return Astro.redirect("/admin/discounts");
+
+// ── POST handler ──────────────────────────────────────────────────────────────
+let saved  = false;
+let error  = "";
+
+if (Astro.request.method === "POST") {
+  const d      = await Astro.request.formData();
+  const action = (d.get("_action") as string) ?? "";
+
+  try {
+    if (action === "update") {
+      const amountDollar = (d.get("amount_dollar") as string)?.trim();
+      const amountPct    = (d.get("amount_pct")    as string)?.trim();
+      const type2  = amountDollar ? 1 : 2;
+      const amount = type2 === 1 ? parseFloat(amountDollar) : parseFloat(amountPct) / 100;
+      const maxRaw = (d.get("MaxOrder") as string)?.trim();
+
+      await updateDiscount(discountId, {
+        Type1:     parseInt(d.get("Type1")     as string) || 1,
+        Type2:     type2,
+        Type4:     parseInt(d.get("Type4")     as string) || 0,
+        Type5:     parseInt(d.get("Type5")     as string) || 0,
+        Name:      (d.get("Name")              as string)?.trim() ?? "",
+        Display:   (d.get("Display")           as string)?.trim() ?? "",
+        Coup_Code: (d.get("Coup_Code")         as string)?.trim() ?? "",
+        OneTime:   d.get("OneTime") === "1",
+        AccessKey: parseInt(d.get("AccessKey") as string) || 0,
+        StartDate: (d.get("StartDate") as string) || null,
+        EndDate:   (d.get("EndDate")   as string) || null,
+        Amount:    isNaN(amount) ? 0 : amount,
+        MinOrder:  parseFloat(d.get("MinOrder") as string) || 0,
+        MaxOrder:  maxRaw ? parseFloat(maxRaw) : null,
+        Type3:     0, // not used in updateDiscount but required by type
+      });
+      saved = true;
+    } else if (action === "delete") {
+      await deleteDiscount(discountId);
+      return Astro.redirect("/admin/discounts");
+    } else if (action === "add_product") {
+      const pid = parseInt(d.get("product_id") as string) || 0;
+      if (pid) await addDiscountProduct(discountId, pid);
+    } else if (action === "remove_product") {
+      const pid = parseInt(d.get("product_id") as string) || 0;
+      if (pid) await removeDiscountProduct(discountId, pid);
+    } else if (action === "add_category") {
+      const cid = parseInt(d.get("category_id") as string) || 0;
+      if (cid) await addDiscountCategory(discountId, cid);
+    } else if (action === "remove_category") {
+      const cid = parseInt(d.get("category_id") as string) || 0;
+      if (cid) await removeDiscountCategory(discountId, cid);
+    } else if (action === "add_group") {
+      const gid = parseInt(d.get("group_id") as string) || 0;
+      if (gid) await addDiscountGroup(discountId, gid);
+    } else if (action === "remove_group") {
+      const gid = parseInt(d.get("group_id") as string) || 0;
+      if (gid) await removeDiscountGroup(discountId, gid);
+    }
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+
+  if (!error) return Astro.redirect(`/admin/discounts/${discountId}?saved=1`);
+}
+
+saved = Astro.url.searchParams.get("saved") === "1";
+
+// ── Load data ─────────────────────────────────────────────────────────────────
+const discount = await getDiscount(discountId);
+if (!discount) return Astro.redirect("/admin/discounts");
+
+const [assignedProducts, assignedCategories, assignedGroups, allGroups] = await Promise.all([
+  discount.Type3 === 0 ? getDiscountProducts(discountId)  : Promise.resolve([]),
+  discount.Type3 === 1 ? getDiscountCategories(discountId): Promise.resolve([]),
+  discount.Type5 === 1 ? getDiscountGroups(discountId)    : Promise.resolve([]),
+  discount.Type5 === 1 ? getAllGroups()                    : Promise.resolve([]),
+]);
+
+// ── Search state ──────────────────────────────────────────────────────────────
+const searchProd = Astro.url.searchParams.get("search_products") ?? "";
+const searchCat  = Astro.url.searchParams.get("search_categories") ?? "";
+
+const productResults  = searchProd.trim().length >= 2 ? await searchProducts(searchProd)  : [];
+const categoryResults = searchCat.trim().length  >= 2 ? await searchCategories(searchCat) : [];
+
+const assignedProductIds  = new Set(assignedProducts.map(p  => p.Product_ID));
+const assignedCategoryIds = new Set(assignedCategories.map(c => c.Category_ID));
+const assignedGroupIds    = new Set(assignedGroups.map(g    => g.Group_ID));
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function fmtDate(d: Date | null) {
+  if (!d) return "";
+  return new Date(d).toISOString().slice(0, 10);
+}
+const isPercentage = discount.Type2 === 2;
+const amountDollar = !isPercentage ? Number(discount.Amount).toFixed(2) : "";
+const amountPct    =  isPercentage ? (Number(discount.Amount) * 100).toFixed(1) : "";
+const maxOrderDisplay = discount.MaxOrder >= 999999999 ? "" : String(discount.MaxOrder);
+---
+
+<AdminLayout title={`Discount: ${discount.Name}`}>
+
+  <div class="mb-5 flex items-center gap-3">
+    <a href="/admin/discounts" class="text-sm text-blue-600 hover:underline">← Discounts</a>
+    <span class="text-gray-300">|</span>
+    <h1 class="text-xl font-semibold text-gray-800">{discount.Name}</h1>
+    <span class="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+      {TYPE3_LABELS[discount.Type3] ?? "Unknown"} Discount
+    </span>
+  </div>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved.</div>
+  )}
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <div class="max-w-2xl space-y-6">
+
+    {/* ── Main Settings ── */}
+    <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <input type="hidden" name="_action" value="update" />
+      <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="font-semibold text-gray-800">Settings</h2>
+        <span class="text-xs text-gray-500">ID: {discount.Discount_ID}</span>
+      </div>
+      <div class="px-5 py-5 space-y-5">
+
+        {/* Discount Type */}
+        <fieldset>
+          <legend class="block text-sm font-medium text-gray-700 mb-2">Discount Type</legend>
+          <div class="space-y-1.5 text-sm">
+            <label class="flex items-start gap-2 cursor-pointer">
+              <input type="radio" name="Type1" value="1" checked={discount.Type1 === 1} class="mt-0.5 accent-blue-600" />
+              <span><strong>Single-item</strong> — purchase a certain amount of one item</span>
+            </label>
+            <label class="flex items-start gap-2 cursor-pointer">
+              <input type="radio" name="Type1" value="2" checked={discount.Type1 === 2} class="mt-0.5 accent-blue-600" />
+              <span><strong>Multi-item</strong> — purchase items within a grouping</span>
+            </label>
+          </div>
+        </fieldset>
+
+        {/* Discount Level (read-only on edit) */}
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Discount Level</label>
+          <p class="text-sm text-gray-800 font-medium">
+            {TYPE3_LABELS[discount.Type3] ?? `Type ${discount.Type3}`} Discount
+          </p>
+          <p class="text-xs text-gray-400 mt-0.5">Discount level cannot be changed after creation.</p>
+        </div>
+
+        {/* User Level */}
+        <fieldset>
+          <legend class="block text-sm font-medium text-gray-700 mb-2">User Level</legend>
+          <div class="space-y-1.5 text-sm">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="Type5" value="0" checked={discount.Type5 === 0} class="accent-blue-600" />
+              Available to all users
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="Type5" value="1" checked={discount.Type5 === 1} class="accent-blue-600" />
+              Available to selected user groups only
+            </label>
+          </div>
+        </fieldset>
+
+        {/* Name + Display */}
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Internal Name <span class="text-red-500">*</span></label>
+            <input type="text" name="Name" required maxlength="255" value={discount.Name}
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Display to Customers</label>
+            <input type="text" name="Display" maxlength="255" value={discount.Display}
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+
+        {/* Coupon + OneTime */}
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Coupon Code</label>
+            <input type="text" name="Coup_Code" maxlength="50" value={discount.Coup_Code}
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm uppercase focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">One Time Only?</label>
+            <div class="flex gap-5 text-sm">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="OneTime" value="1" checked={discount.OneTime} class="accent-blue-600" /> Yes
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="OneTime" value="0" checked={!discount.OneTime} class="accent-blue-600" /> No
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Dates */}
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+            <input type="date" name="StartDate" value={fmtDate(discount.StartDate)}
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+            <input type="date" name="EndDate" value={fmtDate(discount.EndDate)}
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+
+        {/* Amount */}
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Discount Amount</label>
+          <div class="flex items-center gap-3 text-sm">
+            <input type="number" name="amount_dollar" step="0.01" min="0" value={amountDollar}
+                   placeholder="0.00"
+                   class="w-28 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="text-gray-500">$ off</span>
+            <span class="text-gray-400 font-bold">OR</span>
+            <input type="number" name="amount_pct" step="0.1" min="0" max="100" value={amountPct}
+                   placeholder="0"
+                   class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="text-gray-500">% off</span>
+          </div>
+          <p class="text-xs text-gray-400 mt-1">Dollar amount takes priority if both are filled.</p>
+        </div>
+
+        {/* Range */}
+        <fieldset>
+          <legend class="block text-sm font-medium text-gray-700 mb-2">Discount Range</legend>
+          <div class="space-y-1.5 text-sm">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="Type4" value="0" checked={discount.Type4 === 0} class="accent-blue-600" />
+              Based on number of items
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="Type4" value="1" checked={discount.Type4 === 1} class="accent-blue-600" />
+              Based on amount spent
+            </label>
+          </div>
+        </fieldset>
+
+        {/* Min / Max */}
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Minimum <span class="text-red-500">*</span></label>
+            <input type="number" name="MinOrder" step="any" min="0" value={discount.MinOrder} required
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Maximum</label>
+            <input type="number" name="MaxOrder" step="any" min="0" value={maxOrderDisplay}
+                   placeholder="Leave blank for no max"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+
+      </div>
+      <div class="px-5 py-4 border-t border-gray-100 flex gap-3">
+        <button type="submit"
+                class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+          Save Changes
+        </button>
+        <button type="submit" name="_action" value="delete"
+                onclick="return confirm('Delete this discount and all its associations? This cannot be undone.')"
+                class="px-4 py-1.5 rounded text-sm border border-red-200 text-red-600 hover:bg-red-50">
+          Delete Discount
+        </button>
+      </div>
+    </form>
+
+    {/* ── Assigned Products (Type3 = 0) ── */}
+    {discount.Type3 === 0 && (
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100">
+          <h2 class="font-semibold text-gray-800">Assigned Products</h2>
+        </div>
+
+        {/* Current */}
+        {assignedProducts.length === 0 ? (
+          <p class="px-5 py-4 text-sm text-gray-400">No products assigned.</p>
+        ) : (
+          <table class="w-full text-sm">
+            <tbody class="divide-y divide-gray-100">
+              {assignedProducts.map(p => (
+                <tr class="hover:bg-gray-50">
+                  <td class="px-5 py-2.5 text-gray-800">{p.Name}</td>
+                  <td class="px-5 py-2.5 font-mono text-xs text-gray-500">{p.SKU}</td>
+                  <td class="px-5 py-2.5 text-right">
+                    <form method="post">
+                      <input type="hidden" name="_action" value="remove_product" />
+                      <input type="hidden" name="product_id" value={p.Product_ID} />
+                      <button type="submit"
+                              class="px-2 py-0.5 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50">
+                        Remove
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {/* Search + add */}
+        <div class="px-5 py-4 border-t border-gray-100">
+          <form method="get" class="flex gap-2 items-center mb-3">
+            <input type="hidden" name="saved" value="" />
+            <input type="text" name="search_products" value={searchProd}
+                   placeholder="Search products by name or SKU…"
+                   class="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <button type="submit" class="px-3 py-1.5 bg-gray-600 text-white text-xs rounded hover:bg-gray-700">
+              Search
+            </button>
+          </form>
+          {productResults.length > 0 && (
+            <form method="post" class="space-y-1.5">
+              <input type="hidden" name="_action" value="add_product" />
+              {productResults.map(p => (
+                <label class={`flex items-center gap-3 text-sm px-2 py-1.5 rounded cursor-pointer ${assignedProductIds.has(p.Product_ID) ? "opacity-40" : "hover:bg-gray-50"}`}>
+                  <input type="radio" name="product_id" value={p.Product_ID}
+                         disabled={assignedProductIds.has(p.Product_ID)}
+                         class="accent-blue-600" />
+                  <span class="text-gray-800">{p.Name}</span>
+                  <span class="font-mono text-xs text-gray-400">{p.SKU}</span>
+                  {assignedProductIds.has(p.Product_ID) && <span class="text-xs text-gray-400">already added</span>}
+                </label>
+              ))}
+              <button type="submit" class="mt-2 px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">
+                Add Selected
+              </button>
+            </form>
+          )}
+          {searchProd.trim().length >= 2 && productResults.length === 0 && (
+            <p class="text-sm text-gray-400">No matching products found.</p>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* ── Assigned Categories (Type3 = 1) ── */}
+    {discount.Type3 === 1 && (
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100">
+          <h2 class="font-semibold text-gray-800">Assigned Categories</h2>
+        </div>
+
+        {assignedCategories.length === 0 ? (
+          <p class="px-5 py-4 text-sm text-gray-400">No categories assigned.</p>
+        ) : (
+          <table class="w-full text-sm">
+            <tbody class="divide-y divide-gray-100">
+              {assignedCategories.map(c => (
+                <tr class="hover:bg-gray-50">
+                  <td class="px-5 py-2.5 text-gray-800">{c.Name}</td>
+                  <td class="px-5 py-2.5 text-xs text-gray-400">{c.ParentNames}</td>
+                  <td class="px-5 py-2.5 text-right">
+                    <form method="post">
+                      <input type="hidden" name="_action" value="remove_category" />
+                      <input type="hidden" name="category_id" value={c.Category_ID} />
+                      <button type="submit"
+                              class="px-2 py-0.5 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50">
+                        Remove
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        <div class="px-5 py-4 border-t border-gray-100">
+          <form method="get" class="flex gap-2 items-center mb-3">
+            <input type="hidden" name="saved" value="" />
+            <input type="text" name="search_categories" value={searchCat}
+                   placeholder="Search categories by name…"
+                   class="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <button type="submit" class="px-3 py-1.5 bg-gray-600 text-white text-xs rounded hover:bg-gray-700">
+              Search
+            </button>
+          </form>
+          {categoryResults.length > 0 && (
+            <form method="post" class="space-y-1.5">
+              <input type="hidden" name="_action" value="add_category" />
+              {categoryResults.map(c => (
+                <label class={`flex items-center gap-3 text-sm px-2 py-1.5 rounded cursor-pointer ${assignedCategoryIds.has(c.Category_ID) ? "opacity-40" : "hover:bg-gray-50"}`}>
+                  <input type="radio" name="category_id" value={c.Category_ID}
+                         disabled={assignedCategoryIds.has(c.Category_ID)}
+                         class="accent-blue-600" />
+                  <span class="text-gray-800">{c.Name}</span>
+                  {c.ParentNames && <span class="text-xs text-gray-400">{c.ParentNames}</span>}
+                  {assignedCategoryIds.has(c.Category_ID) && <span class="text-xs text-gray-400">already added</span>}
+                </label>
+              ))}
+              <button type="submit" class="mt-2 px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">
+                Add Selected
+              </button>
+            </form>
+          )}
+          {searchCat.trim().length >= 2 && categoryResults.length === 0 && (
+            <p class="text-sm text-gray-400">No matching categories found.</p>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* ── Assigned Groups (Type5 = 1) ── */}
+    {discount.Type5 === 1 && (
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100">
+          <h2 class="font-semibold text-gray-800">User Groups</h2>
+          <p class="text-xs text-gray-400 mt-0.5">Only members of these groups will receive this discount.</p>
+        </div>
+
+        {assignedGroups.length === 0 ? (
+          <p class="px-5 py-4 text-sm text-gray-400">No groups assigned.</p>
+        ) : (
+          <table class="w-full text-sm">
+            <tbody class="divide-y divide-gray-100">
+              {assignedGroups.map(g => (
+                <tr class="hover:bg-gray-50">
+                  <td class="px-5 py-2.5 text-gray-800">{g.Name}</td>
+                  <td class="px-5 py-2.5 text-right">
+                    <form method="post">
+                      <input type="hidden" name="_action" value="remove_group" />
+                      <input type="hidden" name="group_id" value={g.Group_ID} />
+                      <button type="submit"
+                              class="px-2 py-0.5 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50">
+                        Remove
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {allGroups.length > 0 && (
+          <div class="px-5 py-4 border-t border-gray-100">
+            <form method="post" class="flex gap-2 items-center">
+              <input type="hidden" name="_action" value="add_group" />
+              <select name="group_id"
+                      class="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                <option value="">— Select group to add —</option>
+                {allGroups
+                  .filter(g => !assignedGroupIds.has(g.Group_ID))
+                  .map(g => (
+                    <option value={g.Group_ID}>{g.Name}</option>
+                  ))
+                }
+              </select>
+              <button type="submit" class="px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">
+                Add Group
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
+    )}
+
+  </div>
+</AdminLayout>

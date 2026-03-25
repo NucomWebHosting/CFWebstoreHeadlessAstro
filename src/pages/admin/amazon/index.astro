@@ -1,0 +1,171 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getMarketplaceParticipations } from "../../../lib/amazon/spapi";
+import type { MarketplaceParticipation } from "../../../lib/amazon/spapi";
+
+let participations: MarketplaceParticipation[] = [];
+let error = "";
+let tested = false;
+
+if (Astro.request.method === "POST") {
+  tested = true;
+  try {
+    participations = await getMarketplaceParticipations();
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+// Credential status display
+const CRED_VARS = [
+  { key: "AMAZON_LWS_CLIENT_ID",     label: "LWS Client ID"     },
+  { key: "AMAZON_LWS_CLIENT_SECRET", label: "LWS Client Secret" },
+  { key: "AMAZON_REFRESH_TOKEN",     label: "Refresh Token"     },
+  { key: "AMAZON_AWS_KEY",           label: "AWS Access Key"    },
+  { key: "AMAZON_SECRET_KEY",        label: "AWS Secret Key"    },
+  { key: "AMAZON_SELLER_ID",         label: "Seller ID"         },
+  { key: "AMAZON_MARKETPLACE_ID",    label: "Marketplace ID"    },
+];
+
+function maskValue(val: string | undefined): string {
+  if (!val) return "—";
+  if (val.length <= 8) return "●".repeat(val.length);
+  return val.slice(0, 4) + "●".repeat(Math.min(val.length - 8, 16)) + val.slice(-4);
+}
+
+const allSet = CRED_VARS.every(c => !!process.env[c.key]);
+---
+
+<AdminLayout title="Amazon Marketplace">
+
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-xl font-semibold text-gray-800">Amazon Marketplace</h1>
+    {tested && !error && (
+      <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+        Connected
+      </span>
+    )}
+    {tested && error && (
+      <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+        <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+        Connection failed
+      </span>
+    )}
+    {!tested && (
+      <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+        <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+        Not tested
+      </span>
+    )}
+  </div>
+
+  <div class="max-w-2xl space-y-6">
+
+    {/* Error banner */}
+    {error && (
+      <div class="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 break-all">
+        <strong class="font-medium">Error:</strong> {error}
+      </div>
+    )}
+
+    {/* Credentials */}
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Credentials</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Read from <code class="bg-gray-100 px-1 rounded">.env</code>. Edit the file to update.</p>
+      </div>
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-5 py-2.5 text-left">Variable</th>
+            <th class="px-5 py-2.5 text-center w-16">Set</th>
+            <th class="px-5 py-2.5 text-left font-mono">Value</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {CRED_VARS.map(c => {
+            const val = process.env[c.key];
+            return (
+              <tr>
+                <td class="px-5 py-2.5 text-gray-700">{c.label}</td>
+                <td class="px-5 py-2.5 text-center">
+                  {val
+                    ? <span class="text-green-600 font-bold">✓</span>
+                    : <span class="text-red-500 font-bold">✗</span>
+                  }
+                </td>
+                <td class="px-5 py-2.5 font-mono text-xs text-gray-400">{maskValue(val)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div class="px-5 py-3 border-t border-gray-100">
+        <form method="post">
+          <button
+            type="submit"
+            disabled={!allSet}
+            class="bg-blue-600 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Test Connection
+          </button>
+          {!allSet && (
+            <span class="ml-3 text-xs text-gray-400">One or more credentials are missing.</span>
+          )}
+        </form>
+      </div>
+    </div>
+
+    {/* Results */}
+    {tested && !error && (
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100">
+          <h2 class="font-semibold text-gray-800">Marketplace Participations</h2>
+          <p class="text-xs text-gray-400 mt-0.5">{participations.length} marketplace{participations.length !== 1 ? "s" : ""} returned by SP-API</p>
+        </div>
+        {participations.length === 0 ? (
+          <p class="px-5 py-8 text-sm text-center text-gray-400">No marketplaces returned.</p>
+        ) : (
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+              <tr>
+                <th class="px-5 py-2.5 text-left">Marketplace</th>
+                <th class="px-5 py-2.5 text-left">ID</th>
+                <th class="px-5 py-2.5 text-center">Country</th>
+                <th class="px-5 py-2.5 text-center">Currency</th>
+                <th class="px-5 py-2.5 text-center">Participating</th>
+                <th class="px-5 py-2.5 text-center">Suspended Listings</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              {participations.map(p => (
+                <tr class="hover:bg-gray-50">
+                  <td class="px-5 py-3 font-medium text-gray-800">{p.marketplace.name}</td>
+                  <td class="px-5 py-3 font-mono text-xs text-gray-500">{p.marketplace.id}</td>
+                  <td class="px-5 py-3 text-center text-gray-600">{p.marketplace.countryCode}</td>
+                  <td class="px-5 py-3 text-center text-gray-600">{p.marketplace.defaultCurrencyCode}</td>
+                  <td class="px-5 py-3 text-center">
+                    {p.participation.isParticipating
+                      ? <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Yes</span>
+                      : <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">No</span>
+                    }
+                  </td>
+                  <td class="px-5 py-3 text-center">
+                    {p.participation.hasSuspendedListings
+                      ? <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">Yes</span>
+                      : <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">No</span>
+                    }
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    )}
+
+  </div>
+
+</AdminLayout>

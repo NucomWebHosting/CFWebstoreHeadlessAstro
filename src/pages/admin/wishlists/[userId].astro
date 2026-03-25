@@ -1,0 +1,111 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getWishlistItems, getWishlistUser } from "../../../lib/queries/admin-wishlists";
+
+const { userId } = Astro.params;
+const uid = parseInt(userId ?? "0");
+
+const [items, user] = await Promise.all([
+  getWishlistItems(uid),
+  getWishlistUser(uid),
+]);
+
+if (!user) {
+  return Astro.redirect("/admin/wishlists");
+}
+
+const fullName = [user.FirstName, user.LastName].filter(Boolean).join(" ") || `User #${uid}`;
+
+function fmtDate(d: Date | null) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+function fmtCurrency(n: number) {
+  return "$" + Number(n ?? 0).toFixed(2);
+}
+
+const grandTotal = items.reduce((s, item) => {
+  return s + (Number(item.BasePrice) + Number(item.optPrice)) * Number(item.NumDesired);
+}, 0);
+---
+
+<AdminLayout title={`Wish List — ${fullName}`}>
+
+  <div class="mb-5">
+    <a href="/admin/wishlists" class="text-sm text-blue-600 hover:underline">← Wish Lists</a>
+  </div>
+
+  <div class="mb-5">
+    <h2 class="text-lg font-semibold text-gray-800">{fullName}</h2>
+    <p class="text-sm text-gray-400">User #{uid}</p>
+  </div>
+
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    {items.length === 0 ? (
+      <p class="px-5 py-10 text-center text-sm text-gray-400">No items on this wish list.</p>
+    ) : (
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-5 py-3 text-left">#</th>
+            <th class="px-5 py-3 text-left">Product</th>
+            <th class="px-5 py-3 text-right">Price</th>
+            <th class="px-5 py-3 text-center">Desired Qty</th>
+            <th class="px-5 py-3 text-right">Subtotal</th>
+            <th class="px-5 py-3 text-left">Comments</th>
+            <th class="px-5 py-3 text-center">Date Added</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {items.map((item, i) => {
+            const price = Number(item.BasePrice) + Number(item.optPrice);
+            const subtotal = price * Number(item.NumDesired);
+            const unavailable = !item.Name || !item.Display;
+            return (
+              <tr class={`hover:bg-gray-50 ${unavailable ? "opacity-50" : ""}`}>
+                <td class="px-5 py-3 text-gray-400 text-xs">{i + 1}</td>
+                <td class="px-5 py-3">
+                  {unavailable ? (
+                    <span class="text-gray-400 italic">Product no longer available</span>
+                  ) : (
+                    <div>
+                      <a href={`/admin/products/${item.Product_ID}`}
+                         class="font-medium text-blue-600 hover:underline">
+                        {item.Name}
+                      </a>
+                      {item.Availability && (
+                        <div class="text-xs text-gray-400 mt-0.5">{item.Availability}</div>
+                      )}
+                    </div>
+                  )}
+                </td>
+                <td class="px-5 py-3 text-right font-mono text-gray-700">
+                  {fmtCurrency(price)}
+                  {Number(item.optPrice) > 0 && (
+                    <div class="text-xs text-gray-400">+{fmtCurrency(Number(item.optPrice))} opt.</div>
+                  )}
+                </td>
+                <td class="px-5 py-3 text-center text-gray-600">{item.NumDesired}</td>
+                <td class="px-5 py-3 text-right font-mono text-gray-700">{fmtCurrency(subtotal)}</td>
+                <td class="px-5 py-3 text-gray-500 text-xs max-w-xs">{item.Comments || "—"}</td>
+                <td class="px-5 py-3 text-center text-gray-500 text-xs whitespace-nowrap">{fmtDate(item.DateAdded)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot class="bg-gray-50 border-t-2 border-gray-200">
+          <tr>
+            <td colspan="4" class="px-5 py-3 text-right text-sm font-semibold text-gray-700">Grand Total</td>
+            <td class="px-5 py-3 text-right font-mono font-semibold text-gray-800">{fmtCurrency(grandTotal)}</td>
+            <td colspan="2" />
+          </tr>
+        </tfoot>
+      </table>
+    )}
+    <div class="px-5 py-3 border-t border-gray-100 text-xs text-gray-400">
+      {items.length} item{items.length !== 1 ? "s" : ""}
+    </div>
+  </div>
+
+</AdminLayout>

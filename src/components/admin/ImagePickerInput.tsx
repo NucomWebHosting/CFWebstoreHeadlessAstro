@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 
 interface ImageItem {
   filename: string;
@@ -60,8 +60,9 @@ export default function ImagePickerInput({ name, value = "", placeholder, classN
     setSearch("");
   }
 
-  const filtered = images.filter((img) =>
-    img.filename.toLowerCase().includes(search.toLowerCase())
+  const filtered = useMemo(
+    () => images.filter((img) => img.filename.toLowerCase().includes(search.toLowerCase())),
+    [images, search]
   );
 
   return (

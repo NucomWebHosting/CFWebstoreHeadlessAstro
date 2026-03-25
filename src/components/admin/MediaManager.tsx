@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
+import { IconFolder, IconPlay, IconFile } from "./MediaIcons";
 
 type MediaType = "image" | "video" | "doc";
 
@@ -45,34 +46,7 @@ function docColors(ext: string): string {
   return "bg-gray-100 text-gray-600";
 }
 
-// ── SVG icons ──────────────────────────────────────────────────────────────
-
-function IconFolder({ className = "" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
-    </svg>
-  );
-}
-
-function IconPlay({ className = "" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M8 5v14l11-7z"/>
-    </svg>
-  );
-}
-
-function IconFile({ className = "" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
-    </svg>
-  );
-}
-
 // ── Main component ─────────────────────────────────────────────────────────
-
 export default function MediaManager() {
   const [currentFolder, setCurrentFolder] = useState("");
   const [files, setFiles]                 = useState<MediaFile[]>([]);
@@ -208,19 +182,28 @@ export default function MediaManager() {
   }
 
   // Breadcrumbs
-  const crumbs = currentFolder
-    ? currentFolder.split("/").map((part, i, arr) => ({
-        label: part,
-        path:  arr.slice(0, i + 1).join("/"),
-      }))
-    : [];
+  const crumbs = useMemo(
+    () => currentFolder
+      ? currentFolder.split("/").map((part, i, arr) => ({
+          label: part,
+          path:  arr.slice(0, i + 1).join("/"),
+        }))
+      : [],
+    [currentFolder]
+  );
 
   const lc              = search.toLowerCase();
-  const filteredFolders = subfolders.filter(f => !search || f.name.toLowerCase().includes(lc));
-  const filteredFiles   = files.filter(f => !search || f.filename.toLowerCase().includes(lc));
-  const hasContent      = filteredFolders.length > 0 || filteredFiles.length > 0;
-  const isEmpty         = !loading && subfolders.length === 0 && files.length === 0;
-  const noResults       = !loading && !isEmpty && !hasContent && !!search;
+  const filteredFolders = useMemo(
+    () => subfolders.filter(f => !search || f.name.toLowerCase().includes(lc)),
+    [subfolders, search, lc]
+  );
+  const filteredFiles = useMemo(
+    () => files.filter(f => !search || f.filename.toLowerCase().includes(lc)),
+    [files, search, lc]
+  );
+  const hasContent = filteredFolders.length > 0 || filteredFiles.length > 0;
+  const isEmpty    = useMemo(() => !loading && subfolders.length === 0 && files.length === 0, [loading, subfolders, files]);
+  const noResults  = useMemo(() => !loading && !isEmpty && !hasContent && !!search, [loading, isEmpty, hasContent, search]);
 
   const gridCols = selected
     ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"

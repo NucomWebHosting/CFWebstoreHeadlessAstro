@@ -1,0 +1,147 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getDiscounts, discountStatus, TYPE3_LABELS } from "../../../lib/queries/admin-discounts";
+import type { DiscountFilters } from "../../../lib/queries/admin-discounts";
+
+const sp = Astro.url.searchParams;
+const filters: DiscountFilters = {
+  name:     sp.get("name")     || undefined,
+  coupCode: sp.get("coupCode") || undefined,
+  current:  (sp.get("current") as DiscountFilters["current"]) || undefined,
+};
+
+let discounts: Awaited<ReturnType<typeof getDiscounts>> = [];
+let fetchError = "";
+try {
+  discounts = await getDiscounts(filters);
+} catch (e: unknown) {
+  fetchError = e instanceof Error ? e.message : String(e);
+}
+
+function fmtDate(d: Date | null) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit" });
+}
+
+function fmtAmount(type2: number, amount: number) {
+  return type2 === 1 ? `$${Number(amount).toFixed(2)} off` : `${(Number(amount) * 100).toFixed(0)}% off`;
+}
+
+const STATUS_STYLES = {
+  active:    "bg-green-100 text-green-700",
+  scheduled: "bg-blue-100 text-blue-700",
+  expired:   "bg-gray-100 text-gray-500",
+} as const;
+
+const LEVEL_STYLES: Record<number, string> = {
+  0: "bg-indigo-100 text-indigo-700",
+  1: "bg-purple-100 text-purple-700",
+  3: "bg-amber-100 text-amber-700",
+  4: "bg-teal-100 text-teal-700",
+  5: "bg-orange-100 text-orange-700",
+};
+---
+
+<AdminLayout title="Discounts">
+
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-xl font-semibold text-gray-800">Discounts</h1>
+    <a href="/admin/discounts/new"
+       class="px-3 py-1.5 text-xs rounded bg-green-600 text-white hover:bg-green-700">
+      + New Discount
+    </a>
+  </div>
+
+  {fetchError && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{fetchError}</div>
+  )}
+
+  {/* Filters */}
+  <form method="get" class="mb-6 bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-4 flex flex-wrap gap-4 items-end">
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Name</label>
+      <input type="text" name="name" value={filters.name ?? ""}
+             class="border border-gray-300 rounded px-3 py-1.5 text-sm w-36 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Coupon Code</label>
+      <input type="text" name="coupCode" value={filters.coupCode ?? ""}
+             class="border border-gray-300 rounded px-3 py-1.5 text-sm w-32 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Status</label>
+      <select name="current"
+              class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+        <option value="">All</option>
+        <option value="current"   selected={filters.current === "current"}>Active</option>
+        <option value="scheduled" selected={filters.current === "scheduled"}>Scheduled</option>
+        <option value="expired"   selected={filters.current === "expired"}>Expired</option>
+      </select>
+    </div>
+    <div class="flex gap-2">
+      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Filter</button>
+      <a href="/admin/discounts" class="px-4 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">Reset</a>
+    </div>
+  </form>
+
+  {/* Table */}
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    {discounts.length === 0 ? (
+      <p class="px-5 py-10 text-center text-sm text-gray-400">No discounts found.</p>
+    ) : (
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-5 py-3 text-left">Name</th>
+            <th class="px-5 py-3 text-left">Display</th>
+            <th class="px-5 py-3 text-left">Coupon</th>
+            <th class="px-5 py-3 text-center">Level</th>
+            <th class="px-5 py-3 text-center">Amount</th>
+            <th class="px-5 py-3 text-center">Start</th>
+            <th class="px-5 py-3 text-center">End</th>
+            <th class="px-5 py-3 text-center">Status</th>
+            <th class="px-5 py-3 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {discounts.map(d => {
+            const status = discountStatus(d);
+            return (
+              <tr class="hover:bg-gray-50">
+                <td class="px-5 py-3 font-medium text-gray-800">{d.Name}</td>
+                <td class="px-5 py-3 text-gray-600 text-xs">{d.Display}</td>
+                <td class="px-5 py-3 font-mono text-xs text-gray-600">{d.Coup_Code || "—"}</td>
+                <td class="px-5 py-3 text-center">
+                  <span class={`px-2 py-0.5 rounded-full text-xs font-medium ${LEVEL_STYLES[d.Type3] ?? "bg-gray-100 text-gray-600"}`}>
+                    {TYPE3_LABELS[d.Type3] ?? `Type ${d.Type3}`}
+                  </span>
+                </td>
+                <td class="px-5 py-3 text-center text-gray-700 text-xs whitespace-nowrap">
+                  {fmtAmount(d.Type2, d.Amount)}
+                </td>
+                <td class="px-5 py-3 text-center text-gray-500 text-xs">{fmtDate(d.StartDate)}</td>
+                <td class="px-5 py-3 text-center text-gray-500 text-xs">{fmtDate(d.EndDate)}</td>
+                <td class="px-5 py-3 text-center">
+                  <span class={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[status]}`}>
+                    {status}
+                  </span>
+                </td>
+                <td class="px-5 py-3 text-right">
+                  <a href={`/admin/discounts/${d.Discount_ID}`}
+                     class="px-3 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700">
+                    Edit
+                  </a>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    )}
+    <div class="px-5 py-3 border-t border-gray-100 text-xs text-gray-400">
+      {discounts.length} discount{discounts.length !== 1 ? "s" : ""}
+    </div>
+  </div>
+
+</AdminLayout>

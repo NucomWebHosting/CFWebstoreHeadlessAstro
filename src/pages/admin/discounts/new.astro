@@ -1,0 +1,226 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { createDiscount } from "../../../lib/queries/admin-discounts";
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+
+  const amountDollar = d.get("amount_dollar") as string;
+  const amountPct    = d.get("amount_pct")    as string;
+  const type2 = amountDollar?.trim() ? 1 : 2;
+  const amount = type2 === 1 ? parseFloat(amountDollar) : parseFloat(amountPct) / 100;
+
+  const maxOrderRaw = (d.get("MaxOrder") as string)?.trim();
+
+  try {
+    const newId = await createDiscount({
+      Type1:     parseInt(d.get("Type1")    as string) || 1,
+      Type2:     type2,
+      Type3:     parseInt(d.get("Type3")    as string) ?? 0,
+      Type4:     parseInt(d.get("Type4")    as string) || 0,
+      Type5:     parseInt(d.get("Type5")    as string) || 0,
+      Name:      (d.get("Name")             as string)?.trim() ?? "",
+      Display:   (d.get("Display")          as string)?.trim() ?? "",
+      Coup_Code: (d.get("Coup_Code")        as string)?.trim() ?? "",
+      OneTime:   d.get("OneTime") === "1",
+      AccessKey: parseInt(d.get("AccessKey") as string) || 0,
+      StartDate: (d.get("StartDate") as string) || null,
+      EndDate:   (d.get("EndDate")   as string) || null,
+      Amount:    isNaN(amount) ? 0 : amount,
+      MinOrder:  parseFloat(d.get("MinOrder") as string) || 0,
+      MaxOrder:  maxOrderRaw ? parseFloat(maxOrderRaw) : null,
+    });
+    return Astro.redirect(`/admin/discounts/${newId}`);
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+---
+
+<AdminLayout title="New Discount">
+
+  <div class="mb-5">
+    <a href="/admin/discounts" class="text-sm text-blue-600 hover:underline">← Discounts</a>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="max-w-2xl space-y-6">
+
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">New Discount</h2>
+      </div>
+      <div class="px-5 py-5 space-y-5">
+
+        {/* Discount Type */}
+        <fieldset>
+          <legend class="block text-sm font-medium text-gray-700 mb-2">Discount Type</legend>
+          <div class="space-y-1.5 text-sm">
+            <label class="flex items-start gap-2 cursor-pointer">
+              <input type="radio" name="Type1" value="1" checked class="mt-0.5 accent-blue-600" />
+              <span><strong>Single-item</strong> — purchase a certain amount of one item for a discount</span>
+            </label>
+            <label class="flex items-start gap-2 cursor-pointer">
+              <input type="radio" name="Type1" value="2" class="mt-0.5 accent-blue-600" />
+              <span><strong>Multi-item</strong> — purchase items within a grouping for a discount</span>
+            </label>
+          </div>
+        </fieldset>
+
+        {/* Discount Level */}
+        <fieldset>
+          <legend class="block text-sm font-medium text-gray-700 mb-2">Discount Level</legend>
+          <div class="space-y-1.5 text-sm">
+            {[
+              [0, "Product", "applies only to selected products"],
+              [1, "Category", "applies to selected categories"],
+              [3, "Storewide", "applies to all products in the store"],
+              [4, "Order", "applies to the order total, after taxes"],
+              [5, "Shipping", "applies only to the shipping cost — requires a coupon code"],
+            ].map(([val, label, hint]) => (
+              <label class="flex items-start gap-2 cursor-pointer">
+                <input type="radio" name="Type3" value={String(val)} checked={val === 0} class="mt-0.5 accent-blue-600" />
+                <span><strong>{label}</strong> — <span class="text-gray-500">{hint}</span></span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        {/* User Level */}
+        <fieldset>
+          <legend class="block text-sm font-medium text-gray-700 mb-2">User Level</legend>
+          <div class="space-y-1.5 text-sm">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="Type5" value="0" checked class="accent-blue-600" />
+              Available to all users
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="Type5" value="1" class="accent-blue-600" />
+              Available to selected user groups only
+            </label>
+          </div>
+        </fieldset>
+
+        {/* Name + Display */}
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              Internal Name <span class="text-red-500">*</span>
+            </label>
+            <input type="text" name="Name" required maxlength="255"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              Display to Customers <span class="text-red-500">*</span>
+            </label>
+            <input type="text" name="Display" required maxlength="255"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+
+        {/* Coupon + OneTime */}
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Coupon Code</label>
+            <input type="text" name="Coup_Code" maxlength="50"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm uppercase focus:outline-none focus:ring-1 focus:ring-blue-400"
+                   placeholder="Leave blank for auto-apply" />
+            <p class="text-xs text-gray-400 mt-1">Case insensitive. Customer must enter this to receive the discount.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">One Time Only?</label>
+            <div class="flex gap-5 text-sm">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="OneTime" value="1" class="accent-blue-600" /> Yes
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="OneTime" value="0" checked class="accent-blue-600" /> No
+              </label>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Requires coupon code + user login at checkout.</p>
+          </div>
+        </div>
+
+        {/* Dates */}
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+            <input type="date" name="StartDate"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+            <input type="date" name="EndDate"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+
+        {/* Amount */}
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">
+            Discount Amount <span class="text-red-500">*</span>
+          </label>
+          <div class="flex items-center gap-3 text-sm">
+            <input type="number" name="amount_dollar" step="0.01" min="0"
+                   placeholder="0.00"
+                   class="w-28 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="text-gray-500">$ off</span>
+            <span class="text-gray-400 font-bold">OR</span>
+            <input type="number" name="amount_pct" step="0.1" min="0" max="100"
+                   placeholder="0"
+                   class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="text-gray-500">% off</span>
+          </div>
+          <p class="text-xs text-gray-400 mt-1">Fill in one — dollar amount takes priority if both are entered.</p>
+        </div>
+
+        {/* Range */}
+        <fieldset>
+          <legend class="block text-sm font-medium text-gray-700 mb-2">Discount Range</legend>
+          <div class="space-y-1.5 text-sm">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="Type4" value="0" checked class="accent-blue-600" />
+              Based on number of items
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="Type4" value="1" class="accent-blue-600" />
+              Based on amount spent
+            </label>
+          </div>
+        </fieldset>
+
+        {/* Min / Max */}
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              Minimum <span class="text-red-500">*</span>
+            </label>
+            <input type="number" name="MinOrder" step="any" min="0" value="0" required
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Maximum</label>
+            <input type="number" name="MaxOrder" step="any" min="0"
+                   placeholder="Leave blank for no max"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <button type="submit"
+            class="bg-blue-600 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-700">
+      Create Discount
+    </button>
+
+  </form>
+
+</AdminLayout>

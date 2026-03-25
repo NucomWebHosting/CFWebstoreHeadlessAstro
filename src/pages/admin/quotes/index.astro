@@ -1,0 +1,141 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getQuotes } from "../../../lib/queries/admin-quotes";
+import type { QuoteFilters } from "../../../lib/queries/admin-quotes";
+
+const sp = Astro.url.searchParams;
+
+const filters: QuoteFilters = {
+  dateRange:  (sp.get("dateRange") as QuoteFilters["dateRange"]) || undefined,
+  invoiceNum: sp.get("invoiceNum") || undefined,
+  customer:   sp.get("customer")   || undefined,
+};
+
+let quotes: Awaited<ReturnType<typeof getQuotes>> = [];
+let fetchError = "";
+
+try {
+  quotes = await getQuotes(filters);
+} catch (e: unknown) {
+  fetchError = e instanceof Error ? e.message : String(e);
+}
+
+function fmt(d: Date) {
+  return new Date(d).toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit" });
+}
+function money(n: number) {
+  return `$${Number(n).toFixed(2)}`;
+}
+---
+
+<AdminLayout title="Quotes">
+
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-xl font-semibold text-gray-800">Quotes</h1>
+  </div>
+
+  {fetchError && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{fetchError}</div>
+  )}
+
+  {/* Filters */}
+  <form method="get" class="mb-6 bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-4 flex flex-wrap gap-4 items-end">
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Date range</label>
+      <select name="dateRange"
+              class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+        <option value="">— All —</option>
+        {[
+          ["today",     "Today"],
+          ["yesterday", "Yesterday"],
+          ["thismonth", "This month"],
+          ["lastmonth", "Last month"],
+          ["thisyear",  "This year"],
+        ].map(([v, l]) => (
+          <option value={v} selected={filters.dateRange === v}>{l}</option>
+        ))}
+      </select>
+    </div>
+
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Invoice #</label>
+      <input type="text" name="invoiceNum" value={filters.invoiceNum ?? ""}
+             placeholder="INV-123"
+             class="border border-gray-300 rounded px-3 py-1.5 text-sm w-32 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Customer</label>
+      <input type="text" name="customer" value={filters.customer ?? ""}
+             placeholder="Name or email"
+             class="border border-gray-300 rounded px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="flex gap-2">
+      <button type="submit"
+              class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+        Filter
+      </button>
+      <a href="/admin/quotes"
+         class="px-4 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+        Reset
+      </a>
+    </div>
+  </form>
+
+  {/* Table */}
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    {quotes.length === 0 ? (
+      <p class="px-5 py-10 text-center text-sm text-gray-400">No quotes found.</p>
+    ) : (
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-5 py-3 text-left">Quote #</th>
+            <th class="px-5 py-3 text-left">Date</th>
+            <th class="px-5 py-3 text-left">Customer</th>
+            <th class="px-5 py-3 text-center">Products</th>
+            <th class="px-5 py-3 text-center">Items</th>
+            <th class="px-5 py-3 text-right">Total</th>
+            <th class="px-5 py-3 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {quotes.map(q => (
+            <tr class="hover:bg-gray-50">
+              <td class="px-5 py-3 font-mono text-xs text-gray-700">
+                <a href={`/admin/quotes/${q.Order_No}`} class="text-blue-600 hover:underline">
+                  #{q.Order_No}
+                </a>
+              </td>
+              <td class="px-5 py-3 text-gray-600 whitespace-nowrap">{fmt(q.DateOrdered)}</td>
+              <td class="px-5 py-3 text-gray-800">
+                {q.FirstName} {q.LastName}
+              </td>
+              <td class="px-5 py-3 text-center text-gray-600">{q.ProductCount}</td>
+              <td class="px-5 py-3 text-center text-gray-600">{q.ItemTotal}</td>
+              <td class="px-5 py-3 text-right font-medium text-gray-800">{money(q.OrderTotal)}</td>
+              <td class="px-5 py-3 text-right">
+                <a href={`/admin/quotes/${q.Order_No}`}
+                   class="px-3 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700">
+                  View
+                </a>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot class="bg-gray-50 border-t border-gray-200">
+          <tr>
+            <td colspan="5" class="px-5 py-3 text-xs text-gray-500">{quotes.length} quote{quotes.length !== 1 ? "s" : ""}</td>
+            <td class="px-5 py-3 text-right font-semibold text-gray-800">
+              {money(quotes.reduce((s, q) => s + Number(q.OrderTotal), 0))}
+            </td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    )}
+  </div>
+
+</AdminLayout>

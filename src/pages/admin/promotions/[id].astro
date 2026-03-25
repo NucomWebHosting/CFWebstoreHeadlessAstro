@@ -1,0 +1,502 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import {
+  getPromotion, updatePromotion, deletePromotion,
+  getQualProducts, addQualProduct, removeQualProduct,
+  setDiscProduct,
+  getPromoGroups, addPromoGroup, removePromoGroup,
+  getAllGroups, searchProducts,
+  needsDiscProduct, needsQualProducts,
+  TYPE1_LABELS, TYPE1_HINTS,
+} from "../../../lib/queries/admin-promotions";
+
+const { id } = Astro.params;
+const promoId = parseInt(id ?? "0");
+
+let error = "";
+
+// ── POST handler ───────────────────────────────────────────────────────────
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const action = d.get("_action") as string;
+
+  try {
+    if (action === "update") {
+      const amountDollar = (d.get("amount_dollar") as string)?.trim();
+      const amountPct    = (d.get("amount_pct")    as string)?.trim();
+      const type2  = amountDollar ? 1 : 2;
+      const amount = type2 === 1 ? parseFloat(amountDollar) : parseFloat(amountPct) / 100;
+      const qualifyNumMaxRaw = (d.get("QualifyNumMax") as string)?.trim();
+
+      await updatePromotion(promoId, {
+        Type1:         parseInt(d.get("Type1") as string) || 1,
+        Type2:         type2,
+        Type3:         parseInt(d.get("Type3") as string) || 0,
+        Type4:         parseInt(d.get("Type4") as string) || 0,
+        Name:          (d.get("Name")      as string)?.trim() ?? "",
+        Display:       (d.get("Display")   as string)?.trim() ?? "",
+        Coup_Code:     (d.get("Coup_Code") as string)?.trim() ?? "",
+        OneTime:       d.get("OneTime") === "1",
+        AccessKey:     parseInt(d.get("AccessKey") as string) || 0,
+        StartDate:     (d.get("StartDate") as string) || null,
+        EndDate:       (d.get("EndDate")   as string) || null,
+        Amount:        isNaN(amount) ? 0 : amount,
+        QualifyNum:    parseFloat(d.get("QualifyNum") as string) || 0,
+        QualifyNumMax: qualifyNumMaxRaw ? parseFloat(qualifyNumMaxRaw) : 0,
+        DiscountNum:   parseInt(d.get("DiscountNum") as string) || 1,
+        Multiply:      d.get("Multiply") === "1",
+        Add_DiscProd:  d.get("Add_DiscProd") === "1",
+      });
+      return Astro.redirect(`/admin/promotions/${promoId}?saved=1`);
+
+    } else if (action === "delete") {
+      await deletePromotion(promoId);
+      return Astro.redirect("/admin/promotions");
+
+    } else if (action === "add_qual_product") {
+      const pid = parseInt(d.get("product_id") as string);
+      if (pid) await addQualProduct(promoId, pid);
+      return Astro.redirect(`/admin/promotions/${promoId}#qual-products`);
+
+    } else if (action === "remove_qual_product") {
+      const pid = parseInt(d.get("product_id") as string);
+      if (pid) await removeQualProduct(promoId, pid);
+      return Astro.redirect(`/admin/promotions/${promoId}#qual-products`);
+
+    } else if (action === "set_disc_product") {
+      const pid = parseInt(d.get("product_id") as string);
+      if (pid) await setDiscProduct(promoId, pid);
+      return Astro.redirect(`/admin/promotions/${promoId}#disc-product`);
+
+    } else if (action === "clear_disc_product") {
+      await setDiscProduct(promoId, 0);
+      return Astro.redirect(`/admin/promotions/${promoId}#disc-product`);
+
+    } else if (action === "add_group") {
+      const gid = parseInt(d.get("group_id") as string);
+      if (gid) await addPromoGroup(promoId, gid);
+      return Astro.redirect(`/admin/promotions/${promoId}#groups`);
+
+    } else if (action === "remove_group") {
+      const gid = parseInt(d.get("group_id") as string);
+      if (gid) await removePromoGroup(promoId, gid);
+      return Astro.redirect(`/admin/promotions/${promoId}#groups`);
+    }
+
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+// ── Load data ──────────────────────────────────────────────────────────────
+const promo = await getPromotion(promoId);
+if (!promo) {
+  return Astro.redirect("/admin/promotions");
+}
+
+const [qualProducts, allGroups, promoGroups] = await Promise.all([
+  getQualProducts(promoId),
+  getAllGroups(),
+  getPromoGroups(promoId),
+]);
+
+const assignedGroupIds = new Set(promoGroups.map(g => g.Group_ID));
+const unassignedGroups = allGroups.filter(g => !assignedGroupIds.has(g.Group_ID));
+
+// Product search (qualifying)
+const qualSearch = Astro.url.searchParams.get("search_qual") ?? "";
+const discSearch = Astro.url.searchParams.get("search_disc") ?? "";
+const qualResults   = qualSearch.length >= 2   ? await searchProducts(qualSearch)  : [];
+const discResults   = discSearch.length >= 2   ? await searchProducts(discSearch)  : [];
+
+const qualProductIds = new Set(qualProducts.map(p => p.Product_ID));
+
+const saved = Astro.url.searchParams.get("saved") === "1";
+
+// Format stored amount back to display value
+const amountDollar = promo.Type2 === 1 ? Number(promo.Amount).toFixed(2) : "";
+const amountPct    = promo.Type2 === 2 ? (Number(promo.Amount) * 100).toFixed(1) : "";
+
+function fmtDate(d: Date | null) {
+  if (!d) return "";
+  return new Date(d).toISOString().split("T")[0];
+}
+---
+
+<AdminLayout title={`Promotion: ${promo.Name}`}>
+
+  <div class="mb-5 flex items-center justify-between">
+    <a href="/admin/promotions" class="text-sm text-blue-600 hover:underline">← Promotions</a>
+    {saved && (
+      <span class="text-sm text-green-600 font-medium">Saved successfully.</span>
+    )}
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <div class="max-w-2xl space-y-6">
+
+    {/* ── Main Settings ─────────────────────────────────────────────────── */}
+    <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <input type="hidden" name="_action" value="update" />
+      <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="font-semibold text-gray-800">Promotion Settings</h2>
+        <span class={`px-2 py-0.5 rounded-full text-xs font-medium ${
+          promo.Type1 === 1 ? "bg-indigo-100 text-indigo-700" :
+          promo.Type1 === 2 ? "bg-purple-100 text-purple-700" :
+          promo.Type1 === 3 ? "bg-teal-100 text-teal-700" :
+                              "bg-amber-100 text-amber-700"
+        }`}>{TYPE1_LABELS[promo.Type1]}</span>
+      </div>
+
+      <div class="px-5 py-5 space-y-5">
+
+        {/* Type1 read-only */}
+        <input type="hidden" name="Type1" value={promo.Type1} />
+        <div class="rounded-md bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-600">
+          <strong>Type:</strong> {TYPE1_LABELS[promo.Type1]} — {TYPE1_HINTS[promo.Type1]}
+          <p class="text-xs text-gray-400 mt-0.5">Promotion type cannot be changed after creation.</p>
+        </div>
+
+        {/* User Level */}
+        <fieldset>
+          <legend class="block text-sm font-medium text-gray-700 mb-2">User Level <span class="text-red-500">*</span></legend>
+          <div class="space-y-1.5 text-sm">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="Type4" value="0" checked={promo.Type4 === 0} class="accent-blue-600" />
+              Available to all users
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="Type4" value="1" checked={promo.Type4 === 1} class="accent-blue-600" />
+              Available to selected user groups only
+            </label>
+          </div>
+        </fieldset>
+
+        {/* Name + Display */}
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Internal Name <span class="text-red-500">*</span></label>
+            <input type="text" name="Name" value={promo.Name} required maxlength="255"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Display to Customers <span class="text-red-500">*</span></label>
+            <input type="text" name="Display" value={promo.Display} required maxlength="255"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+
+        {/* Coupon + OneTime */}
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Coupon Code</label>
+            <input type="text" name="Coup_Code" value={promo.Coup_Code} maxlength="50"
+                   placeholder="Leave blank for auto-apply"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm uppercase focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <p class="text-xs text-gray-400 mt-1">Case insensitive.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">One Time Only? <span class="text-red-500">*</span></label>
+            <div class="flex gap-5 text-sm">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="OneTime" value="1" checked={promo.OneTime} class="accent-blue-600" /> Yes
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="OneTime" value="0" checked={!promo.OneTime} class="accent-blue-600" /> No
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Dates */}
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+            <input type="date" name="StartDate" value={fmtDate(promo.StartDate)}
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+            <input type="date" name="EndDate" value={fmtDate(promo.EndDate)}
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+
+        {/* Qualify Based On */}
+        <fieldset>
+          <legend class="block text-sm font-medium text-gray-700 mb-2">Qualify Based On <span class="text-red-500">*</span></legend>
+          <div class="space-y-1.5 text-sm">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="Type3" value="0" checked={promo.Type3 === 0} class="accent-blue-600" />
+              Number of items purchased
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="Type3" value="1" checked={promo.Type3 === 1} class="accent-blue-600" />
+              Amount spent on items
+            </label>
+          </div>
+        </fieldset>
+
+        {/* Qualifying Amount Min/Max */}
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Qualifying Amount — Min <span class="text-red-500">*</span></label>
+            <input type="number" name="QualifyNum" step="any" min="0" value={promo.QualifyNum} required
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Qualifying Amount — Max</label>
+            <input type="number" name="QualifyNumMax" step="any" min="0"
+                   value={promo.QualifyNumMax > 0 ? promo.QualifyNumMax : ""}
+                   placeholder="Leave blank for no max"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+
+        {/* DiscountNum */}
+        <div class="w-48">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Items to Discount <span class="text-red-500">*</span></label>
+          <input type="number" name="DiscountNum" step="1" min="1" value={promo.DiscountNum} required
+                 class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+
+        {/* Amount */}
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Discount Amount <span class="text-red-500">*</span></label>
+          <div class="flex items-center gap-3 text-sm">
+            <input type="number" name="amount_dollar" step="0.01" min="0"
+                   value={amountDollar} placeholder="0.00"
+                   class="w-28 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="text-gray-500">$ off</span>
+            <span class="text-gray-400 font-bold">OR</span>
+            <input type="number" name="amount_pct" step="0.1" min="0" max="100"
+                   value={amountPct} placeholder="0"
+                   class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="text-gray-500">% off</span>
+          </div>
+          <p class="text-xs text-gray-400 mt-1">Fill in one. Dollar amount takes priority if both are entered.</p>
+        </div>
+
+        {/* Multiply + Add_DiscProd */}
+        <div class="grid grid-cols-2 gap-6">
+          <fieldset>
+            <legend class="block text-sm font-medium text-gray-700 mb-2">Amounts can Multiply? <span class="text-red-500">*</span></legend>
+            <div class="flex gap-5 text-sm">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="Multiply" value="1" checked={promo.Multiply} class="accent-blue-600" /> Yes
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="Multiply" value="0" checked={!promo.Multiply} class="accent-blue-600" /> No
+              </label>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Each additional qualifying amount earns an additional discounted item.</p>
+          </fieldset>
+          <fieldset>
+            <legend class="block text-sm font-medium text-gray-700 mb-2">Auto-add Discounted Product? <span class="text-red-500">*</span></legend>
+            <div class="flex gap-5 text-sm">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="Add_DiscProd" value="1" checked={promo.Add_DiscProd} class="accent-blue-600" /> Yes
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="Add_DiscProd" value="0" checked={!promo.Add_DiscProd} class="accent-blue-600" /> No
+              </label>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Automatically adds the discounted product to cart. Best for free-product promos only.</p>
+          </fieldset>
+        </div>
+
+      </div>
+
+      <div class="px-5 py-4 border-t border-gray-100 flex items-center gap-3">
+        <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-700">
+          Save Changes
+        </button>
+      </div>
+    </form>
+
+    {/* ── Qualifying Products (Type1 ≤ 3) ─────────────────────────────────── */}
+    {needsQualProducts(promo.Type1) && (
+      <div id="qual-products" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100">
+          <h2 class="font-semibold text-gray-800">Qualifying Products</h2>
+          <p class="text-xs text-gray-400 mt-0.5">Products the customer must purchase to trigger this promotion.</p>
+        </div>
+
+        {/* Current list */}
+        {qualProducts.length > 0 ? (
+          <ul class="divide-y divide-gray-100">
+            {qualProducts.map(p => (
+              <li class="px-5 py-2.5 flex items-center justify-between text-sm">
+                <span class="text-gray-800">{p.Name} <span class="text-gray-400 font-mono text-xs ml-1">{p.SKU}</span></span>
+                <form method="post">
+                  <input type="hidden" name="_action" value="remove_qual_product" />
+                  <input type="hidden" name="product_id" value={p.Product_ID} />
+                  <button type="submit" class="text-xs text-red-600 hover:underline">Remove</button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p class="px-5 py-4 text-sm text-gray-400">No qualifying products assigned.</p>
+        )}
+
+        {/* Search to add */}
+        <div class="px-5 py-4 border-t border-gray-100 bg-gray-50">
+          <form method="get" class="flex gap-2 items-end mb-3">
+            <div class="flex-1">
+              <label class="block text-xs text-gray-500 mb-1">Search products to add</label>
+              <input type="text" name="search_qual" value={qualSearch}
+                     placeholder="Name or SKU…"
+                     class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            </div>
+            <button type="submit" class="bg-gray-700 text-white px-3 py-1.5 rounded text-sm hover:bg-gray-800">Search</button>
+            {qualSearch && <a href={`/admin/promotions/${promoId}#qual-products`} class="px-3 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-100">Clear</a>}
+          </form>
+
+          {qualResults.length > 0 && (
+            <form method="post" class="space-y-1.5">
+              <input type="hidden" name="_action" value="add_qual_product" />
+              {qualResults.map(p => {
+                const already = qualProductIds.has(p.Product_ID);
+                return (
+                  <label class={`flex items-center gap-2 text-sm cursor-pointer ${already ? "opacity-40" : ""}`}>
+                    <input type="radio" name="product_id" value={p.Product_ID} disabled={already} required class="accent-blue-600" />
+                    <span>{p.Name} <span class="text-gray-400 font-mono text-xs">{p.SKU}</span></span>
+                    {already && <span class="text-xs text-gray-400 italic">already added</span>}
+                  </label>
+                );
+              })}
+              <div class="pt-2">
+                <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Add Selected</button>
+              </div>
+            </form>
+          )}
+          {qualSearch.length >= 2 && qualResults.length === 0 && (
+            <p class="text-sm text-gray-400">No products found for "{qualSearch}".</p>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* ── Discounted Product (Type1 ≥ 2) ───────────────────────────────────── */}
+    {needsDiscProduct(promo.Type1) && (
+      <div id="disc-product" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100">
+          <h2 class="font-semibold text-gray-800">Discounted Product</h2>
+          <p class="text-xs text-gray-400 mt-0.5">The product that receives the discount (different from the qualifying product).</p>
+        </div>
+
+        {/* Current */}
+        <div class="px-5 py-4">
+          {promo.Disc_Product > 0 ? (
+            <div class="flex items-center justify-between text-sm mb-4">
+              <span class="font-medium text-gray-800">{promo.ProdName ?? `Product #${promo.Disc_Product}`}</span>
+              <form method="post">
+                <input type="hidden" name="_action" value="clear_disc_product" />
+                <button type="submit" class="text-xs text-red-600 hover:underline">Clear</button>
+              </form>
+            </div>
+          ) : (
+            <p class="text-sm text-gray-400 mb-4">No discounted product set.</p>
+          )}
+
+          {/* Search to set */}
+          <form method="get" class="flex gap-2 items-end mb-3">
+            <div class="flex-1">
+              <label class="block text-xs text-gray-500 mb-1">Search to set discounted product</label>
+              <input type="text" name="search_disc" value={discSearch}
+                     placeholder="Name or SKU…"
+                     class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            </div>
+            <button type="submit" class="bg-gray-700 text-white px-3 py-1.5 rounded text-sm hover:bg-gray-800">Search</button>
+            {discSearch && <a href={`/admin/promotions/${promoId}#disc-product`} class="px-3 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-100">Clear</a>}
+          </form>
+
+          {discResults.length > 0 && (
+            <form method="post" class="space-y-1.5">
+              <input type="hidden" name="_action" value="set_disc_product" />
+              {discResults.map(p => (
+                <label class="flex items-center gap-2 text-sm cursor-pointer">
+                  <input type="radio" name="product_id" value={p.Product_ID} required class="accent-blue-600" />
+                  <span>{p.Name} <span class="text-gray-400 font-mono text-xs">{p.SKU}</span></span>
+                </label>
+              ))}
+              <div class="pt-2">
+                <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Set Product</button>
+              </div>
+            </form>
+          )}
+          {discSearch.length >= 2 && discResults.length === 0 && (
+            <p class="text-sm text-gray-400">No products found for "{discSearch}".</p>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* ── User Groups (Type4 = 1) ───────────────────────────────────────────── */}
+    {promo.Type4 === 1 && (
+      <div id="groups" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100">
+          <h2 class="font-semibold text-gray-800">User Groups</h2>
+          <p class="text-xs text-gray-400 mt-0.5">Only members of these groups will see this promotion.</p>
+        </div>
+
+        {promoGroups.length > 0 ? (
+          <ul class="divide-y divide-gray-100">
+            {promoGroups.map(g => (
+              <li class="px-5 py-2.5 flex items-center justify-between text-sm">
+                <span class="text-gray-800">{g.Name}</span>
+                <form method="post">
+                  <input type="hidden" name="_action" value="remove_group" />
+                  <input type="hidden" name="group_id" value={g.Group_ID} />
+                  <button type="submit" class="text-xs text-red-600 hover:underline">Remove</button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p class="px-5 py-4 text-sm text-gray-400">No groups assigned — promotion is effectively unavailable.</p>
+        )}
+
+        {unassignedGroups.length > 0 && (
+          <div class="px-5 py-4 border-t border-gray-100 bg-gray-50">
+            <form method="post" class="flex gap-2 items-end">
+              <div class="flex-1">
+                <label class="block text-xs text-gray-500 mb-1">Add a group</label>
+                <select name="group_id"
+                        class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                  {unassignedGroups.map(g => (
+                    <option value={g.Group_ID}>{g.Name}</option>
+                  ))}
+                </select>
+              </div>
+              <input type="hidden" name="_action" value="add_group" />
+              <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Add</button>
+            </form>
+          </div>
+        )}
+      </div>
+    )}
+
+    {/* ── Danger Zone ───────────────────────────────────────────────────────── */}
+    <div class="bg-white rounded-xl border border-red-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-red-100">
+        <h2 class="font-semibold text-red-700">Danger Zone</h2>
+      </div>
+      <div class="px-5 py-4">
+        <form method="post" onsubmit="return confirm('Delete this promotion? This cannot be undone.')">
+          <input type="hidden" name="_action" value="delete" />
+          <button type="submit" class="bg-red-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-red-700">
+            Delete Promotion
+          </button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+
+</AdminLayout>

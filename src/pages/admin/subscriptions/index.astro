@@ -1,0 +1,248 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import {
+  getSubscriptions,
+  updateSubscription,
+  setSubscriptionPause,
+  deleteSubscription,
+  PERIOD_LABELS,
+} from "../../../lib/queries/admin-subscriptions";
+import type { SubscriptionFilters } from "../../../lib/queries/admin-subscriptions";
+
+// ── POST handler ──────────────────────────────────────────────────────────────
+let saved  = false;
+let error  = "";
+
+if (Astro.request.method === "POST") {
+  const d      = await Astro.request.formData();
+  const action = (d.get("_action") as string) ?? "";
+  const id     = parseInt(d.get("id") as string) || 0;
+
+  try {
+    if (action === "update" && id > 0) {
+      const period       = parseInt(d.get("period")        as string) || 4;
+      const nextShipDate = (d.get("nextShipDate") as string)          ?? "";
+      const quantity     = parseInt(d.get("quantity")      as string) || 1;
+      await updateSubscription(id, { subscription_period: period, NextShipDate: nextShipDate, Quantity: quantity });
+      saved = true;
+    } else if (action === "pause" && id > 0) {
+      const pause = (d.get("pause") as string) === "1";
+      await setSubscriptionPause(id, pause);
+    } else if (action === "delete" && id > 0) {
+      await deleteSubscription(id);
+    }
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+
+  if (!error) return Astro.redirect(Astro.url.pathname + Astro.url.search);
+}
+
+saved = Astro.url.searchParams.get("saved") === "1";
+
+// ── Filters ───────────────────────────────────────────────────────────────────
+const sp = Astro.url.searchParams;
+
+const pauseParam = sp.get("pause");
+const filters: SubscriptionFilters = {
+  customer:  sp.get("customer")  || undefined,
+  productId: parseInt(sp.get("productId") ?? "") || undefined,
+  pause:     pauseParam === "0" ? 0 : pauseParam === "1" ? 1 : 2,
+  startDate: sp.get("startDate") || undefined,
+  toDate:    sp.get("toDate")    || undefined,
+};
+
+let subs: Awaited<ReturnType<typeof getSubscriptions>> = [];
+let fetchError = "";
+try {
+  subs = await getSubscriptions(filters);
+} catch (e: unknown) {
+  fetchError = e instanceof Error ? e.message : String(e);
+}
+
+function fmtDate(d: Date) {
+  return new Date(d).toISOString().slice(0, 10);
+}
+---
+
+<AdminLayout title="Product Subscriptions">
+
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-xl font-semibold text-gray-800">Product Subscriptions</h1>
+    <a href="/admin/settings/subscriptions" class="text-xs text-blue-600 hover:underline">
+      Subscription Settings →
+    </a>
+  </div>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved.</div>
+  )}
+  {(error || fetchError) && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error || fetchError}</div>
+  )}
+
+  {/* Filters */}
+  <form method="get" class="mb-6 bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-4 flex flex-wrap gap-4 items-end">
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Next ship from</label>
+      <input type="date" name="startDate" value={filters.startDate ?? ""}
+             class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Through</label>
+      <input type="date" name="toDate" value={filters.toDate ?? ""}
+             class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Customer</label>
+      <input type="text" name="customer" value={filters.customer ?? ""}
+             placeholder="Name"
+             class="border border-gray-300 rounded px-3 py-1.5 text-sm w-36 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Product ID</label>
+      <input type="number" name="productId" value={filters.productId ?? ""}
+             placeholder="ID"
+             class="border border-gray-300 rounded px-3 py-1.5 text-sm w-24 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Paused</label>
+      <select name="pause"
+              class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+        <option value="2" selected={filters.pause === 2}>All</option>
+        <option value="0" selected={filters.pause === 0}>No</option>
+        <option value="1" selected={filters.pause === 1}>Yes</option>
+      </select>
+    </div>
+    <div class="flex gap-2">
+      <button type="submit"
+              class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+        Filter
+      </button>
+      <a href="/admin/subscriptions"
+         class="px-4 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+        Reset
+      </a>
+    </div>
+  </form>
+
+  {/* Table */}
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    {subs.length === 0 ? (
+      <p class="px-5 py-10 text-center text-sm text-gray-400">No subscriptions found.</p>
+    ) : (
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-5 py-3 text-left">Customer</th>
+            <th class="px-5 py-3 text-left">Product</th>
+            <th class="px-5 py-3 text-center">Term</th>
+            <th class="px-5 py-3 text-center">Next Ship Date</th>
+            <th class="px-5 py-3 text-center">Qty</th>
+            <th class="px-5 py-3 text-center">Update</th>
+            <th class="px-5 py-3 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {subs.map(s => {
+            const rowId = `sub-${s.ID}`;
+            return (
+              <tr class={s.Pause ? "bg-amber-50/40" : "hover:bg-gray-50"}>
+                {/* Customer */}
+                <td class="px-5 py-3 text-gray-800 whitespace-nowrap">
+                  {s.Pause && (
+                    <span class="mr-1.5 inline-block px-1.5 py-0.5 rounded text-xs bg-amber-100 text-amber-700 font-medium">Paused</span>
+                  )}
+                  {s.FirstName} {s.LastName}
+                </td>
+
+                {/* Product */}
+                <td class="px-5 py-3 text-gray-700 max-w-[180px] truncate">{s.ProductName}</td>
+
+                {/* Inline update form spans: term, date, qty, update button */}
+                <td class="px-3 py-2 text-center">
+                  <form method="post" id={rowId}>
+                    <input type="hidden" name="_action" value="update" />
+                    <input type="hidden" name="id" value={s.ID} />
+                    <select name="period"
+                            disabled={s.Pause}
+                            class="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50">
+                      {Object.entries(PERIOD_LABELS).map(([v, label]) => (
+                        <option value={v} selected={s.subscription_period === parseInt(v)}>{label}</option>
+                      ))}
+                    </select>
+                  </form>
+                </td>
+
+                <td class="px-3 py-2 text-center">
+                  <input form={rowId} type="date" name="nextShipDate"
+                         value={fmtDate(s.NextShipDate)}
+                         disabled={s.Pause}
+                         class="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50" />
+                </td>
+
+                <td class="px-3 py-2 text-center">
+                  <input form={rowId} type="number" name="quantity"
+                         value={s.Quantity} min="1"
+                         disabled={s.Pause}
+                         class="border border-gray-300 rounded px-2 py-1 text-xs w-16 text-center focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50" />
+                </td>
+
+                <td class="px-3 py-2 text-center">
+                  <button form={rowId} type="submit"
+                          disabled={s.Pause}
+                          class="px-3 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                    Update
+                  </button>
+                </td>
+
+                {/* Pause/Unpause + Delete */}
+                <td class="px-3 py-2 text-right">
+                  <div class="flex items-center justify-end gap-1.5">
+                    {s.Pause ? (
+                      <form method="post">
+                        <input type="hidden" name="_action" value="pause" />
+                        <input type="hidden" name="id" value={s.ID} />
+                        <input type="hidden" name="pause" value="0" />
+                        <button type="submit"
+                                class="px-3 py-1 text-xs rounded bg-gray-600 text-white hover:bg-gray-700">
+                          Unpause
+                        </button>
+                      </form>
+                    ) : (
+                      <form method="post">
+                        <input type="hidden" name="_action" value="pause" />
+                        <input type="hidden" name="id" value={s.ID} />
+                        <input type="hidden" name="pause" value="1" />
+                        <button type="submit"
+                                class="px-3 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
+                          Pause
+                        </button>
+                      </form>
+                    )}
+                    <form method="post" onsubmit="return confirm('Delete this subscription permanently?')">
+                      <input type="hidden" name="_action" value="delete" />
+                      <input type="hidden" name="id" value={s.ID} />
+                      <button type="submit"
+                              class="px-3 py-1 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50">
+                        Delete
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    )}
+    {subs.length > 0 && (
+      <div class="px-5 py-3 border-t border-gray-100 text-xs text-gray-400">
+        {subs.length} subscription{subs.length !== 1 ? "s" : ""}
+        {subs.filter(s => s.Pause).length > 0 && ` (${subs.filter(s => s.Pause).length} paused)`}
+      </div>
+    )}
+  </div>
+
+</AdminLayout>
