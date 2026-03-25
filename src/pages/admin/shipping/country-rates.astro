@@ -39,9 +39,13 @@ const availableCountries = allCountries.filter(c => !activeAbbrevs.has(c.Abbrev)
 
 <AdminLayout title="Shipping — Country Rates">
 
+  <div class="mb-5">
+    <a href="/admin/shipping" class="text-sm text-blue-600 hover:underline">← Shipping Types</a>
+  </div>
+
   <nav class="flex flex-wrap gap-1 mb-6 text-sm border-b border-gray-200 pb-0">
     {[
-      ["/admin/shipping",                  "Settings"],
+      ["/admin/shipping",                  "← Types"],
       ["/admin/shipping/rates",            "Rates"],
       ["/admin/shipping/country-rates",    "Country Rates"],
       ["/admin/shipping/methods",          "Methods"],

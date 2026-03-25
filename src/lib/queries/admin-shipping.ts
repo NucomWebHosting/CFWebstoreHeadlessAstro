@@ -29,7 +29,24 @@ export interface ShipSettings {
   Flatrate_domestic: number;   // 1=domestic, 0=international
 }
 
-export async function getShipSettings(): Promise<ShipSettings | null> {
+export interface ShipSettingsSummary {
+  ID: number;
+  ShipType: string;
+  ShipBase: number;
+  ShipHand: number;
+  InStorePickup: boolean;
+  ShowEstimator: boolean;
+  UseDropShippers: boolean;
+}
+
+export async function getAllShipSettings(): Promise<ShipSettingsSummary[]> {
+  return query<ShipSettingsSummary>(
+    `SELECT ID, ShipType, ShipBase, ShipHand, InStorePickup, ShowEstimator, UseDropShippers
+     FROM ShipSettings ORDER BY ID`
+  );
+}
+
+export async function getShipSettings(id = 1): Promise<ShipSettings | null> {
   const rows = await query<ShipSettings>(
     `SELECT ID, ShipType,
             InStorePickup, ShowEstimator, ShowFreight, OverrideFreight,
@@ -37,12 +54,29 @@ export async function getShipSettings(): Promise<ShipSettings | null> {
             ShipBase, ShipHand, AllowNoShip, NoShipType, NoShipMess,
             Freeship_Min, Freeship_ShipIDs, FreeShipAmtFlag, FreeShipStateFlag, FreeshipStates,
             Flatrate, Flatrate_min, Flatrate_domestic
-     FROM ShipSettings WHERE ID = 1`
+     FROM ShipSettings WHERE ID = @id`,
+    { id }
   );
   return rows[0] ?? null;
 }
 
-export async function saveShipSettings(s: Omit<ShipSettings,
+export async function createShipSettings(shipType: string): Promise<number> {
+  const rows = await query<{ newID: number }>(
+    `INSERT INTO ShipSettings
+       (ShipType, InStorePickup, ShowEstimator, ShowFreight, OverrideFreight,
+        UseDropShippers, SingleShipmentOnly, ShowFrontEnd, ShipBase, ShipHand, AllowNoShip)
+     OUTPUT INSERTED.ID AS newID
+     VALUES (@ShipType, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0)`,
+    { ShipType: shipType }
+  );
+  return rows[0]?.newID ?? 0;
+}
+
+export async function deleteShipSettings(id: number): Promise<void> {
+  await query(`DELETE FROM ShipSettings WHERE ID = @id`, { id });
+}
+
+export async function saveShipSettings(id: number, s: Omit<ShipSettings,
   "ID" | "Freeship_Min" | "Freeship_ShipIDs" | "FreeShipAmtFlag" | "FreeShipStateFlag" |
   "FreeshipStates" | "Flatrate" | "Flatrate_min" | "Flatrate_domestic">
 ): Promise<void> {
@@ -61,8 +95,8 @@ export async function saveShipSettings(s: Omit<ShipSettings,
        AllowNoShip       = @AllowNoShip,
        NoShipType        = @NoShipType,
        NoShipMess        = @NoShipMess
-     WHERE ID = 1`,
-    s
+     WHERE ID = @id`,
+    { id, ...s }
   );
 }
 
