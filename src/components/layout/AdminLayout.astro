@@ -6,31 +6,58 @@ const { title } = Astro.props;
 const user = await Astro.session?.get("user");
 const path = Astro.url.pathname;
 
-const nav = [
-  { href: "/admin",            label: "Dashboard"   },
-  { href: "/admin/products",   label: "Products"    },
-  { href: "/admin/categories", label: "Categories"  },
-  { href: "/admin/orders",     label: "Orders"      },
-  { href: "/admin/users",      label: "Users"       },
-  { href: "/admin/tax",       label: "Tax"         },
-  { href: "/admin/reports",   label: "Reports"     },
-  { href: "/admin/pages",      label: "Pages"       },
-  { href: "/admin/homepage",   label: "Homepage"    },
-  { href: "/admin/settings",      label: "Settings"      },
-  { href: "/admin/cart-settings",     label: "Cart Settings"     },
-  { href: "/admin/payment-settings",  label: "Payment Settings"  },
-  { href: "/admin/shipping",           label: "Shipping"          },
-  { href: "/admin/abandoned-carts",   label: "Abandoned Carts"   },
-  { href: "/admin/user-settings",     label: "User Settings"     },
-  { href: "/admin/accounts",          label: "Accounts"          },
-  { href: "/admin/customers",         label: "Customers"         },
-  { href: "/admin/groups",            label: "Groups"            },
-  { href: "/admin/dealers",           label: "Dealers"           },
-  { href: "/admin/system-text",       label: "System Text"       },
-  { href: "/admin/tax/avatax",        label: "Avatax"            },
-  { href: "/admin/list-manager",      label: "List Manager"      },
-  { href: "/admin/blog",              label: "Blog Manager"      },
-  { href: "/admin/media",             label: "Media"             },
+function isActive(href: string) {
+  return path === href || path.startsWith(href + "/");
+}
+
+const groups = [
+  {
+    label: "Shopping",
+    links: [
+      { href: "/admin/orders",          label: "Orders"          },
+      { href: "/admin/abandoned-carts", label: "Abandoned Carts" },
+      { href: "/admin/reports",         label: "Reports"         },
+    ],
+  },
+  {
+    label: "Products",
+    links: [
+      { href: "/admin/products", label: "Products" },
+    ],
+  },
+  {
+    label: "Users",
+    links: [
+      { href: "/admin/users", label: "Users" },
+    ],
+  },
+  {
+    label: "Settings",
+    links: [
+      { href: "/admin/settings",         label: "Site Settings"    },
+      { href: "/admin/shipping",         label: "Shipping"         },
+      { href: "/admin/payment-settings", label: "Payment Settings" },
+      { href: "/admin/tax",              label: "Tax"              },
+      { href: "/admin/cart-settings",    label: "Cart Settings"    },
+      { href: "/admin/user-settings",    label: "User Settings"    },
+      { href: "/admin/accounts",         label: "Accounts"         },
+      { href: "/admin/customers",        label: "Customers"        },
+      { href: "/admin/groups",           label: "Groups"           },
+      { href: "/admin/dealers",          label: "Dealers"          },
+      { href: "/admin/system-text",      label: "System Text"      },
+      { href: "/admin/list-manager",     label: "List Manager"     },
+      { href: "/admin/blog",             label: "Blog Manager"     },
+      { href: "/admin/media",            label: "Media"            },
+    ],
+  },
+  {
+    label: "Layout",
+    links: [
+      { href: "/admin/homepage",   label: "Homepage"   },
+      { href: "/admin/categories", label: "Categories" },
+      { href: "/admin/pages",      label: "Pages"      },
+    ],
+  },
 ];
 ---
 <!doctype html>
@@ -40,35 +67,89 @@ const nav = [
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{title} — Admin</title>
   <style>
-    /* Inline Tailwind reset for the admin shell */
     *, *::before, *::after { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
+
+    /* Accordion */
+    details > summary {
+      list-style: none;
+      cursor: pointer;
+      user-select: none;
+    }
+    details > summary::-webkit-details-marker { display: none; }
+
+    details > summary .chevron {
+      transition: transform 0.15s ease;
+    }
+    details[open] > summary .chevron {
+      transform: rotate(90deg);
+    }
   </style>
 </head>
 <body class="bg-gray-100 text-gray-900 font-sans">
   <div class="flex min-h-screen">
 
     <!-- Sidebar -->
-    <aside class="w-56 shrink-0 bg-slate-900 text-slate-100 flex flex-col">
+    <aside class="w-56 shrink-0 bg-slate-900 text-slate-100 flex flex-col overflow-y-auto">
       <div class="px-5 py-4 border-b border-slate-700">
         <span class="text-sm font-bold tracking-widest uppercase text-slate-300">Admin</span>
         {user && <div class="text-xs text-slate-500 mt-0.5">{user.username}</div>}
       </div>
 
-      <nav class="flex-1 py-3 text-sm">
-        {nav.map(({ href, label }) => {
-          const active = path === href || (href !== "/admin" && path.startsWith(href));
+      <nav class="flex-1 py-2 text-sm">
+
+        <!-- Dashboard (top-level, not grouped) -->
+        <a
+          href="/admin"
+          class={`flex items-center px-5 py-2.5 transition-colors ${
+            path === "/admin"
+              ? "bg-slate-700 text-white font-medium"
+              : "text-slate-400 hover:bg-slate-800 hover:text-white"
+          }`}
+        >
+          Dashboard
+        </a>
+
+        <!-- Accordion groups -->
+        {groups.map(({ label, links }) => {
+          const groupActive = links.some(({ href }) => isActive(href));
           return (
-            <a
-              href={href}
-              class={`flex items-center px-5 py-2.5 transition-colors ${
-                active
-                  ? "bg-slate-700 text-white font-medium"
-                  : "text-slate-400 hover:bg-slate-800 hover:text-white"
-              }`}
-            >
-              {label}
-            </a>
+            <details open={groupActive || undefined} class="group">
+              <summary class={`flex items-center justify-between px-5 py-2.5 transition-colors ${
+                groupActive
+                  ? "text-white"
+                  : "text-slate-400 hover:text-white"
+              }`}>
+                <span class="font-medium tracking-wide">{label}</span>
+                <svg
+                  class="chevron w-3.5 h-3.5 shrink-0 opacity-60"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </summary>
+
+              <div class="border-l border-slate-700 ml-5 mt-0.5 mb-1">
+                {links.map(({ href, label: linkLabel }) => {
+                  const active = isActive(href);
+                  return (
+                    <a
+                      href={href}
+                      class={`flex items-center pl-4 pr-3 py-2 transition-colors ${
+                        active
+                          ? "text-white font-medium bg-slate-700/60"
+                          : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                      }`}
+                    >
+                      {linkLabel}
+                    </a>
+                  );
+                })}
+              </div>
+            </details>
           );
         })}
       </nav>
