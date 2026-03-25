@@ -1,0 +1,136 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../../components/layout/AdminLayout.astro";
+import { getEasypostMethod, saveEasypostMethod, deleteEasypostMethod } from "../../../../../lib/queries/admin-shipping-easypost";
+
+const rawId = Astro.params.id ?? "0";
+const isNew  = rawId === "new";
+const id     = isNew ? 0 : (parseInt(rawId) || 0);
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d      = await Astro.request.formData();
+  const g      = (k: string) => (d.get(k) as string ?? "").trim();
+  const action = g("_action");
+
+  if (action === "delete" && id > 0) {
+    await deleteEasypostMethod(id);
+    return Astro.redirect("/admin/shipping/easypost/methods?saved=1");
+  }
+
+  const hand = parseFloat(g("MethodHand")) || 0;
+  const data = {
+    Name:          g("Name"),
+    Friendly_Name: g("Friendly_Name"),
+    MethodHand:    hand / 100,
+    MethodWeight:  parseInt(g("MethodWeight")) || 0,
+    Priority:      parseInt(g("Priority")) || 99,
+    Used:          g("Used") === "1",
+  };
+
+  try {
+    await saveEasypostMethod(id, data);
+    return Astro.redirect("/admin/shipping/easypost/methods?saved=1");
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+const m = isNew
+  ? { ID: 0, Name: "", Friendly_Name: "", MethodHand: 0, MethodWeight: 0, Priority: 99, Used: true }
+  : await getEasypostMethod(id);
+
+if (!m) return new Response(`Method ${id} not found.`, { status: 404, headers: { "content-type": "text/plain" } });
+
+const title = isNew ? "Add Easypost Method" : `Easypost Method — ${m.Name || id}`;
+---
+
+<AdminLayout title={title}>
+
+  <div class="mb-5 flex items-center gap-3">
+    <a href="/admin/shipping/easypost/methods" class="text-sm text-blue-600 hover:underline">← Methods</a>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4 max-w-xl">
+    <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">
+      {isNew ? "New Method" : `Method #${id}`}
+    </h2>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Method Name</label>
+      <div class="col-span-2 space-y-1">
+        <input type="text" name="Name" value={m.Name} required
+               class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <p class="text-xs text-gray-400">Internal code — must match carrier's method name exactly. Do not rename existing methods.</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Friendly Name</label>
+      <input type="text" name="Friendly_Name" value={m.Friendly_Name}
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Handling %</label>
+      <div class="col-span-2 flex items-center gap-2">
+        <input type="number" name="MethodHand" value={parseFloat((m.MethodHand * 100).toPrecision(10)).toString()} step="any" min="0"
+               class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span class="text-sm text-gray-500">%</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Extra Weight</label>
+      <div class="col-span-2 flex items-center gap-2">
+        <input type="number" name="MethodWeight" value={m.MethodWeight} min="0"
+               class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span class="text-sm text-gray-500">oz</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Priority</label>
+      <div class="col-span-2 flex items-center gap-2">
+        <input type="number" name="Priority" value={m.Priority} min="1" max="999"
+               class="w-20 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span class="text-xs text-gray-400">lower = displayed first</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <span class="text-sm text-gray-600 font-medium text-right pt-1">Active</span>
+      <div class="col-span-2 flex gap-4 pt-1">
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="Used" value="1" checked={m.Used} /> Yes</label>
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="Used" value="0" checked={!m.Used} /> No</label>
+      </div>
+    </div>
+
+    <div class="pt-2 flex gap-3">
+      <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded text-sm hover:bg-blue-700">
+        {isNew ? "Add Method" : "Save Changes"}
+      </button>
+      <a href="/admin/shipping/easypost/methods"
+         class="px-5 py-2 rounded border border-gray-300 text-sm text-gray-600 hover:bg-gray-50">
+        Cancel
+      </a>
+    </div>
+  </form>
+
+  {!isNew && (
+    <div class="mt-5 max-w-xl">
+      <form method="post" onsubmit={`return confirm('Delete method "${m.Name}"? This cannot be undone.')`}>
+        <input type="hidden" name="_action" value="delete" />
+        <button type="submit" class="px-4 py-2 rounded text-sm border border-red-300 text-red-600 hover:bg-red-50">
+          Delete Method
+        </button>
+      </form>
+    </div>
+  )}
+
+</AdminLayout>

@@ -1,0 +1,127 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../components/layout/AdminLayout.astro";
+import { getEasypostBoxes, deleteEasypostBox } from "../../../../lib/queries/admin-shipping-easypost";
+import { getAllShipSettings } from "../../../../lib/queries/admin-shipping";
+
+const allSettings = await getAllShipSettings();
+const easypostId  = allSettings.find(r => r.ShipType === "Easypost")?.ID ?? 0;
+
+let saved = false;
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const id = parseInt(d.get("id") as string) || 0;
+  try {
+    if (id > 0) await deleteEasypostBox(id);
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+  if (!error) return Astro.redirect("/admin/shipping/easypost/boxes?saved=1");
+}
+
+saved = Astro.url.searchParams.get("saved") === "1";
+const boxes = await getEasypostBoxes();
+
+// DIM weight in oz: (L * W * H) / 166 lbs → convert to oz (* 16)
+function dimWeightOz(l: number, w: number, h: number): string {
+  return ((l * w * h) / 166 * 16).toFixed(1);
+}
+
+const tabs = [
+  [easypostId ? `/admin/shipping/${easypostId}` : "/admin/shipping", "Settings"],
+  ["/admin/shipping/easypost/methods",  "Methods"],
+  ["/admin/shipping/easypost/boxes",    "Boxes"],
+  ["/admin/shipping/promotions",        "Promotions"],
+] as const;
+---
+
+<AdminLayout title="Easypost — Shipping Boxes">
+
+  <div class="mb-5">
+    <a href="/admin/shipping" class="text-sm text-blue-600 hover:underline">← Shipping Types</a>
+  </div>
+
+  <nav class="flex flex-wrap gap-1 mb-6 text-sm border-b border-gray-200 pb-0">
+    {tabs.map(([href, label]) => {
+      const active = Astro.url.pathname === href;
+      return (
+        <a href={href}
+           class={`px-4 py-2 font-medium border-b-2 -mb-px transition-colors ${
+             active ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
+           }`}>
+          {label}
+        </a>
+      );
+    })}
+  </nav>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved.</div>
+  )}
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <div class="max-w-4xl space-y-6">
+
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="font-semibold text-gray-800">Shipping Box Sizes</h2>
+        <a href="/admin/shipping/easypost/boxes/new"
+           class="px-3 py-1.5 text-xs rounded bg-green-600 text-white hover:bg-green-700">
+          + Add Box
+        </a>
+      </div>
+
+      <p class="px-5 pt-3 pb-1 text-xs text-gray-400">
+        DIM weight = (L × W × H) / 166 lbs, converted to oz. The greater of actual weight vs DIM weight is the billable weight.
+      </p>
+
+      {boxes.length === 0 ? (
+        <p class="px-5 py-8 text-sm text-gray-400 text-center">No box sizes configured yet.</p>
+      ) : (
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="px-5 py-3 text-left">Name</th>
+              <th class="px-5 py-3 text-center">Dimensions (in)</th>
+              <th class="px-5 py-3 text-center">Box Wt (oz)</th>
+              <th class="px-5 py-3 text-center">DIM Wt (oz)</th>
+              <th class="px-5 py-3 text-left">Notes</th>
+              <th class="px-5 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {boxes.map(b => (
+              <tr class="hover:bg-gray-50">
+                <td class="px-5 py-3 font-medium text-gray-800">{b.Name}</td>
+                <td class="px-5 py-3 text-center text-gray-600">{b.Length} × {b.Width} × {b.Height}</td>
+                <td class="px-5 py-3 text-center text-gray-600">{b.packaging}</td>
+                <td class="px-5 py-3 text-center text-gray-600">{dimWeightOz(b.Length, b.Width, b.Height)}</td>
+                <td class="px-5 py-3 text-gray-500 text-xs">{b.Notes}</td>
+                <td class="px-5 py-3 text-right">
+                  <div class="flex items-center justify-end gap-2">
+                    <a href={`/admin/shipping/easypost/boxes/${b.box_ID}`}
+                       class="px-3 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700">
+                      Edit
+                    </a>
+                    <form method="post" onsubmit={`return confirm('Delete box "${b.Name}"?')`}>
+                      <input type="hidden" name="id" value={b.box_ID} />
+                      <button type="submit"
+                              class="px-3 py-1 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50">
+                        Delete
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+
+  </div>
+</AdminLayout>

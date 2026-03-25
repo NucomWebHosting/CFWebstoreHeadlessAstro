@@ -2,6 +2,7 @@
 export const prerender = false;
 import AdminLayout from "../../../components/layout/AdminLayout.astro";
 import { getShipSettings, saveShipSettings } from "../../../lib/queries/admin-shipping";
+import { getEasypostSettings, saveEasypostSettings } from "../../../lib/queries/admin-shipping-easypost";
 
 const SHIP_TYPES: [string, string][] = [
   ["Price",    "Amount Added by Total Price"],
@@ -19,37 +20,102 @@ const CUSTOM_TYPES = ["Price", "Price2", "Weight", "Weight2", "Items"];
 
 const id = parseInt(Astro.params.id ?? "0") || 0;
 
+let saved = false;
+let error = "";
+
 if (Astro.request.method === "POST") {
   const d = await Astro.request.formData();
   const g  = (k: string) => (d.get(k) as string) ?? "";
   const gb = (k: string) => g(k) === "1";
+  const gi = (k: string) => parseInt(g(k)) || 0;
+  const gf = (k: string) => parseFloat(g(k)) || 0;
   const shipType = g("ShipType");
-  await saveShipSettings(id, {
-    ShipType:           shipType,
-    InStorePickup:      gb("InStorePickup"),
-    ShowEstimator:      gb("ShowEstimator"),
-    ShowFreight:        gb("ShowFreight"),
-    OverrideFreight:    gb("OverrideFreight"),
-    UseDropShippers:    gb("UseDropShippers"),
-    SingleShipmentOnly: gb("SingleShipmentOnly"),
-    ShowFrontEnd:       CUSTOM_TYPES.includes(shipType) ? true : gb("ShowFrontEnd"),
-    ShipBase:           parseFloat(g("ShipBase")) || 0,
-    ShipHand:           (parseFloat(g("ShipHand")) || 0) / 100,
-    AllowNoShip:        gb("AllowNoShip"),
-    NoShipType:         g("NoShipType") || null,
-    NoShipMess:         g("NoShipMess") || null,
-  });
-  return Astro.redirect(`/admin/shipping/${id}?saved=1`);
+
+  try {
+    await saveShipSettings(id, {
+      ShipType:           shipType,
+      InStorePickup:      gb("InStorePickup"),
+      ShowEstimator:      gb("ShowEstimator"),
+      ShowFreight:        gb("ShowFreight"),
+      OverrideFreight:    gb("OverrideFreight"),
+      UseDropShippers:    gb("UseDropShippers"),
+      SingleShipmentOnly: gb("SingleShipmentOnly"),
+      ShowFrontEnd:       CUSTOM_TYPES.includes(shipType) ? true : gb("ShowFrontEnd"),
+      ShipBase:           gf("ShipBase"),
+      ShipHand:           gf("ShipHand") / 100,
+      AllowNoShip:        gb("AllowNoShip"),
+      NoShipType:         g("NoShipType") || null,
+      NoShipMess:         g("NoShipMess") || null,
+    });
+
+    if (shipType === "Easypost") {
+      await saveEasypostSettings({
+        EasyPostApiKey:      g("EasyPostApiKey"),
+        EasyPostCallURL:     g("EasyPostCallURL"),
+        MerchantFullName:    g("MerchantFullName"),
+        MerchantAddress1:    g("MerchantAddress1"),
+        MerchantAddress2:    g("MerchantAddress2"),
+        MerchantCity:        g("MerchantCity"),
+        MerchantState:       g("MerchantState"),
+        MerchantZipcode:     g("MerchantZipcode"),
+        MerchantPhone:       g("MerchantPhone"),
+        MerchantEmail:       g("MerchantEmail"),
+        NucomClientKey:      g("NucomClientKey"),
+        NucomClientSecret:   g("NucomClientSecret"),
+        NucomAPIKey:         g("NucomAPIKey"),
+        CFWebstoreURL:       g("CFWebstoreURL"),
+        NucomServicesURL:    g("NucomServicesURL"),
+        UseShipBox:          gi("UseShipBox"),
+        customs_signer:      g("customs_signer"),
+        non_delivery_option: g("non_delivery_option"),
+        UseAV:               gi("UseAV"),
+        Debug:               gb("Debug"),
+        Email_Customer:      gi("Email_Customer"),
+        SMS_Customer:        gi("SMS_Customer"),
+        rate_to_show:        gi("rate_to_show"),
+        show_delivery_date:  gb("show_delivery_date"),
+        default_prep_days:   gi("default_prep_days"),
+        AddOneDay_Time:      g("AddOneDay_Time") || "14:00",
+        ShowShipFrom:        gb("ShowShipFrom"),
+      });
+    }
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+
+  if (!error) return Astro.redirect(`/admin/shipping/${id}?saved=1`);
 }
 
 const s = await getShipSettings(id);
 if (!s) return new Response(`Shipping type ${id} not found.`, { status: 404, headers: { "content-type": "text/plain" } });
 
-const saved = Astro.url.searchParams.get("saved") === "1";
-const isCustom = CUSTOM_TYPES.includes(s.ShipType);
+saved = Astro.url.searchParams.get("saved") === "1";
+const isCustom   = CUSTOM_TYPES.includes(s.ShipType);
 const isEasypost = s.ShipType === "Easypost";
 
+const ep = isEasypost ? await getEasypostSettings() : null;
+
 const shipTypeName = SHIP_TYPES.find(([v]) => v === s.ShipType)?.[1] ?? s.ShipType;
+
+// Easypost sub-nav tabs
+const easypostTabs = [
+  [`/admin/shipping/${id}`,             "Settings"],
+  ["/admin/shipping/easypost/methods",  "Methods"],
+  ["/admin/shipping/easypost/boxes",    "Boxes"],
+  ["/admin/shipping/promotions",        "Promotions"],
+];
+
+// Standard sub-nav tabs
+const standardTabs = [
+  [`/admin/shipping/${id}`,              "Settings"],
+  ["/admin/shipping/rates",              "Rates"],
+  ["/admin/shipping/country-rates",      "Country Rates"],
+  ["/admin/shipping/methods",            "Methods"],
+  ["/admin/shipping/custom-settings",    "Custom Settings"],
+  ["/admin/shipping/promotions",         "Promotions"],
+];
+
+const tabs = isEasypost ? easypostTabs : standardTabs;
 ---
 
 <AdminLayout title={`Shipping — ${shipTypeName}`}>
@@ -60,14 +126,7 @@ const shipTypeName = SHIP_TYPES.find(([v]) => v === s.ShipType)?.[1] ?? s.ShipTy
 
   <!-- Sub-nav -->
   <nav class="flex flex-wrap gap-1 mb-6 text-sm border-b border-gray-200 pb-0">
-    {[
-      [`/admin/shipping/${id}`,              "Settings"],
-      ["/admin/shipping/rates",              "Rates"],
-      ["/admin/shipping/country-rates",      "Country Rates"],
-      ["/admin/shipping/methods",            "Methods"],
-      ["/admin/shipping/custom-settings",    "Custom Settings"],
-      ["/admin/shipping/promotions",         "Promotions"],
-    ].map(([href, label]) => {
+    {tabs.map(([href, label]) => {
       const active = Astro.url.pathname === href;
       return (
         <a href={href}
@@ -83,9 +142,13 @@ const shipTypeName = SHIP_TYPES.find(([v]) => v === s.ShipType)?.[1] ?? s.ShipTy
   {saved && (
     <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved.</div>
   )}
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
 
   <form method="post" class="space-y-6 max-w-3xl">
 
+    <!-- General ShipSettings section (common to all types) -->
     <section class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
       <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">General Settings</h2>
 
@@ -221,6 +284,220 @@ const shipTypeName = SHIP_TYPES.find(([v]) => v === s.ShipType)?.[1] ?? s.ShipTy
                   class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">{s.NoShipMess ?? ""}</textarea>
       </div>
     </section>
+
+    <!-- Easypost-specific sections -->
+    {isEasypost && ep && (
+      <>
+        <section class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
+          <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Easypost API Keys</h2>
+
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">API Key</label>
+            <input type="text" name="EasyPostApiKey" value={ep.EasyPostApiKey}
+                   class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">Call URL</label>
+            <input type="text" name="EasyPostCallURL" value={ep.EasyPostCallURL}
+                   class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
+          <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Merchant / Ship-From Address</h2>
+
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">Full Name</label>
+            <input type="text" name="MerchantFullName" value={ep.MerchantFullName}
+                   class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">Address 1</label>
+            <input type="text" name="MerchantAddress1" value={ep.MerchantAddress1}
+                   class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">Address 2</label>
+            <input type="text" name="MerchantAddress2" value={ep.MerchantAddress2}
+                   class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">City</label>
+            <input type="text" name="MerchantCity" value={ep.MerchantCity}
+                   class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">State</label>
+            <input type="text" name="MerchantState" value={ep.MerchantState} maxlength="2"
+                   class="w-20 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">Zip</label>
+            <input type="text" name="MerchantZipcode" value={ep.MerchantZipcode}
+                   class="w-32 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">Phone</label>
+            <input type="tel" name="MerchantPhone" value={ep.MerchantPhone}
+                   class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">Email</label>
+            <input type="email" name="MerchantEmail" value={ep.MerchantEmail}
+                   class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
+          <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Nucom Keys</h2>
+          <p class="text-xs text-gray-400">Required for Nucom-hosted Easypost integration.</p>
+
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">Services URL</label>
+            <input type="text" name="NucomServicesURL" value={ep.NucomServicesURL}
+                   class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">Client Key</label>
+            <input type="text" name="NucomClientKey" value={ep.NucomClientKey}
+                   class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">Client Secret</label>
+            <input type="text" name="NucomClientSecret" value={ep.NucomClientSecret}
+                   class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">API Key</label>
+            <input type="text" name="NucomAPIKey" value={ep.NucomAPIKey}
+                   class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">CFWebstore URL</label>
+            <input type="text" name="CFWebstoreURL" value={ep.CFWebstoreURL}
+                   class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
+          <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Easypost Behaviour</h2>
+
+          <div class="grid grid-cols-3 gap-3 items-start">
+            <span class="text-sm text-gray-600 font-medium text-right pt-1">Rate to Show</span>
+            <div class="col-span-2 space-y-1 pt-1">
+              <div class="flex flex-col gap-1.5">
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="rate_to_show" value="1" checked={ep.rate_to_show === 1} /> Cheapest rate</label>
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="rate_to_show" value="2" checked={ep.rate_to_show === 2} /> Fastest rate</label>
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="rate_to_show" value="3" checked={ep.rate_to_show === 3} /> All rates (customer chooses)</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 items-start">
+            <span class="text-sm text-gray-600 font-medium text-right pt-1">Box Selection</span>
+            <div class="col-span-2 space-y-1 pt-1">
+              <div class="flex flex-col gap-1.5">
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="UseShipBox" value="0" checked={ep.UseShipBox === 0} /> No box sizing</label>
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="UseShipBox" value="1" checked={ep.UseShipBox === 1} /> Auto-select best box</label>
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="UseShipBox" value="2" checked={ep.UseShipBox === 2} /> Manual box selection</label>
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="UseShipBox" value="3" checked={ep.UseShipBox === 3} /> Manual multi-box</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 items-start">
+            <span class="text-sm text-gray-600 font-medium text-right pt-1">Show Delivery Date</span>
+            <div class="col-span-2 flex gap-4 pt-1">
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="show_delivery_date" value="1" checked={ep.show_delivery_date} /> Yes</label>
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="show_delivery_date" value="0" checked={!ep.show_delivery_date} /> No</label>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">Default Prep Days</label>
+            <div class="col-span-2 flex items-center gap-2">
+              <input type="number" name="default_prep_days" value={ep.default_prep_days} min="0" max="99"
+                     class="w-20 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              <span class="text-xs text-gray-400">days before shipment</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">Add Day After</label>
+            <div class="col-span-2 flex items-center gap-2">
+              <input type="time" name="AddOneDay_Time" value={ep.AddOneDay_Time ?? "14:00"}
+                     class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              <span class="text-xs text-gray-400">orders after this time get +1 prep day</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 items-start">
+            <span class="text-sm text-gray-600 font-medium text-right pt-1">Address Verification</span>
+            <div class="col-span-2 space-y-1 pt-1">
+              <div class="flex flex-col gap-1.5">
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="UseAV" value="0" checked={ep.UseAV === 0} /> Off</label>
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="UseAV" value="1" checked={ep.UseAV === 1} /> Warn if unverified</label>
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="UseAV" value="2" checked={ep.UseAV === 2} /> Require verified address</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 items-start">
+            <span class="text-sm text-gray-600 font-medium text-right pt-1">Email Customer</span>
+            <div class="col-span-2 space-y-1 pt-1">
+              <div class="flex flex-col gap-1.5">
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="Email_Customer" value="0" checked={ep.Email_Customer === 0} /> Off</label>
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="Email_Customer" value="1" checked={ep.Email_Customer === 1} /> On shipment</label>
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="Email_Customer" value="2" checked={ep.Email_Customer === 2} /> On delivery</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 items-start">
+            <span class="text-sm text-gray-600 font-medium text-right pt-1">SMS Customer</span>
+            <div class="col-span-2 space-y-1 pt-1">
+              <div class="flex flex-col gap-1.5">
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="SMS_Customer" value="0" checked={ep.SMS_Customer === 0} /> Off</label>
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="SMS_Customer" value="1" checked={ep.SMS_Customer === 1} /> On shipment</label>
+                <label class="flex items-center gap-2 text-sm"><input type="radio" name="SMS_Customer" value="2" checked={ep.SMS_Customer === 2} /> On delivery</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">Customs Signer</label>
+            <input type="text" name="customs_signer" value={ep.customs_signer}
+                   class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 items-center">
+            <label class="text-sm text-gray-600 font-medium text-right">Non-Delivery Option</label>
+            <select name="non_delivery_option"
+                    class="col-span-2 w-auto border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+              <option value="return" selected={ep.non_delivery_option === "return"}>Return to sender</option>
+              <option value="abandon" selected={ep.non_delivery_option === "abandon"}>Abandon</option>
+            </select>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 items-start">
+            <span class="text-sm text-gray-600 font-medium text-right pt-1">Show Ship From</span>
+            <div class="col-span-2 flex gap-4 pt-1">
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="ShowShipFrom" value="1" checked={ep.ShowShipFrom} /> Yes</label>
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="ShowShipFrom" value="0" checked={!ep.ShowShipFrom} /> No</label>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 items-start">
+            <span class="text-sm text-gray-600 font-medium text-right pt-1">Debug Mode</span>
+            <div class="col-span-2 flex gap-4 pt-1">
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="Debug" value="1" checked={ep.Debug} /> On</label>
+              <label class="flex items-center gap-2 text-sm"><input type="radio" name="Debug" value="0" checked={!ep.Debug} /> Off</label>
+            </div>
+          </div>
+        </section>
+      </>
+    )}
 
     <div class="flex gap-3">
       <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded text-sm hover:bg-blue-700">Save Changes</button>

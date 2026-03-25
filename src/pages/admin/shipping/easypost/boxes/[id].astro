@@ -1,0 +1,138 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../../components/layout/AdminLayout.astro";
+import { getEasypostBox, saveEasypostBox, deleteEasypostBox } from "../../../../../lib/queries/admin-shipping-easypost";
+
+const rawId = Astro.params.id ?? "0";
+const isNew  = rawId === "new";
+const id     = isNew ? 0 : (parseInt(rawId) || 0);
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d      = await Astro.request.formData();
+  const g      = (k: string) => (d.get(k) as string ?? "").trim();
+  const gf     = (k: string) => parseFloat(g(k)) || 0;
+  const action = g("_action");
+
+  if (action === "delete" && id > 0) {
+    await deleteEasypostBox(id);
+    return Astro.redirect("/admin/shipping/easypost/boxes?saved=1");
+  }
+
+  const l = gf("Length"), w = gf("Width"), h = gf("Height");
+  // DIM weight in lbs, stored in 'weight' column
+  const dimWeight = (l > 0 && w > 0 && h > 0) ? (l * w * h) / 166 : 0;
+
+  try {
+    await saveEasypostBox(id, {
+      Name:      g("Name"),
+      Length:    l,
+      Width:     w,
+      Height:    h,
+      weight:    dimWeight,
+      packaging: gf("packaging"),
+      Notes:     g("Notes"),
+    });
+    return Astro.redirect("/admin/shipping/easypost/boxes?saved=1");
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+const b = isNew
+  ? { box_ID: 0, Name: "", Length: 0, Width: 0, Height: 0, weight: 0, packaging: 0, Notes: "" }
+  : await getEasypostBox(id);
+
+if (!b) return new Response(`Box ${id} not found.`, { status: 404, headers: { "content-type": "text/plain" } });
+
+const title = isNew ? "Add Shipping Box" : `Shipping Box — ${b.Name || id}`;
+---
+
+<AdminLayout title={title}>
+
+  <div class="mb-5">
+    <a href="/admin/shipping/easypost/boxes" class="text-sm text-blue-600 hover:underline">← Shipping Boxes</a>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4 max-w-xl">
+    <h2 class="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">
+      {isNew ? "New Shipping Box" : `Box #${id}`}
+    </h2>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Name</label>
+      <input type="text" name="Name" value={b.Name} required
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Length (in)</label>
+      <input type="number" name="Length" value={b.Length} step="0.01" min="0"
+             class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Width (in)</label>
+      <input type="number" name="Width" value={b.Width} step="0.01" min="0"
+             class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Height (in)</label>
+      <input type="number" name="Height" value={b.Height} step="0.01" min="0"
+             class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Box Weight (oz)</label>
+      <div class="col-span-2 flex items-center gap-2">
+        <input type="number" name="packaging" value={b.packaging} step="0.01" min="0"
+               class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span class="text-xs text-gray-400">weight of empty box</span>
+      </div>
+    </div>
+
+    {!isNew && b.Length > 0 && (
+      <div class="grid grid-cols-3 gap-3 items-center">
+        <span class="text-sm text-gray-600 font-medium text-right">DIM Weight</span>
+        <span class="col-span-2 text-sm text-gray-500">
+          {((b.Length * b.Width * b.Height) / 166 * 16).toFixed(2)} oz
+          <span class="text-xs text-gray-400 ml-1">(auto-calculated from dimensions)</span>
+        </span>
+      </div>
+    )}
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Notes</label>
+      <textarea name="Notes" rows={3}
+                class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">{b.Notes}</textarea>
+    </div>
+
+    <div class="pt-2 flex gap-3">
+      <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded text-sm hover:bg-blue-700">
+        {isNew ? "Add Box" : "Save Changes"}
+      </button>
+      <a href="/admin/shipping/easypost/boxes"
+         class="px-5 py-2 rounded border border-gray-300 text-sm text-gray-600 hover:bg-gray-50">
+        Cancel
+      </a>
+    </div>
+  </form>
+
+  {!isNew && (
+    <div class="mt-5 max-w-xl">
+      <form method="post" onsubmit={`return confirm('Delete box "${b.Name}"? This cannot be undone.')`}>
+        <input type="hidden" name="_action" value="delete" />
+        <button type="submit" class="px-4 py-2 rounded text-sm border border-red-300 text-red-600 hover:bg-red-50">
+          Delete Box
+        </button>
+      </form>
+    </div>
+  )}
+
+</AdminLayout>
