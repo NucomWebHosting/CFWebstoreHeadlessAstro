@@ -3,26 +3,12 @@ export const prerender = false;
 import AdminLayout from "../../components/layout/AdminLayout.astro";
 import { getDashboardStats, getRecentContacts } from "../../lib/queries/admin";
 
-const defaultStats = { totalProducts: 0, totalCategories: 0, totalPages: 0, unreadContacts: 0 };
-let stats = defaultStats;
-let contacts: Awaited<ReturnType<typeof getRecentContacts>> = [];
-let dbError = "";
-
-try {
-  [stats, contacts] = await Promise.all([
-    getDashboardStats(),
-    getRecentContacts(8),
-  ]);
-} catch (e) {
-  dbError = e instanceof Error ? e.message : "Database error loading dashboard.";
-}
+const [stats, contacts] = await Promise.all([
+  getDashboardStats(),
+  getRecentContacts(8),
+]);
 ---
 <AdminLayout title="Dashboard">
-  {dbError && (
-    <div class="mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-      Dashboard data unavailable: {dbError}
-    </div>
-  )}
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
     {[
       { label: "Products",          value: stats.totalProducts,    href: "/admin/products"   },
