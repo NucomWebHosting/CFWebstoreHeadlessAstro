@@ -1,0 +1,232 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getUsersAdmin, getAllGroups } from "../../../lib/queries/admin-users";
+
+const sp = Astro.url.searchParams;
+const show      = sp.get("show")      ?? "recent";
+const un        = sp.get("un")        ?? "";
+const email     = sp.get("email")     ?? "";
+const firstname = sp.get("firstname") ?? "";
+const lastname  = sp.get("lastname")  ?? "";
+const gid       = sp.get("gid")       ?? "";
+const allow_po  = sp.get("allow_po")  ?? "";
+const page      = Math.max(1, parseInt(sp.get("page") ?? "1") || 1);
+const perPage   = 40;
+
+const [{ rows, total }, groups] = await Promise.all([
+  getUsersAdmin({ show, un, email, firstname, lastname, gid, allow_po, page, perPage }),
+  getAllGroups(),
+]);
+
+const totalPages = Math.max(1, Math.ceil(total / perPage));
+
+// 5-page sliding window
+function pageWindow(cur: number, max: number) {
+  let start = Math.max(1, cur - 2);
+  const end = Math.min(max, start + 4);
+  start = Math.max(1, end - 4);
+  const pages = [];
+  for (let i = start; i <= end; i++) pages.push(i);
+  return pages;
+}
+
+function filterQS(overrides: Record<string, string | number | null> = {}) {
+  const base: Record<string, string> = {};
+  if (show && show !== "recent") base.show = show;
+  if (un)        base.un        = un;
+  if (email)     base.email     = email;
+  if (firstname) base.firstname = firstname;
+  if (lastname)  base.lastname  = lastname;
+  if (gid)       base.gid       = gid;
+  if (allow_po)  base.allow_po  = allow_po;
+  base.page = String(page);
+  for (const [k, v] of Object.entries(overrides)) {
+    if (v === null) delete base[k];
+    else base[k] = String(v);
+  }
+  const qs = new URLSearchParams(base).toString();
+  return qs ? `?${qs}` : "?";
+}
+
+function fmtDate(d: Date | null | undefined) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit" });
+}
+---
+
+<AdminLayout title="Users">
+
+  <!-- Top bar -->
+  <div class="flex items-center justify-between mb-4">
+    <div class="text-sm text-gray-500">
+      {total === 0 ? "No users found" : `${total.toLocaleString()} user${total !== 1 ? "s" : ""}`}
+      {show === "recent" && <span class="ml-1">(last 7 days)</span>}
+    </div>
+    <div class="flex gap-2">
+      <a href={filterQS({ show: "recent", page: 1 })}
+         class={`px-3 py-1.5 text-xs rounded border ${show === "recent" ? "bg-blue-600 text-white border-blue-600" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+        Recent
+      </a>
+      <a href={filterQS({ show: "all", page: 1 })}
+         class={`px-3 py-1.5 text-xs rounded border ${show === "all" ? "bg-blue-600 text-white border-blue-600" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+        All Users
+      </a>
+    </div>
+  </div>
+
+  <!-- Filter form -->
+  <form method="get" action="/admin/users" class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
+    <input type="hidden" name="show" value={show} />
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Username / ID</label>
+        <input type="text" name="un" value={un}
+               class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Email</label>
+        <input type="text" name="email" value={email}
+               class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">First Name</label>
+        <input type="text" name="firstname" value={firstname}
+               class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Last Name</label>
+        <input type="text" name="lastname" value={lastname}
+               class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Group</label>
+        <select name="gid" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          <option value="">all</option>
+          <option value="0" selected={gid === "0"}>unassigned</option>
+          {groups.map(g => (
+            <option value={String(g.Group_ID)} selected={gid === String(g.Group_ID)}>{g.Name}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Allow PO</label>
+        <select name="allow_po" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          <option value="">all</option>
+          <option value="1" selected={allow_po === "1"}>yes</option>
+          <option value="0" selected={allow_po === "0"}>no</option>
+        </select>
+      </div>
+    </div>
+    <div class="mt-3 flex gap-2">
+      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+        Search
+      </button>
+      <a href="/admin/users" class="px-4 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+        Clear
+      </a>
+    </div>
+  </form>
+
+  <!-- Table -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+        <tr>
+          <th class="px-4 py-2.5 text-left">User / Email</th>
+          <th class="px-4 py-2.5 text-left">Real Name</th>
+          <th class="px-4 py-2.5 text-left">Created</th>
+          <th class="px-4 py-2.5 text-left">Last Login</th>
+          <th class="px-4 py-2.5 text-left">Group</th>
+          <th class="px-4 py-2.5 text-center w-20">Cust</th>
+          <th class="px-4 py-2.5 text-center w-16">PO</th>
+          <th class="px-4 py-2.5 text-left w-20">Edit</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {rows.length === 0 && (
+          <tr>
+            <td colspan="8" class="px-5 py-8 text-center text-gray-400">No users found.</td>
+          </tr>
+        )}
+        {rows.map(u => {
+          const rowClass = u.Disable
+            ? "bg-red-50"
+            : (u.EmailIsBad ? "bg-red-50" : (u.EmailLock && u.EmailLock !== "verified" ? "bg-yellow-50" : ""));
+          const sameAsUser = u.Username === u.Email;
+          return (
+            <tr class={`hover:bg-gray-50 ${rowClass}`}>
+              <td class="px-4 py-2.5">
+                {sameAsUser ? (
+                  <a href={`/admin/users/${u.User_ID}`} class="text-blue-600 hover:underline font-medium text-xs">
+                    {u.Email}
+                  </a>
+                ) : (
+                  <div>
+                    <a href={`/admin/users/${u.User_ID}`} class="text-blue-600 hover:underline font-medium text-xs">
+                      {u.Username}
+                    </a>
+                    <div class="text-xs text-gray-400">{u.Email}</div>
+                  </div>
+                )}
+                {u.Disable && <span class="text-xs text-red-500 ml-1">[disabled]</span>}
+                {u.EmailIsBad && <span class="text-xs text-red-500 ml-1">[bad email]</span>}
+                {u.EmailLock && u.EmailLock !== "verified" && (
+                  <span class="text-xs text-yellow-600 ml-1">[locked]</span>
+                )}
+              </td>
+              <td class="px-4 py-2.5 text-xs text-gray-700">
+                {[u.FirstName, u.LastName].filter(Boolean).join(" ") || "—"}
+              </td>
+              <td class="px-4 py-2.5 text-xs text-gray-500">{fmtDate(u.Created)}</td>
+              <td class="px-4 py-2.5 text-xs text-gray-500">{fmtDate(u.LastLogin)}</td>
+              <td class="px-4 py-2.5 text-xs text-gray-600">{u.GroupName ?? <span class="text-gray-300">—</span>}</td>
+              <td class="px-4 py-2.5 text-center text-xs text-gray-500">
+                {u.Customer_ID ? String(u.Customer_ID) : "—"}
+              </td>
+              <td class="px-4 py-2.5 text-center text-xs">
+                {u.Allow_PO
+                  ? <span class="text-green-600 font-medium">yes</span>
+                  : <span class="text-gray-300">no</span>}
+              </td>
+              <td class="px-4 py-2.5">
+                <a href={`/admin/users/${u.User_ID}`}
+                   class="text-xs text-blue-600 hover:underline">Edit</a>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  {totalPages > 1 && (
+    <div class="flex items-center justify-between mt-4">
+      <div class="text-xs text-gray-400">
+        Page {page} of {totalPages}
+      </div>
+      <div class="flex gap-1">
+        {page > 1 && (
+          <a href={filterQS({ page: page - 1 })}
+             class="px-2.5 py-1 text-xs border border-gray-300 rounded text-gray-600 hover:bg-gray-50">
+            ←
+          </a>
+        )}
+        {pageWindow(page, totalPages).map(p => (
+          <a href={filterQS({ page: p })}
+             class={`px-2.5 py-1 text-xs border rounded ${p === page ? "bg-blue-600 text-white border-blue-600" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+            {p}
+          </a>
+        ))}
+        {page < totalPages && (
+          <a href={filterQS({ page: page + 1 })}
+             class="px-2.5 py-1 text-xs border border-gray-300 rounded text-gray-600 hover:bg-gray-50">
+            →
+          </a>
+        )}
+      </div>
+    </div>
+  )}
+
+</AdminLayout>
