@@ -1,7 +1,8 @@
 ---
 export const prerender = false;
 import AdminLayout from "../../../components/layout/AdminLayout.astro";
-import { getOrderDetail, updateOrderStatus, saveOrderNotes } from "../../../lib/queries/admin-orders";
+import { getOrderDetail, updateOrderStatus, saveOrderNotes, addShipment, deleteShipment, updateOrderUser, findUserBySearch } from "../../../lib/queries/admin-orders";
+import OrderShipmentsPanel from "../../../components/admin/OrderShipmentsPanel.astro";
 
 const id = Number(Astro.params.id);
 if (!id) return new Response(null, { status: 404 });
@@ -12,6 +13,21 @@ if (Astro.request.method === "POST") {
   const action = data.get("_action") as string;
   if (action === "save_notes") {
     await saveOrderNotes(id, (data.get("notes") as string) ?? "");
+  } else if (action === "add_shipment") {
+    const itemList = ((data.get("item_list") as string) ?? "").split(",").filter(Boolean);
+    const shipItems = itemList.map(sid => ({
+      itemId: parseInt(sid),
+      qty: parseInt((data.get(`qty_${sid}`) as string) ?? "0") || 0,
+      weight: parseFloat((data.get(`weight_${sid}`) as string) ?? "0") || 0,
+    }));
+    await addShipment(id, shipItems);
+  } else if (action === "delete_shipment") {
+    const shipmentId = parseInt((data.get("shipment_id") as string) ?? "0");
+    if (shipmentId) await deleteShipment(shipmentId);
+  } else if (action === "replace_user") {
+    const search = (data.get("user_search") as string) ?? "";
+    const found = await findUserBySearch(search);
+    if (found) await updateOrderUser(id, found.User_ID);
   } else {
     await updateOrderStatus(id, action);
   }
@@ -23,10 +39,9 @@ let detailResult: Awaited<ReturnType<typeof getOrderDetail>>;
 try {
   detailResult = await getOrderDetail(id);
 } catch (e) {
-  const msg = e instanceof Error ? e.message : String(e);
-  return new Response(`Query error on order ${id}: ${msg}`, { status: 500, headers: { "content-type": "text/plain" } });
+  return new Response(`Query error on order ${id}: ${e instanceof Error ? e.message : String(e)}`, { status: 500, headers: { "content-type": "text/plain" } });
 }
-const { order, items, billing, shipping, payments, shipments } = detailResult;
+const { order, items, billing, shipping, payments, shipments, shipmentItems, user } = detailResult;
 if (!order) return new Response(`Order ${id} not found in database.`, { status: 404, headers: { "content-type": "text/plain" } });
 
 const saved = Astro.url.searchParams.get("saved") === "1";
@@ -82,6 +97,8 @@ function addrLines(c: typeof billing) {
   if (c.Email) lines.push(c.Email);
   return lines;
 }
+
+const unshippedItems = items.filter(i => i.Quantity > i.Quantity_shipped);
 
 function paymentLabel(p: typeof payments[0]) {
   if (!p.OfflinePayment || p.OfflinePayment === "CreditCard" || p.OfflinePayment === "Online")
@@ -302,46 +319,14 @@ function paymentLabel(p: typeof payments[0]) {
       </div>
 
       <!-- Shipments -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div class="px-5 py-3 border-b border-gray-100">
-          <h3 class="text-sm font-semibold text-gray-700">Shipments</h3>
-        </div>
-        {shipments.length === 0
-          ? <p class="px-5 py-4 text-sm text-gray-400">No shipments recorded.</p>
-          : (
-            <table class="w-full text-sm">
-              <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
-                <tr>
-                  <th class="px-4 py-2 text-left">Date</th>
-                  <th class="px-4 py-2 text-left">Method</th>
-                  <th class="px-4 py-2 text-left">Tracking</th>
-                  <th class="px-4 py-2 text-right w-20">Weight</th>
-                  <th class="px-4 py-2 text-right w-24">Cost</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                {shipments.map(s => (
-                  <tr class="hover:bg-gray-50">
-                    <td class="px-4 py-2 text-xs text-gray-600">{fmtDate(s.DateEntered)}</td>
-                    <td class="px-4 py-2 text-xs text-gray-600">
-                      {[s.Shipper, s.ShipType].filter(Boolean).join(" / ") || "—"}
-                    </td>
-                    <td class="px-4 py-2 text-xs font-mono text-blue-600">
-                      {s.Tracking ?? "—"}
-                    </td>
-                    <td class="px-4 py-2 text-right text-xs text-gray-500">
-                      {s.Weight != null ? `${s.Weight} lbs` : "—"}
-                    </td>
-                    <td class="px-4 py-2 text-right text-xs">
-                      {s.Actual_Shipping != null ? fmt(s.Actual_Shipping) : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )
-        }
-      </div>
+      <OrderShipmentsPanel
+        orderId={id}
+        shipments={shipments}
+        shipmentItems={shipmentItems}
+        unshippedItems={unshippedItems}
+        orderShipping={order.Shipping}
+        orderFilled={order.Filled}
+      />
 
       <!-- Notes -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -420,7 +405,10 @@ function paymentLabel(p: typeof payments[0]) {
 
       <!-- Billing Address -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Bill To</h3>
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Bill To</h3>
+          <a href={`/admin/customers/${order.Customer_ID}`} class="text-xs text-blue-600 hover:underline">edit</a>
+        </div>
         {billing
           ? (
             <address class="not-italic text-sm text-gray-700 space-y-0.5">
@@ -429,22 +417,69 @@ function paymentLabel(p: typeof payments[0]) {
           )
           : <p class="text-sm text-gray-400">No billing address.</p>
         }
+        {billing?.Email && (
+          <a href={`/admin/customers/${order.Customer_ID}/email`}
+             class="mt-2 inline-block text-xs text-blue-600 hover:underline">
+            Email Customer
+          </a>
+        )}
       </div>
 
       <!-- Shipping Address -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Ship To</h3>
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Ship To</h3>
+          {shipping
+            ? <a href={`/admin/customers/${order.ShipTo}`} class="text-xs text-blue-600 hover:underline">edit</a>
+            : <span />
+          }
+        </div>
         {shipping
           ? (
-            <address class="not-italic text-sm text-gray-700 space-y-0.5">
-              {addrLines(shipping).map(line => <div>{line}</div>)}
-            </address>
+            <>
+              <address class="not-italic text-sm text-gray-700 space-y-0.5">
+                {addrLines(shipping).map(line => <div>{line}</div>)}
+              </address>
+              {shipping.Email && (
+                <a href={`/admin/customers/${order.ShipTo}/email`}
+                   class="mt-2 inline-block text-xs text-blue-600 hover:underline">
+                  Email Ship To
+                </a>
+              )}
+            </>
           )
-          : (
-            <p class="text-sm text-gray-500 italic">Same as billing</p>
-          )
+          : <p class="text-sm text-gray-500 italic">Same as billing</p>
         }
       </div>
+
+      <!-- User -->
+      {user && (
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">User</h3>
+            <a href={`/admin/users/${user.User_ID}`} class="text-xs text-blue-600 hover:underline">
+              user summary
+            </a>
+          </div>
+          <p class="text-sm text-gray-800 mb-1">
+            {user.UserName} <span class="text-gray-400 text-xs">#{user.User_ID}</span>
+          </p>
+          {user.Email && <p class="text-xs text-gray-500 mb-3">{user.Email}</p>}
+          <details class="group">
+            <summary class="text-xs text-blue-600 hover:underline cursor-pointer list-none">
+              Replace User
+            </summary>
+            <form method="post" class="mt-2 flex gap-2">
+              <input type="hidden" name="_action" value="replace_user" />
+              <input type="text" name="user_search" placeholder="Username or User ID"
+                     class="flex-1 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              <button type="submit" class="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700">
+                Update
+              </button>
+            </form>
+          </details>
+        </div>
+      )}
 
     </div>
   </div>

@@ -229,6 +229,7 @@ export interface OrderItem {
   Name: string;
   SKU: string | null;
   Quantity: number;
+  Quantity_shipped: number;
   Price: number;
   OptPrice: number;
   AddonMultP: number;
@@ -271,6 +272,22 @@ export interface OrderShipment {
   Actual_Shipping: number | null;
   Weight: number | null;
   DateEntered: Date | null;
+  Printed_Pack: boolean;
+}
+
+export interface ShipmentItemRow {
+  Shipment_ID: number;
+  Item_ID: number;
+  Name: string;
+  Options: string | null;
+  Addons: string | null;
+  Quantity: number;
+}
+
+export interface OrderUser {
+  User_ID: number;
+  UserName: string;
+  Email: string | null;
 }
 
 export async function getOrderDetail(orderNo: number): Promise<{
@@ -280,8 +297,10 @@ export async function getOrderDetail(orderNo: number): Promise<{
   shipping: OrderCustomer | null;
   payments: OrderPayment[];
   shipments: OrderShipment[];
+  shipmentItems: ShipmentItemRow[];
+  user: OrderUser | null;
 }> {
-  const [orders, items, payments, shipments] = await Promise.all([
+  const [orders, items, payments, shipments, shipmentItems] = await Promise.all([
     query<OrderDetailHeader>(
       `SELECT O.*,
          COALESCE((SELECT SUM(P.Amount) FROM Payment P WHERE P.Order_No = O.Order_No), 0) AS AmountPaid
@@ -290,7 +309,9 @@ export async function getOrderDetail(orderNo: number): Promise<{
       { orderNo }
     ),
     query<OrderItem>(
-      `SELECT Item_ID, Product_ID, Name, SKU, Quantity, Price,
+      `SELECT Item_ID, Product_ID, Name, SKU, Quantity,
+         ISNULL(Quantity_shipped, 0) AS Quantity_shipped,
+         Price,
          ISNULL(OptPrice, 0) AS OptPrice, ISNULL(AddonMultP, 0) AS AddonMultP,
          Options, Addons
        FROM Order_Items
@@ -308,35 +329,116 @@ export async function getOrderDetail(orderNo: number): Promise<{
       { orderNo }
     ),
     query<OrderShipment>(
-      `SELECT Shipment_ID, Shipper, ShipType, Tracking, Actual_Shipping, Weight, DateEntered
+      `SELECT Shipment_ID, Shipper, ShipType, Tracking, Actual_Shipping, Weight, DateEntered,
+         ISNULL(Printed_Pack, 0) AS Printed_Pack
        FROM Shipment
        WHERE Order_No = @orderNo
-       ORDER BY Shipment_ID DESC`,
+       ORDER BY Shipment_ID ASC`,
+      { orderNo }
+    ),
+    query<ShipmentItemRow>(
+      `SELECT SI.Shipment_ID, SI.Item_ID, OI.Name, OI.Options, OI.Addons, SI.Quantity
+       FROM Shipment_Items SI
+       JOIN Order_Items OI ON OI.Item_ID = SI.Item_ID
+       WHERE OI.Order_No = @orderNo
+       ORDER BY SI.Shipment_ID, SI.Item_ID`,
       { orderNo }
     ),
   ]);
 
   const order = orders[0] ?? null;
-  if (!order) return { order: null, items: [], billing: null, shipping: null, payments: [], shipments: [] };
+  if (!order) return { order: null, items: [], billing: null, shipping: null, payments: [], shipments: [], shipmentItems: [], user: null };
 
   // Fetch billing + (optionally different) shipping customer records
   const ids = [order.Customer_ID];
   if (order.ShipTo && order.ShipTo !== order.Customer_ID) ids.push(order.ShipTo);
 
-  const customers = await query<OrderCustomer>(
-    `SELECT Customer_ID, FirstName, LastName, Company, Address1, Address2,
-            City, State, Zip, Country, Phone, Email
-     FROM Customers
-     WHERE Customer_ID IN (${ids.map((_, i) => `@cid${i}`).join(",")})`,
-    Object.fromEntries(ids.map((id, i) => [`cid${i}`, id]))
-  );
+  const [customers, userRows] = await Promise.all([
+    query<OrderCustomer>(
+      `SELECT Customer_ID, FirstName, LastName, Company, Address1, Address2,
+              City, State, Zip, Country, Phone, Email
+       FROM Customers
+       WHERE Customer_ID IN (${ids.map((_, i) => `@cid${i}`).join(",")})`,
+      Object.fromEntries(ids.map((id, i) => [`cid${i}`, id]))
+    ),
+    order.User_ID > 0
+      ? query<OrderUser>(
+          `SELECT User_ID, UserName, Email FROM Users WHERE User_ID = @uid`,
+          { uid: order.User_ID }
+        )
+      : Promise.resolve([] as OrderUser[]),
+  ]);
 
   const billing  = customers.find(c => c.Customer_ID === order.Customer_ID) ?? null;
   const shipping = order.ShipTo && order.ShipTo !== order.Customer_ID
     ? customers.find(c => c.Customer_ID === order.ShipTo) ?? null
     : null;
+  const user = userRows[0] ?? null;
 
-  return { order, items, billing, shipping, payments, shipments };
+  return { order, items, billing, shipping, payments, shipments, shipmentItems, user };
+}
+
+export async function updateOrderUser(orderNo: number, userId: number): Promise<void> {
+  await query(
+    `UPDATE Order_No SET User_ID = @userId WHERE Order_No = @orderNo`,
+    { orderNo, userId } as Record<string, number>
+  );
+}
+
+export async function findUserBySearch(search: string): Promise<OrderUser | null> {
+  if (!search.trim()) return null;
+  const isId = /^\d+$/.test(search.trim());
+  const rows = await query<OrderUser>(
+    isId
+      ? `SELECT User_ID, UserName, Email FROM Users WHERE User_ID = @val`
+      : `SELECT User_ID, UserName, Email FROM Users WHERE UserName = @val`,
+    { val: isId ? parseInt(search) : search.trim() } as Record<string, string | number>
+  );
+  return rows[0] ?? null;
+}
+
+export async function addShipment(
+  orderNo: number,
+  shipItems: { itemId: number; qty: number; weight: number }[]
+): Promise<void> {
+  const validItems = shipItems.filter(i => i.qty > 0);
+  if (validItems.length === 0) return;
+
+  const result = await query<{ id: number }>(
+    `INSERT INTO Shipment (Order_No, DateEntered)
+     OUTPUT INSERTED.Shipment_ID AS id
+     VALUES (@orderNo, GETDATE())`,
+    { orderNo }
+  );
+  const shipmentId = result[0]?.id;
+  if (!shipmentId) throw new Error("Failed to create shipment");
+
+  for (const item of validItems) {
+    await query(
+      `INSERT INTO Shipment_Items (Shipment_ID, Item_ID, Quantity) VALUES (@shipmentId, @itemId, @qty)`,
+      { shipmentId, itemId: item.itemId, qty: item.qty } as Record<string, number>
+    );
+    await query(
+      `UPDATE Order_Items SET Quantity_shipped = ISNULL(Quantity_shipped, 0) + @qty WHERE Item_ID = @itemId`,
+      { qty: item.qty, itemId: item.itemId } as Record<string, number>
+    );
+  }
+}
+
+export async function deleteShipment(shipmentId: number): Promise<void> {
+  // Revert quantity_shipped for each item in this shipment
+  const items = await query<{ Item_ID: number; Quantity: number }>(
+    `SELECT Item_ID, Quantity FROM Shipment_Items WHERE Shipment_ID = @shipmentId`,
+    { shipmentId }
+  );
+  for (const item of items) {
+    await query(
+      `UPDATE Order_Items SET Quantity_shipped = ISNULL(Quantity_shipped, 0) - @qty WHERE Item_ID = @itemId`,
+      { qty: item.Quantity, itemId: item.Item_ID } as Record<string, number>
+    );
+  }
+  await query(`DELETE FROM Shipment_Items WHERE Shipment_ID = @shipmentId`, { shipmentId });
+  await query(`DELETE FROM Shipment WHERE Shipment_ID = @shipmentId`, { shipmentId });
 }
 
 export async function updateOrderStatus(orderNo: number, action: string): Promise<void> {

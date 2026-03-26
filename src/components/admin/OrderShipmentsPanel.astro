@@ -1,0 +1,188 @@
+---
+import type { OrderShipment, ShipmentItemRow, OrderItem } from "../../lib/queries/admin-orders";
+
+interface Props {
+  orderId: number;
+  shipments: OrderShipment[];
+  shipmentItems: ShipmentItemRow[];
+  unshippedItems: OrderItem[];
+  orderShipping: number;
+  orderFilled: boolean;
+}
+
+const { orderId, shipments, shipmentItems, unshippedItems, orderShipping, orderFilled } = Astro.props;
+
+// Group shipment items by Shipment_ID
+const shipmentItemMap = new Map<number, ShipmentItemRow[]>();
+for (const si of shipmentItems) {
+  if (!shipmentItemMap.has(si.Shipment_ID)) shipmentItemMap.set(si.Shipment_ID, []);
+  shipmentItemMap.get(si.Shipment_ID)!.push(si);
+}
+
+const totalShippingCost = shipments.reduce((sum, s) => sum + (s.Actual_Shipping ?? 0), 0);
+
+function fmt(n: number) {
+  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+function fmtDate(d: Date | null | undefined) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit" });
+}
+---
+
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+  <div class="px-5 py-3 border-b border-gray-100">
+    <h3 class="text-sm font-semibold text-gray-700">Shipments</h3>
+  </div>
+
+  {shipments.length > 0 && (
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-4 py-2 text-left">Item</th>
+            <th class="px-4 py-2 text-center w-12">Qty</th>
+            <th class="px-4 py-2 text-left">Method / Tracking</th>
+            <th class="px-4 py-2 text-right w-20">Weight</th>
+            <th class="px-4 py-2 text-right w-24">Cost</th>
+            <th class="px-4 py-2 w-44"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {shipments.map(s => {
+            const sItems = shipmentItemMap.get(s.Shipment_ID) ?? [];
+            const firstItem = sItems[0];
+            const extraItems = sItems.slice(1);
+            return (
+              <>
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-2 text-xs text-gray-800">
+                    {firstItem ? (
+                      <>
+                        {firstItem.Name}
+                        {firstItem.Options && <div class="text-gray-400 italic">{firstItem.Options}</div>}
+                        {firstItem.Addons && <div class="text-gray-400 italic">{firstItem.Addons}</div>}
+                      </>
+                    ) : "—"}
+                  </td>
+                  <td class="px-4 py-2 text-center text-xs">{firstItem?.Quantity ?? "—"}</td>
+                  <td class="px-4 py-2 text-xs text-gray-600">
+                    <div>{[s.Shipper, s.ShipType].filter(Boolean).join(" ") || "—"}</div>
+                    {s.Tracking && <div class="font-mono text-blue-600 text-xs">{s.Tracking}</div>}
+                    <div class="text-gray-400">{fmtDate(s.DateEntered)}</div>
+                  </td>
+                  <td class="px-4 py-2 text-right text-xs text-gray-500">
+                    {s.Weight != null ? `${s.Weight} oz` : "—"}
+                  </td>
+                  <td class="px-4 py-2 text-right text-xs">
+                    {s.Actual_Shipping != null ? fmt(s.Actual_Shipping) : "—"}
+                  </td>
+                  <td class="px-4 py-2">
+                    <div class="flex flex-wrap gap-1 justify-end">
+                      <a href={`/admin/orders/${orderId}/packing-slip/${s.Shipment_ID}`} target="_blank"
+                         class={`px-2 py-1 rounded text-xs ${s.Printed_Pack ? "bg-gray-100 text-gray-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
+                        Packing Slip
+                      </a>
+                      {!s.Tracking && (
+                        <a href={`/admin/orders/${orderId}/add-tracking/${s.Shipment_ID}`}
+                           class="px-2 py-1 rounded text-xs bg-blue-600 text-white hover:bg-blue-700">
+                          Add Tracking
+                        </a>
+                      )}
+                      {s.Tracking && !orderFilled && (
+                        <form method="post">
+                          <input type="hidden" name="_action" value="mark_filled" />
+                          <button class="px-2 py-1 rounded text-xs bg-green-600 text-white hover:bg-green-700">
+                            Complete Order
+                          </button>
+                        </form>
+                      )}
+                      {!s.Tracking && (
+                        <form method="post" onsubmit="return confirm('Delete this shipment?')">
+                          <input type="hidden" name="_action" value="delete_shipment" />
+                          <input type="hidden" name="shipment_id" value={s.Shipment_ID} />
+                          <button class="px-2 py-1 rounded text-xs bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600">
+                            Delete
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+                {extraItems.map(ei => (
+                  <tr class="bg-gray-50/50">
+                    <td class="px-4 py-1.5 text-xs text-gray-700 pl-8">
+                      {ei.Name}
+                      {ei.Options && <div class="text-gray-400 italic">{ei.Options}</div>}
+                      {ei.Addons && <div class="text-gray-400 italic">{ei.Addons}</div>}
+                    </td>
+                    <td class="px-4 py-1.5 text-center text-xs">{ei.Quantity}</td>
+                    <td /><td /><td /><td />
+                  </tr>
+                ))}
+              </>
+            );
+          })}
+          <tr class="bg-gray-50 font-semibold">
+            <td class="px-4 py-2 text-xs text-gray-500" colspan={4}>Total Shipping Cost</td>
+            <td class="px-4 py-2 text-right text-xs">{fmt(totalShippingCost)}</td>
+            <td />
+          </tr>
+        </tbody>
+      </table>
+      {totalShippingCost > orderShipping + 0.005 && (
+        <div class="mx-4 mb-3 rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-xs text-red-700 text-center">
+          Shipping cost exceeded: actual {fmt(totalShippingCost)} vs charged {fmt(orderShipping)} — over by <strong>{fmt(totalShippingCost - orderShipping)}</strong>
+        </div>
+      )}
+    </div>
+  )}
+
+  {shipments.length === 0 && unshippedItems.length === 0 && (
+    <p class="px-5 py-4 text-sm text-gray-400">No shipments recorded.</p>
+  )}
+
+  {unshippedItems.length > 0 && (
+    <div class="border-t border-gray-100 px-5 py-4">
+      <h4 class="text-sm font-semibold text-gray-700 mb-3">New Shipment</h4>
+      <form method="post">
+        <input type="hidden" name="_action" value="add_shipment" />
+        <input type="hidden" name="item_list" value={unshippedItems.map(i => i.Item_ID).join(",")} />
+        <table class="w-full text-sm mb-3">
+          <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="px-3 py-2 text-left">Item</th>
+              <th class="px-3 py-2 text-center w-20">Ordered</th>
+              <th class="px-3 py-2 text-center w-20">Shipped</th>
+              <th class="px-3 py-2 text-center w-28">Qty This Shipment</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {unshippedItems.map(item => {
+              const remaining = item.Quantity - item.Quantity_shipped;
+              return (
+                <tr>
+                  <td class="px-3 py-2 text-xs text-gray-800">
+                    {item.Name}
+                    {item.Options && <div class="text-gray-400 italic">{item.Options}</div>}
+                    {item.Addons && <div class="text-gray-400 italic">{item.Addons}</div>}
+                    {item.SKU && <div class="text-gray-400">{item.SKU}</div>}
+                  </td>
+                  <td class="px-3 py-2 text-center text-xs">{item.Quantity}</td>
+                  <td class="px-3 py-2 text-center text-xs">{item.Quantity_shipped}</td>
+                  <td class="px-3 py-2 text-center">
+                    <input type="number" name={`qty_${item.Item_ID}`} value={remaining} min="0" max={remaining}
+                           class="w-20 border border-gray-300 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-semibold hover:bg-blue-700">
+          Add Shipment
+        </button>
+      </form>
+    </div>
+  )}
+</div>
