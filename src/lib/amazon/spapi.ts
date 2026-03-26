@@ -5,9 +5,12 @@
  *  1. Exchange REFRESH_TOKEN → short-lived access_token via LWA
  *  2. Sign every request with AWS Signature Version 4 (service: execute-api)
  *  3. Attach x-amz-access-token + signed Authorization header
+ *
+ * Credentials are read from the amazon_settings DB table (ID=1).
  */
 
 import crypto from "node:crypto";
+import { getAmazonSettings } from "../queries/admin-amazon";
 
 const BASE_URL = "https://sellingpartnerapi-na.amazon.com";
 const LWA_URL  = "https://api.amazon.com/auth/o2/token";
@@ -39,11 +42,16 @@ function getSigningKey(secretKey: string, dateStamp: string): Buffer {
 // ── LWA token exchange ─────────────────────────────────────────────────────
 
 export async function getAccessToken(): Promise<string> {
+  const settings = await getAmazonSettings();
+  if (!settings?.Refresh_Token || !settings?.lws_client_id || !settings?.lws_client_secret) {
+    throw new Error("Amazon credentials missing from database (Refresh_Token, lws_client_id, or lws_client_secret not set)");
+  }
+
   const body = new URLSearchParams({
     grant_type:    "refresh_token",
-    refresh_token: process.env.AMAZON_REFRESH_TOKEN ?? "",
-    client_id:     process.env.AMAZON_LWS_CLIENT_ID ?? "",
-    client_secret: process.env.AMAZON_LWS_CLIENT_SECRET ?? "",
+    refresh_token: settings.Refresh_Token,
+    client_id:     settings.lws_client_id,
+    client_secret: settings.lws_client_secret,
   });
 
   const res = await fetch(LWA_URL, {
@@ -69,8 +77,13 @@ export async function makeRequest<T>(
   query:   Record<string, string | string[]> = {},
   body?:   string,
 ): Promise<T> {
-  const accessKey  = process.env.AMAZON_AWS_KEY ?? "";
-  const secretKey  = process.env.AMAZON_SECRET_KEY ?? "";
+  const settings = await getAmazonSettings();
+  if (!settings?.AWS_Key || !settings?.Secret_Key) {
+    throw new Error("Amazon AWS credentials missing from database (AWS_Key or Secret_Key not set)");
+  }
+
+  const accessKey   = settings.AWS_Key;
+  const secretKey   = settings.Secret_Key;
   const accessToken = await getAccessToken();
 
   // Timestamps
@@ -227,8 +240,11 @@ export interface GetOrdersParams {
 }
 
 export async function getOrders(params: GetOrdersParams = {}): Promise<{ orders: SPOrder[]; nextToken?: string }> {
+  const settings = await getAmazonSettings();
+  const marketplaceId = settings?.Marketplace_ID ?? "ATVPDKIKX0DER";
+
   const query: Record<string, string | string[]> = {
-    MarketplaceIds: [process.env.AMAZON_MARKETPLACE_ID ?? "ATVPDKIKX0DER"],
+    MarketplaceIds: [marketplaceId],
   };
   if (params.lastUpdatedAfter)    query.LastUpdatedAfter  = params.lastUpdatedAfter;
   if (params.lastUpdatedBefore)   query.LastUpdatedBefore = params.lastUpdatedBefore;

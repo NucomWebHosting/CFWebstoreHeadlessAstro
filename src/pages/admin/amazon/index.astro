@@ -1,40 +1,62 @@
 ---
 export const prerender = false;
 import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getAmazonSettings, saveRefreshToken } from "../../../lib/queries/admin-amazon";
 import { getMarketplaceParticipations } from "../../../lib/amazon/spapi";
 import type { MarketplaceParticipation } from "../../../lib/amazon/spapi";
 
+let settings = await getAmazonSettings();
 let participations: MarketplaceParticipation[] = [];
 let error = "";
+let successMsg = "";
 let tested = false;
 
 if (Astro.request.method === "POST") {
-  tested = true;
-  try {
-    participations = await getMarketplaceParticipations();
-  } catch (e: unknown) {
-    error = e instanceof Error ? e.message : String(e);
+  const form = await Astro.request.formData();
+  const action = form.get("action");
+
+  if (action === "save_token") {
+    const token = (form.get("refresh_token") as string ?? "").trim();
+    if (!token) {
+      error = "Refresh token cannot be empty.";
+    } else {
+      try {
+        await saveRefreshToken(token);
+        successMsg = "Refresh token saved.";
+        settings = await getAmazonSettings();
+      } catch (e: unknown) {
+        error = e instanceof Error ? e.message : String(e);
+      }
+    }
+  } else if (action === "test") {
+    tested = true;
+    try {
+      participations = await getMarketplaceParticipations();
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
+    }
   }
 }
 
-// Credential status display
-const CRED_VARS = [
-  { key: "AMAZON_LWS_CLIENT_ID",     label: "LWS Client ID"     },
-  { key: "AMAZON_LWS_CLIENT_SECRET", label: "LWS Client Secret" },
-  { key: "AMAZON_REFRESH_TOKEN",     label: "Refresh Token"     },
-  { key: "AMAZON_AWS_KEY",           label: "AWS Access Key"    },
-  { key: "AMAZON_SECRET_KEY",        label: "AWS Secret Key"    },
-  { key: "AMAZON_SELLER_ID",         label: "Seller ID"         },
-  { key: "AMAZON_MARKETPLACE_ID",    label: "Marketplace ID"    },
-];
+const CRED_FIELDS = [
+  { key: "lws_client_id",    label: "LWA Client ID"     },
+  { key: "lws_client_secret", label: "LWA Client Secret" },
+  { key: "Refresh_Token",    label: "Refresh Token"      },
+  { key: "AWS_Key",          label: "AWS Access Key"     },
+  { key: "Secret_Key",       label: "AWS Secret Key"     },
+  { key: "Seller_ID",        label: "Seller ID"          },
+  { key: "Marketplace_ID",   label: "Marketplace ID"     },
+] as const;
 
-function maskValue(val: string | undefined): string {
+type CredKey = typeof CRED_FIELDS[number]["key"];
+
+function maskValue(val: string | null | undefined): string {
   if (!val) return "—";
   if (val.length <= 8) return "●".repeat(val.length);
   return val.slice(0, 4) + "●".repeat(Math.min(val.length - 8, 16)) + val.slice(-4);
 }
 
-const allSet = CRED_VARS.every(c => !!process.env[c.key]);
+const allSet = CRED_FIELDS.every(f => !!settings?.[f.key as CredKey]);
 ---
 
 <AdminLayout title="Amazon Marketplace">
@@ -63,33 +85,37 @@ const allSet = CRED_VARS.every(c => !!process.env[c.key]);
 
   <div class="max-w-2xl space-y-6">
 
-    {/* Error banner */}
     {error && (
       <div class="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 break-all">
         <strong class="font-medium">Error:</strong> {error}
       </div>
     )}
+    {successMsg && (
+      <div class="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+        {successMsg}
+      </div>
+    )}
 
-    {/* Credentials */}
+    {/* Credentials from DB */}
     <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       <div class="px-5 py-4 border-b border-gray-100">
         <h2 class="font-semibold text-gray-800">Credentials</h2>
-        <p class="text-xs text-gray-400 mt-0.5">Read from <code class="bg-gray-100 px-1 rounded">.env</code>. Edit the file to update.</p>
+        <p class="text-xs text-gray-400 mt-0.5">Stored in <code class="bg-gray-100 px-1 rounded">amazon_settings</code> (ID&nbsp;=&nbsp;1). Edit in the database or use the form below.</p>
       </div>
       <table class="w-full text-sm">
         <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
           <tr>
-            <th class="px-5 py-2.5 text-left">Variable</th>
+            <th class="px-5 py-2.5 text-left">Field</th>
             <th class="px-5 py-2.5 text-center w-16">Set</th>
             <th class="px-5 py-2.5 text-left font-mono">Value</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
-          {CRED_VARS.map(c => {
-            const val = process.env[c.key];
+          {CRED_FIELDS.map(f => {
+            const val = settings?.[f.key as CredKey];
             return (
               <tr>
-                <td class="px-5 py-2.5 text-gray-700">{c.label}</td>
+                <td class="px-5 py-2.5 text-gray-700">{f.label}</td>
                 <td class="px-5 py-2.5 text-center">
                   {val
                     ? <span class="text-green-600 font-bold">✓</span>
@@ -104,6 +130,7 @@ const allSet = CRED_VARS.every(c => !!process.env[c.key]);
       </table>
       <div class="px-5 py-3 border-t border-gray-100">
         <form method="post">
+          <input type="hidden" name="action" value="test" />
           <button
             type="submit"
             disabled={!allSet}
@@ -118,7 +145,38 @@ const allSet = CRED_VARS.every(c => !!process.env[c.key]);
       </div>
     </div>
 
-    {/* Results */}
+    {/* Save refresh token */}
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Refresh Token</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Paste the LWA refresh token obtained from Amazon Seller Central.</p>
+      </div>
+      <form method="post" class="px-5 py-4 space-y-3">
+        <input type="hidden" name="action" value="save_token" />
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Refresh Token</label>
+          <input
+            type="text"
+            name="refresh_token"
+            placeholder={settings?.Refresh_Token ? "●●●●●●●● (already set — paste to replace)" : "Amo|..."}
+            class="w-full border border-gray-300 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+        </div>
+        <button type="submit" class="bg-slate-700 text-white px-4 py-2 rounded text-sm font-medium hover:bg-slate-800">
+          Save Token
+        </button>
+      </form>
+    </div>
+
+    {/* DB migration note */}
+    {!settings?.Refresh_Token && settings && (
+      <div class="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+        <strong class="font-medium">Note:</strong> If saving fails, the <code class="bg-amber-100 px-1 rounded">Refresh_Token</code> column may not exist yet. Run this SQL once:
+        <pre class="mt-2 text-xs bg-amber-100 rounded p-2 overflow-x-auto">ALTER TABLE amazon_settings ADD Refresh_Token VARCHAR(1000) NULL;</pre>
+      </div>
+    )}
+
+    {/* Test results */}
     {tested && !error && (
       <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div class="px-5 py-4 border-b border-gray-100">
