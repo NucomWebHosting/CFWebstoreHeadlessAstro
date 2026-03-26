@@ -65,17 +65,17 @@ function dateVal(d: Date | null | undefined) {
       <div class="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Min Qty to Buy</label>
-          <input type="number" name="min_qty" min="0" value={pricing?.MinQty ?? ""}
+          <input type="number" name="min_qty" min="0" value={pricing?.Min_Order ?? ""}
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Prep Days</label>
-          <input type="number" name="prep_days" min="0" value={pricing?.PrepDays ?? ""}
+          <input type="number" name="prep_days" min="0" value={pricing?.Prep_days ?? ""}
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Reorder Level</label>
-          <input type="number" name="reorder" min="0" value={pricing?.ReorderLevel ?? ""}
+          <input type="number" name="reorder" min="0" value={pricing?.reorder_level ?? ""}
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         <div>
@@ -87,8 +87,8 @@ function dateVal(d: Date | null | undefined) {
       <div class="px-6 pb-5">
         <label class="block text-sm font-medium text-gray-700 mb-2">Require Multiples of Min Qty?</label>
         <div class="flex gap-4 text-sm">
-          <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="req_mult" value="1" checked={pricing?.RequireMinQtyMultiple} /> Yes</label>
-          <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="req_mult" value="0" checked={!pricing?.RequireMinQtyMultiple} /> No</label>
+          <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="req_mult" value="1" checked={pricing?.Mult_Min} /> Yes</label>
+          <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="req_mult" value="0" checked={!pricing?.Mult_Min} /> No</label>
         </div>
       </div>
     </div>
@@ -112,11 +112,6 @@ function dateVal(d: Date | null | undefined) {
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Height (in)</label>
           <input type="number" name="pack_height" step="0.01" min="0" value={pricing?.Pack_Height ?? ""}
-                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Pack Weight (lbs)</label>
-          <input type="number" name="pack_weight" step="0.01" min="0" value={pricing?.PackWeight ?? ""}
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
       </div>

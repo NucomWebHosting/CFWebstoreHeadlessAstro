@@ -6,21 +6,20 @@ export interface PricingFields {
   Product_ID: number;
   Sale_Start: Date | null;
   Sale_End: Date | null;
-  MinQty: number | null;
-  RequireMinQtyMultiple: boolean;
-  PrepDays: number | null;
-  ReorderLevel: number | null;
+  Min_Order: number | null;
+  Mult_Min: boolean;
+  Prep_days: number | null;
+  reorder_level: number | null;
   Pack_Length: number | null;
   Pack_Width: number | null;
   Pack_Height: number | null;
-  PackWeight: number | null;
   Shipping: number | null;
 }
 
 export async function getPricingFields(id: number): Promise<PricingFields | null> {
   const rows = await query<PricingFields>(
-    `SELECT Product_ID, Sale_Start, Sale_End, MinQty, RequireMinQtyMultiple,
-            PrepDays, ReorderLevel, Pack_Length, Pack_Width, Pack_Height, PackWeight, Shipping
+    `SELECT Product_ID, Sale_Start, Sale_End, Min_Order, Mult_Min,
+            Prep_days, reorder_level, Pack_Length, Pack_Width, Pack_Height, Shipping
      FROM   Products WHERE Product_ID = @id`,
     { id }
   );
@@ -33,30 +32,28 @@ export async function updatePricingFields(id: number, data: FormData): Promise<v
   const iopt = (k: string) => { const v = s(k); return v ? (parseInt(v) || null) : null; };
   await query(
     `UPDATE Products SET
-       Sale_Start            = @sale_start,
-       Sale_End              = @sale_end,
-       MinQty                = @min_qty,
-       RequireMinQtyMultiple = @req_mult,
-       PrepDays              = @prep_days,
-       ReorderLevel          = @reorder,
-       Pack_Length           = @pack_length,
-       Pack_Width            = @pack_width,
-       Pack_Height           = @pack_height,
-       PackWeight            = @pack_weight,
-       Shipping              = @shipping
+       Sale_Start    = @sale_start,
+       Sale_End      = @sale_end,
+       Min_Order     = @min_order,
+       Mult_Min      = @req_mult,
+       Prep_days     = @prep_days,
+       reorder_level = @reorder,
+       Pack_Length   = @pack_length,
+       Pack_Width    = @pack_width,
+       Pack_Height   = @pack_height,
+       Shipping      = @shipping
      WHERE Product_ID = @id`,
     {
       id,
       sale_start:  s("sale_start"),
       sale_end:    s("sale_end"),
-      min_qty:     iopt("min_qty"),
+      min_order:   iopt("min_qty"),
       req_mult:    data.get("req_mult") === "1" ? 1 : 0,
       prep_days:   iopt("prep_days"),
       reorder:     iopt("reorder"),
       pack_length: nopt("pack_length"),
       pack_width:  nopt("pack_width"),
       pack_height: nopt("pack_height"),
-      pack_weight: nopt("pack_weight"),
       shipping:    nopt("shipping"),
     } as Record<string, string | number | null>
   );
