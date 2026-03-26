@@ -697,7 +697,7 @@ export interface ManufacturerRow {
 
 export async function getManufacturers(): Promise<ManufacturerRow[]> {
   return query<ManufacturerRow>(
-    `SELECT account_id, Account_name FROM Accounts WHERE Type1 = 'manufacturer' ORDER BY Account_name`
+    `SELECT account_id, Account_name FROM Account WHERE Type1 = 'manufacturer' ORDER BY Account_name`
   );
 }
 
