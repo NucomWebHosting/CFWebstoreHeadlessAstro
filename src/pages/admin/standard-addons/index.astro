@@ -1,0 +1,123 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getStdAddons, ADDON_TYPES } from "../../../lib/queries/admin-std-addons";
+import type { StdAddonFilters } from "../../../lib/queries/admin-std-addons";
+
+const sp = Astro.url.searchParams;
+const filters: StdAddonFilters = {
+  name:     sp.get("name")     || undefined,
+  type:     sp.get("type")     || undefined,
+  display:  sp.get("display")  || undefined,
+  required: sp.get("required") || undefined,
+};
+const hasFilters = Object.values(filters).some(Boolean);
+const addons = await getStdAddons(filters);
+---
+
+<AdminLayout title="Standard Addons">
+
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-xl font-semibold text-gray-800">Standard Addons</h1>
+    <a href="/admin/standard-addons/new"
+       class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">
+      + New Addon
+    </a>
+  </div>
+
+  <form method="get" class="mb-6 bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-4 flex flex-wrap gap-4 items-end">
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Name</label>
+      <input type="text" name="name" value={filters.name ?? ""}
+             class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Type</label>
+      <select name="type" class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+        <option value="">All</option>
+        {Object.entries(ADDON_TYPES).map(([val, label]) => (
+          <option value={val} selected={filters.type === val}>{label}</option>
+        ))}
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Display</label>
+      <select name="display" class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+        <option value="">All</option>
+        <option value="1" selected={filters.display === "1"}>Yes</option>
+        <option value="0" selected={filters.display === "0"}>No</option>
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Required</label>
+      <select name="required" class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+        <option value="">All</option>
+        <option value="1" selected={filters.required === "1"}>Yes</option>
+        <option value="0" selected={filters.required === "0"}>No</option>
+      </select>
+    </div>
+    <div class="flex gap-2">
+      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Search</button>
+      <a href="/admin/standard-addons" class="px-4 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">Reset</a>
+    </div>
+  </form>
+
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    {addons.length === 0 ? (
+      <p class="px-5 py-10 text-center text-sm text-gray-400">
+        {hasFilters ? "No addons match your search." : "No standard addons yet."}
+      </p>
+    ) : (
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-5 py-3 text-left">Name</th>
+            <th class="px-5 py-3 text-left">Type</th>
+            <th class="px-5 py-3 text-right">Price</th>
+            <th class="px-5 py-3 text-center">Display</th>
+            <th class="px-5 py-3 text-center">Required</th>
+            <th class="px-5 py-3 text-center">Qty Mult</th>
+            <th class="px-5 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {addons.map(a => (
+            <tr class="hover:bg-gray-50">
+              <td class="px-5 py-3">
+                <p class="font-medium text-gray-800">{a.Std_Name}</p>
+                {a.Std_Prompt && <p class="text-xs text-gray-400 mt-0.5">{a.Std_Prompt}</p>}
+              </td>
+              <td class="px-5 py-3 text-xs text-gray-500">{ADDON_TYPES[a.Std_Type] ?? a.Std_Type}</td>
+              <td class="px-5 py-3 text-right font-mono text-xs text-gray-700">
+                {a.Std_Price > 0 ? `+$${a.Std_Price.toFixed(2)}` : "—"}
+              </td>
+              <td class="px-5 py-3 text-center">
+                {a.Std_Display
+                  ? <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Yes</span>
+                  : <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">No</span>
+                }
+              </td>
+              <td class="px-5 py-3 text-center">
+                {a.Std_Required
+                  ? <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">Yes</span>
+                  : <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">No</span>
+                }
+              </td>
+              <td class="px-5 py-3 text-center text-xs text-gray-500">{a.Std_ProdMult ? "Yes" : "No"}</td>
+              <td class="px-5 py-3 text-right">
+                <a href={`/admin/standard-addons/${a.Std_ID}`}
+                   class="px-3 py-1 text-xs rounded bg-slate-100 text-slate-700 hover:bg-slate-200">
+                  Edit
+                </a>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+    <div class="px-5 py-3 border-t border-gray-100 text-xs text-gray-400">
+      {addons.length} addon{addons.length !== 1 ? "s" : ""}
+    </div>
+  </div>
+
+</AdminLayout>

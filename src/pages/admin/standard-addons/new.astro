@@ -1,0 +1,143 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { createStdAddon, ADDON_TYPES } from "../../../lib/queries/admin-std-addons";
+import type { StdAddonData } from "../../../lib/queries/admin-std-addons";
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const name = (form.get("std_name") as string ?? "").trim();
+  if (!name) {
+    error = "Addon name is required.";
+  } else {
+    try {
+      const data: StdAddonData = {
+        Std_Name:            name,
+        Std_Prompt:          (form.get("std_prompt")  as string ?? "").trim(),
+        Std_Desc:            (form.get("std_desc")    as string ?? "").trim(),
+        Std_Message:         (form.get("std_message") as string ?? "").trim(),
+        Std_Type:            (form.get("std_type")    as string ?? "textbox"),
+        Std_Price:           parseFloat(form.get("std_price")    as string) || 0,
+        Std_Price_Wholesale: parseFloat(form.get("std_price_ws") as string) || 0,
+        Std_Weight:          parseFloat(form.get("std_weight")   as string) || 0,
+        Std_Display:         form.get("std_display")  === "1" ? 1 : 0,
+        Std_ProdMult:        form.get("std_prodmult") === "1" ? 1 : 0,
+        Std_Required:        form.get("std_required") === "1" ? 1 : 0,
+      };
+      const newId = await createStdAddon(data);
+      return Astro.redirect(`/admin/standard-addons/${newId}`);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+}
+---
+
+<AdminLayout title="New Standard Addon">
+  <div class="mb-5">
+    <a href="/admin/standard-addons" class="text-sm text-blue-600 hover:underline">← Standard Addons</a>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <div class="max-w-xl bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="px-5 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">New Standard Addon</h2>
+    </div>
+    <form method="post" class="px-5 py-5 space-y-4">
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Name <span class="text-red-500">*</span></label>
+          <input type="text" name="std_name" maxlength="50" required
+                 class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Prompt <span class="text-gray-400">(shown to customer)</span></label>
+          <input type="text" name="std_prompt" maxlength="100"
+                 class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Description in Cart</label>
+        <input type="text" name="std_desc" maxlength="100"
+               class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Sales Message <span class="text-gray-400">(shown above addon)</span></label>
+        <textarea name="std_message" rows="2"
+                  class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"></textarea>
+      </div>
+
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Addon Type</label>
+        <select name="std_type"
+                class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          {Object.entries(ADDON_TYPES).map(([val, label]) => (
+            <option value={val}>{label}</option>
+          ))}
+        </select>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Price (+$)</label>
+          <input type="number" name="std_price" value="0" step="any"
+                 class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Wholesale (+$)</label>
+          <input type="number" name="std_price_ws" value="0" step="any"
+                 class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Weight (+)</label>
+          <input type="number" name="std_weight" value="0" step="any" min="0"
+                 class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-6">
+        <div>
+          <label class="block text-xs text-gray-500 mb-2">Display in store?</label>
+          <div class="flex gap-4 text-sm">
+            <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_display" value="1" checked /> Yes</label>
+            <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_display" value="0" /> No</label>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-2">Required?</label>
+          <div class="flex gap-4 text-sm">
+            <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_required" value="1" /> Yes</label>
+            <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_required" value="0" checked /> No</label>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-2">Qty multiplies price &amp; weight?</label>
+          <div class="flex gap-4 text-sm">
+            <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_prodmult" value="1" /> Yes</label>
+            <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_prodmult" value="0" checked /> No</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-2 flex gap-3">
+        <button type="submit"
+                class="bg-blue-600 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-700">
+          Create Addon
+        </button>
+        <a href="/admin/standard-addons"
+           class="px-5 py-2 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+          Cancel
+        </a>
+      </div>
+
+    </form>
+  </div>
+</AdminLayout>
