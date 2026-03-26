@@ -4,18 +4,18 @@ import { query } from "../db";
 
 export interface InfoFields {
   Product_ID: number;
-  Google_Category: string | null;
-  Google_Brand: string | null;
-  Google_Condition: string | null;
-  Google_Gender: string | null;
-  Google_Age_Group: string | null;
+  google_product_category: string | null;
+  google_brand: string | null;
+  google_condition: string | null;
+  google_gender: string | null;
+  google_age: string | null;
   ProdType_ID: number | null;
 }
 
 export async function getInfoFields(id: number): Promise<InfoFields | null> {
   const rows = await query<InfoFields>(
-    `SELECT Product_ID, Google_Category, Google_Brand, Google_Condition,
-            Google_Gender, Google_Age_Group, ProdType_ID
+    `SELECT Product_ID, google_product_category, google_brand, google_condition,
+            google_gender, google_age, ProdType_ID
      FROM   Products WHERE Product_ID = @id`,
     { id }
   );
@@ -26,11 +26,11 @@ export async function saveInfoFields(id: number, data: FormData): Promise<void> 
   const s = (k: string) => (data.get(k) as string | null)?.trim() || null;
   await query(
     `UPDATE Products SET
-       Google_Category   = @google_cat,
-       Google_Brand      = @google_brand,
-       Google_Condition  = @google_cond,
-       Google_Gender     = @google_gender,
-       Google_Age_Group  = @google_age
+       google_product_category = @google_cat,
+       google_brand            = @google_brand,
+       google_condition        = @google_cond,
+       google_gender           = @google_gender,
+       google_age              = @google_age
      WHERE Product_ID = @id`,
     {
       id,

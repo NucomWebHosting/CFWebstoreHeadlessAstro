@@ -77,12 +77,12 @@ const successMsg = saved === "save_google" ? "Google fields saved."
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Google Product Category</label>
-            <input type="text" name="google_category" value={info?.Google_Category ?? ""}
+            <input type="text" name="google_category" value={info?.google_product_category ?? ""}
                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Brand / Manufacturer</label>
-            <input type="text" name="google_brand" value={info?.Google_Brand ?? ""}
+            <input type="text" name="google_brand" value={info?.google_brand ?? ""}
                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
@@ -92,7 +92,7 @@ const successMsg = saved === "save_google" ? "Google fields saved."
           <div class="flex gap-4 text-sm">
             {["new", "used", "refurbished"].map(c => (
               <label class="flex items-center gap-1.5 cursor-pointer capitalize">
-                <input type="radio" name="google_condition" value={c} checked={info?.Google_Condition === c} />
+                <input type="radio" name="google_condition" value={c} checked={info?.google_condition === c} />
                 {c}
               </label>
             ))}
@@ -105,7 +105,7 @@ const successMsg = saved === "save_google" ? "Google fields saved."
             <div class="flex gap-4 text-sm flex-wrap">
               {[["", "N/A"], ["male", "Male"], ["female", "Female"]].map(([val, lbl]) => (
                 <label class="flex items-center gap-1.5 cursor-pointer">
-                  <input type="radio" name="google_gender" value={val} checked={info?.Google_Gender === val || (!info?.Google_Gender && val === "")} />
+                  <input type="radio" name="google_gender" value={val} checked={info?.google_gender === val || (!info?.google_gender && val === "")} />
                   {lbl}
                 </label>
               ))}
@@ -116,7 +116,7 @@ const successMsg = saved === "save_google" ? "Google fields saved."
             <div class="flex gap-4 text-sm flex-wrap">
               {[["", "N/A"], ["adult", "Adult"], ["kids", "Kids"], ["toddler", "Toddler"], ["infant", "Infant"], ["newborn", "Newborn"]].map(([val, lbl]) => (
                 <label class="flex items-center gap-1.5 cursor-pointer">
-                  <input type="radio" name="google_age_group" value={val} checked={info?.Google_Age_Group === val || (!info?.Google_Age_Group && val === "")} />
+                  <input type="radio" name="google_age_group" value={val} checked={info?.google_age === val || (!info?.google_age && val === "")} />
                   {lbl}
                 </label>
               ))}
