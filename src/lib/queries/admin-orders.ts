@@ -403,49 +403,11 @@ export async function findUserBySearch(search: string): Promise<OrderUser | null
   return rows[0] ?? null;
 }
 
-export async function addShipment(
-  orderNo: number,
-  shipItems: { itemId: number; qty: number; weight: number }[]
-): Promise<void> {
-  const validItems = shipItems.filter(i => i.qty > 0);
-  if (validItems.length === 0) return;
-
-  const result = await query<{ id: number }>(
-    `INSERT INTO Shipment (Order_No, DateEntered)
-     OUTPUT INSERTED.Shipment_ID AS id
-     VALUES (@orderNo, GETDATE())`,
-    { orderNo }
-  );
-  const shipmentId = result[0]?.id;
-  if (!shipmentId) throw new Error("Failed to create shipment");
-
-  for (const item of validItems) {
-    await query(
-      `INSERT INTO Shipment_Items (Shipment_ID, Item_ID, Quantity) VALUES (@shipmentId, @itemId, @qty)`,
-      { shipmentId, itemId: item.itemId, qty: item.qty } as Record<string, number>
-    );
-    await query(
-      `UPDATE Order_Items SET Quantity_shipped = ISNULL(Quantity_shipped, 0) + @qty WHERE Item_ID = @itemId`,
-      { qty: item.qty, itemId: item.itemId } as Record<string, number>
-    );
-  }
-}
-
-export async function deleteShipment(shipmentId: number): Promise<void> {
-  // Revert quantity_shipped for each item in this shipment
-  const items = await query<{ Item_ID: number; Quantity: number }>(
-    `SELECT Item_ID, Quantity FROM Shipment_Items WHERE Shipment_ID = @shipmentId`,
-    { shipmentId }
-  );
-  for (const item of items) {
-    await query(
-      `UPDATE Order_Items SET Quantity_shipped = ISNULL(Quantity_shipped, 0) - @qty WHERE Item_ID = @itemId`,
-      { qty: item.Quantity, itemId: item.Item_ID } as Record<string, number>
-    );
-  }
-  await query(`DELETE FROM Shipment_Items WHERE Shipment_ID = @shipmentId`, { shipmentId });
-  await query(`DELETE FROM Shipment WHERE Shipment_ID = @shipmentId`, { shipmentId });
-}
+export { addShipment, deleteShipment } from "./admin-order-shipments";
+export type { ShipmentRow, ShipmentTrackingData } from "./admin-order-shipments";
+export { getShipmentForTracking, updateShipmentTracking } from "./admin-order-shipments";
+export { voidPayment, addManualPayment } from "./admin-order-payments";
+export type { ManualPaymentData } from "./admin-order-payments";
 
 export async function updateOrderStatus(orderNo: number, action: string): Promise<void> {
   const allowed = ["mark_paid","mark_unpaid","mark_process","mark_filled","mark_void","mark_unvoid"];
@@ -463,26 +425,4 @@ export async function updateOrderStatus(orderNo: number, action: string): Promis
 
 export async function saveOrderNotes(orderNo: number, notes: string): Promise<void> {
   await query("UPDATE Order_No SET Notes=@notes WHERE Order_No=@orderNo", { orderNo, notes });
-}
-
-export async function voidPayment(paymentId: number): Promise<void> {
-  await query(`UPDATE Payment SET Voided=1, Status='CANCELED' WHERE Payment_ID=@paymentId`, { paymentId });
-}
-
-export interface ManualPaymentData {
-  amount: number;
-  offlinePayment: string; // Cash | Check | Purchase Order | Offline | Other
-  authNumber: string;
-}
-
-export async function addManualPayment(orderNo: number, d: ManualPaymentData): Promise<void> {
-  await query(
-    `INSERT INTO Payment (Order_No, PaymentDateTime, Amount, OfflinePayment, AuthNumber, Voided)
-     VALUES (@orderNo, GETDATE(), @amount, @offlinePayment, @authNumber, 0)`,
-    { orderNo, amount: d.amount, offlinePayment: d.offlinePayment || "Offline", authNumber: d.authNumber || "" } as Record<string, string | number>
-  );
-  await query(
-    `UPDATE Order_No SET Paid = CASE WHEN OrderTotal <= (SELECT ISNULL(SUM(Amount),0) FROM Payment WHERE Order_No=@orderNo AND Voided=0) THEN 1 ELSE Paid END WHERE Order_No=@orderNo`,
-    { orderNo }
-  );
 }

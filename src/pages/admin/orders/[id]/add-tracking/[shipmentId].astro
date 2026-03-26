@@ -1,0 +1,187 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../../components/layout/AdminLayout.astro";
+import { getOrderDetail, updateOrderStatus } from "../../../../../lib/queries/admin-orders";
+import { getShipmentForTracking, updateShipmentTracking } from "../../../../../lib/queries/admin-order-shipments";
+
+const orderId   = Number(Astro.params.id);
+const shipmentId = Number(Astro.params.shipmentId);
+if (!orderId || !shipmentId) return new Response(null, { status: 404 });
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const submit = (form.get("submit") as string) ?? "";
+  try {
+    await updateShipmentTracking(shipmentId, {
+      shipper:         (form.get("shipper")          as string) ?? "",
+      shipType:        (form.get("shiptype")          as string) ?? "",
+      tracking:        (form.get("tracking")          as string) ?? "",
+      actualShipping:  parseFloat((form.get("actual_shipping") as string) ?? "") || null,
+    });
+    if (submit === "complete_order") {
+      await updateOrderStatus(orderId, "mark_filled");
+    }
+    return Astro.redirect(`/admin/orders/${orderId}?saved=1`);
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+const [shipment, detailResult] = await Promise.all([
+  getShipmentForTracking(shipmentId),
+  getOrderDetail(orderId),
+]);
+
+if (!shipment || !detailResult.order) return new Response(null, { status: 404 });
+const { order, billing } = detailResult;
+
+const CARRIERS = [
+  { label: "UPS Ground",              shipper: "UPS",   method: "Ground" },
+  { label: "UPS 2nd Day Air",         shipper: "UPS",   method: "2nd Day Air" },
+  { label: "UPS Next Day Air",        shipper: "UPS",   method: "Next Day Air" },
+  { label: "USPS Priority Mail",      shipper: "USPS",  method: "Priority Mail" },
+  { label: "USPS First Class",        shipper: "USPS",  method: "First Class" },
+  { label: "USPS Priority Express",   shipper: "USPS",  method: "Priority Express" },
+  { label: "FedEx Ground",            shipper: "FedEx", method: "Ground" },
+  { label: "FedEx 2Day",              shipper: "FedEx", method: "2Day" },
+  { label: "FedEx Overnight",         shipper: "FedEx", method: "Overnight" },
+  { label: "DHL Express",             shipper: "DHL",   method: "Express" },
+  { label: "Drop Ship",               shipper: "",      method: "DropShip" },
+  { label: "In-Store Pickup",         shipper: "",      method: "In-Store Pickup" },
+  { label: "Other",                   shipper: "",      method: "Other" },
+];
+
+// Pre-select the current shipment's carrier/method combination
+const currentKey = [shipment.Shipper, shipment.ShipType].filter(Boolean).join(" ");
+---
+
+<AdminLayout title={`Add Tracking — Order #${order.Order_No}`}>
+
+  <div class="flex items-center gap-3 mb-5">
+    <a href={`/admin/orders/${orderId}`} class="text-sm text-blue-600 hover:underline">
+      ← Order #{order.Order_No}
+    </a>
+    <h2 class="text-lg font-semibold text-gray-800">Add Tracking</h2>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <div class="max-w-lg">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+
+      <!-- Order summary -->
+      <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 text-sm text-gray-600 space-y-0.5">
+        <div><strong class="text-gray-800">Order #{order.Order_No}</strong> &mdash; {new Date(order.DateOrdered).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
+        {billing && (
+          <div>
+            <a href={`mailto:${billing.Email}`} class="hover:underline">
+              {[billing.FirstName, billing.LastName].filter(Boolean).join(" ")}
+            </a>
+          </div>
+        )}
+      </div>
+
+      <form method="post" class="p-6 space-y-5">
+
+        <!-- Send email -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Send Shipping Email to Customer</label>
+          <div class="flex gap-4 text-sm">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="email_customer" value="1" checked /> Yes
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="email_customer" value="0" /> No
+            </label>
+          </div>
+          <p class="mt-1 text-xs text-gray-400">
+            Sends a shipping notification including the tracking link. If no tracking number is entered, the carrier selection is omitted from the email.
+          </p>
+        </div>
+
+        <!-- Ship method -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Ship Method</label>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-xs text-gray-500 mb-0.5">Carrier</label>
+              <input type="text" name="shipper" value={shipment.Shipper ?? ""}
+                     list="shipper-list"
+                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <datalist id="shipper-list">
+                {["UPS","USPS","FedEx","DHL"].map(s => <option value={s} />)}
+              </datalist>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-0.5">Service</label>
+              <input type="text" name="shiptype" value={shipment.ShipType ?? ""}
+                     list="shiptype-list"
+                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <datalist id="shiptype-list">
+                {["Ground","Priority Mail","First Class","2nd Day Air","Next Day Air","Express","2Day","Overnight","DropShip","In-Store Pickup","Other"].map(m => <option value={m} />)}
+              </datalist>
+            </div>
+          </div>
+          <p class="mt-1 text-xs text-gray-400">Or choose a preset:</p>
+          <select class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onchange="const [s,m]=this.value.split('|');document.querySelector('[name=shipper]').value=s;document.querySelector('[name=shiptype]').value=m;this.value=''">
+            <option value="">— Quick select —</option>
+            {CARRIERS.map(c => (
+              <option value={`${c.shipper}|${c.method}`}
+                      selected={currentKey === [c.shipper, c.method].filter(Boolean).join(" ") || undefined}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <!-- Tracking -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Tracking Number(s)</label>
+          <input type="text" name="tracking" value={shipment.Tracking ?? ""} maxlength="255"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <p class="mt-1 text-xs text-gray-400">Separate multiple tracking numbers with commas.</p>
+        </div>
+
+        <!-- Cost -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Actual Shipping Cost</label>
+          <input type="number" name="actual_shipping" step="0.01" min="0"
+                 value={shipment.Actual_Shipping ?? ""}
+                 class="w-48 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <!-- Notes -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Additional Notes to Customer</label>
+          <textarea name="customer_notes" rows="3"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex flex-wrap gap-2 pt-1">
+          <button type="submit" name="submit" value="save_only"
+                  class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">
+            Save Tracking Only
+          </button>
+          {!order.Filled && (
+            <button type="submit" name="submit" value="complete_order"
+                    class="bg-green-600 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-green-700">
+              Save &amp; Complete Order
+            </button>
+          )}
+          <a href={`/admin/orders/${orderId}`}
+             class="px-5 py-2 rounded-lg text-sm font-semibold border border-gray-300 text-gray-600 hover:bg-gray-50">
+            Cancel
+          </a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+</AdminLayout>
