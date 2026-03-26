@@ -3,7 +3,7 @@ import { query } from "../db";
 // ─── Images ───────────────────────────────────────────────────────────────────
 
 export interface ProductImage {
-  Image_ID: number;
+  Product_Image_ID: number;
   Product_ID: number;
   filename: string | null;
   Original: string | null;
@@ -17,16 +17,16 @@ export interface ProductImage {
 
 export async function getProductImages(id: number): Promise<ProductImage[]> {
   return query<ProductImage>(
-    `SELECT Image_ID, Product_ID, filename, Original, sm_image, md_image, lg_image, priority, caption, Gallery
+    `SELECT Product_Image_ID, Product_ID, filename, Original, sm_image, md_image, lg_image, priority, caption, Gallery
      FROM   Product_Images WHERE Product_ID = @id
-     ORDER  BY priority ASC, Image_ID ASC`,
+     ORDER  BY priority ASC, Product_Image_ID ASC`,
     { id }
   );
 }
 
 export async function updateProductImage(imageId: number, caption: string | null, priority: number, gallery: boolean): Promise<void> {
   await query(
-    `UPDATE Product_Images SET caption=@caption, priority=@priority, Gallery=@gallery WHERE Image_ID=@imageId`,
+    `UPDATE Product_Images SET caption=@caption, priority=@priority, Gallery=@gallery WHERE Product_Image_ID=@imageId`,
     { imageId, caption, priority, gallery: gallery ? 1 : 0 } as Record<string, string | number | null>
   );
 }
@@ -40,7 +40,7 @@ export async function addProductImage(productId: number, filename: string, prior
 }
 
 export async function deleteProductImage(imageId: number): Promise<void> {
-  await query(`DELETE FROM Product_Images WHERE Image_ID = @imageId`, { imageId });
+  await query(`DELETE FROM Product_Images WHERE Product_Image_ID = @imageId`, { imageId });
 }
 
 // ─── Videos ───────────────────────────────────────────────────────────────────
