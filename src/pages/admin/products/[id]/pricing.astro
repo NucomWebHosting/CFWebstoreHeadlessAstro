@@ -22,13 +22,15 @@ if (Astro.request.method === "POST") {
 const product = await getProductByIdAdmin(id);
 if (!product) return new Response(null, { status: 404 });
 
-const pricing = await getPricingFields(id);
+const p = await getPricingFields(id);
 const saved = Astro.url.searchParams.get("saved") === "1";
 
 function dateVal(d: Date | null | undefined) {
   if (!d) return "";
-  const dt = new Date(d);
-  return dt.toISOString().split("T")[0];
+  return new Date(d).toISOString().split("T")[0];
+}
+function nv(n: number | null | undefined) {
+  return (n !== null && n !== undefined && n !== 0) ? String(n) : "";
 }
 ---
 
@@ -38,82 +40,409 @@ function dateVal(d: Date | null | undefined) {
   {error && <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
   {saved && <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved successfully.</div>}
 
-  <form method="post" class="space-y-6 max-w-2xl">
+  <form method="post" class="space-y-6 max-w-3xl">
 
+    <!-- On/Off -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">On / Off</h2>
+      </div>
+      <div class="p-6 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Sell this Item</label>
+          <div class="flex gap-4 text-sm">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="NotSold" value="0" checked={!p?.NotSold} /> Yes
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="NotSold" value="1" checked={!!p?.NotSold} /> No
+            </label>
+          </div>
+          <p class="text-xs text-gray-400 mt-1">If not sold, product displays without ordering information.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">In-Stock Date</label>
+          <input type="date" name="stock_date" value={dateVal(p?.stock_date)}
+                 class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <p class="text-xs text-gray-400 mt-1">Only shown when &ldquo;Sell this Item&rdquo; is No.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sale Dates -->
     <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100">
         <h2 class="font-semibold text-gray-800">Sale Dates</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Leave blank if product is always sold.</p>
       </div>
       <div class="p-6 grid grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Sale Start</label>
-          <input type="date" name="sale_start" value={dateVal(pricing?.Sale_Start)}
+          <input type="date" name="sale_start" value={dateVal(p?.Sale_Start)}
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Sale End</label>
-          <input type="date" name="sale_end" value={dateVal(pricing?.Sale_End)}
+          <input type="date" name="sale_end" value={dateVal(p?.Sale_End)}
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
       </div>
     </div>
 
+    <!-- Inventory & Identifiers -->
     <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-800">Inventory</h2>
+        <h2 class="font-semibold text-gray-800">Inventory &amp; Identifiers</h2>
       </div>
-      <div class="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="p-6 grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+          <input type="text" name="SKU" value={p?.SKU ?? ""}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">UPC (barcode)</label>
+          <input type="text" name="UPC" value={p?.UPC ?? ""}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">ALU</label>
+          <input type="text" name="ALU" value={p?.ALU ?? ""}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Qty in Stock</label>
+          <input type="number" name="NumInStock" min="0" value={p?.NumInStock ?? ""}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Min Qty to Buy</label>
-          <input type="number" name="min_qty" min="0" value={pricing?.Min_Order ?? ""}
+          <input type="number" name="min_order" min="0" value={p?.Min_Order ?? ""}
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Prep Days</label>
-          <input type="number" name="prep_days" min="0" value={pricing?.Prep_days ?? ""}
+          <input type="number" name="prep_days" min="0" value={p?.Prep_days ?? ""}
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Reorder Level</label>
-          <input type="number" name="reorder" min="0" value={pricing?.reorder_level ?? ""}
+          <input type="number" name="reorder_level" min="0" value={p?.reorder_level ?? ""}
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Flat Shipping ($)</label>
-          <input type="number" name="shipping" step="0.01" min="0" value={pricing?.Shipping ?? ""}
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Availability Message</label>
+          <input type="text" name="availability" value={p?.Availability ?? ""} placeholder="e.g. Usually ships in 2–3 days"
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
       </div>
       <div class="px-6 pb-5">
         <label class="block text-sm font-medium text-gray-700 mb-2">Require Multiples of Min Qty?</label>
         <div class="flex gap-4 text-sm">
-          <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="req_mult" value="1" checked={pricing?.Mult_Min} /> Yes</label>
-          <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="req_mult" value="0" checked={!pricing?.Mult_Min} /> No</label>
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input type="radio" name="mult_min" value="1" checked={!!p?.Mult_Min} /> Yes
+          </label>
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input type="radio" name="mult_min" value="0" checked={!p?.Mult_Min} /> No
+          </label>
         </div>
       </div>
     </div>
 
+    <!-- Prices -->
     <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-800">Pack Dimensions</h2>
-        <p class="text-xs text-gray-400 mt-0.5">Used for shipping rate calculations.</p>
+        <h2 class="font-semibold text-gray-800">Prices</h2>
       </div>
       <div class="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Length (in)</label>
-          <input type="number" name="pack_length" step="0.01" min="0" value={pricing?.Pack_Length ?? ""}
+          <label class="block text-sm font-medium text-gray-700 mb-1">Base Price <span class="text-red-500">*</span></label>
+          <input type="number" name="Base_Price" step="0.01" min="0" value={p?.Base_Price ?? 0}
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Width (in)</label>
-          <input type="number" name="pack_width" step="0.01" min="0" value={pricing?.Pack_Width ?? ""}
+          <label class="block text-sm font-medium text-gray-700 mb-1">Retail Price (MSRP)</label>
+          <input type="number" name="Retail_Price" step="0.01" min="0" value={nv(p?.Retail_Price)}
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Height (in)</label>
-          <input type="number" name="pack_height" step="0.01" min="0" value={pricing?.Pack_Height ?? ""}
+          <label class="block text-sm font-medium text-gray-700 mb-1">MAP Price</label>
+          <input type="number" name="MAP_Price" step="0.01" min="0" value={nv(p?.MAP_Price)}
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Wholesale Price</label>
+          <input type="number" name="Wholesale" step="0.01" min="0" value={nv(p?.Wholesale)}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Price Unit</label>
+          <input type="text" name="Unit_Desc" value={p?.Unit_Desc ?? ""} placeholder="e.g. each, pair, box"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+      <div class="px-6 pb-5 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Show Price?</label>
+          <div class="flex gap-4 text-sm">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="ShowPrice" value="Y" checked={p?.ShowPrice !== "N"} /> Yes
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="ShowPrice" value="N" checked={p?.ShowPrice === "N"} /> No
+            </label>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Show Price Range?</label>
+          <div class="flex gap-4 text-sm">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="showPriceRange" value="Y" checked={p?.showPriceRange === "Y"} /> Yes
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="showPriceRange" value="N" checked={p?.showPriceRange !== "Y"} /> No
+            </label>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Show Quantity</label>
+          <div class="flex gap-4 text-sm flex-wrap">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="showquantity" value="0" checked={(p?.showquantity ?? 0) === 0} /> Show qty
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="showquantity" value="1" checked={p?.showquantity === 1} /> Hide qty
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="showquantity" value="2" checked={p?.showquantity === 2} /> Show text
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Subscription -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Subscription</h2>
+      </div>
+      <div class="p-6 grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Subscription Product?</label>
+          <div class="flex gap-4 text-sm">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="subscription" value="1" checked={!!p?.subscription} /> Yes
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="subscription" value="0" checked={!p?.subscription} /> No
+            </label>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Subscription Discount (%)</label>
+          <input type="number" name="subscription_discount" step="any" min="0" max="99"
+                 value={p?.subscription_discount ?? ""}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Discounts & Promotions -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Discounts &amp; Promotions</h2>
+      </div>
+      <div class="p-6 grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Show Discounts?</label>
+          <div class="flex gap-4 text-sm">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="showDiscounts" value="1" checked={!!p?.showDiscounts} /> Yes
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="showDiscounts" value="0" checked={!p?.showDiscounts} /> No
+            </label>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Show Promotions?</label>
+          <div class="flex gap-4 text-sm">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="ShowPromotions" value="1" checked={!!p?.ShowPromotions} /> Yes
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="ShowPromotions" value="0" checked={!p?.ShowPromotions} /> No
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vendor / Dropship -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Vendor / Dropship</h2>
+      </div>
+      <div class="p-6 grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Vendor SKU</label>
+          <input type="text" name="Vendor_SKU" value={p?.Vendor_SKU ?? ""}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Dropship Cost ($)</label>
+          <input type="number" name="dropship_cost" step="0.01" min="0" value={nv(p?.dropship_cost)}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div class="md:col-span-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Dropship Note</label>
+          <input type="text" name="DropShip_Note" value={p?.DropShip_Note ?? ""}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Shipping -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Shipping</h2>
+      </div>
+      <div class="p-6 space-y-4">
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Calculate Shipping?</label>
+            <div class="flex gap-4 text-sm">
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="shipping" value="1" checked={!!p?.shipping} /> Yes
+              </label>
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="shipping" value="0" checked={!p?.shipping} /> No
+              </label>
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Shipping Quote?</label>
+            <div class="flex gap-4 text-sm">
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="shipping_quote" value="1" checked={!!p?.shipping_quote} /> Yes
+              </label>
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="shipping_quote" value="0" checked={!p?.shipping_quote} /> No
+              </label>
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Gift Wrapping?</label>
+            <div class="flex gap-4 text-sm">
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="Giftwrap" value="1" checked={!!p?.Giftwrap} /> Yes
+              </label>
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="Giftwrap" value="0" checked={!p?.Giftwrap} /> No
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Weight (lbs)</label>
+            <input type="number" name="Weight" step="0.01" min="0" value={nv(p?.Weight)}
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Per Item Handling ($)</label>
+            <input type="number" name="Item_Handling" step="0.01" min="0" value={nv(p?.Item_Handling)}
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Freight Domestic ($)</label>
+            <input type="number" name="freight_dom" step="0.01" min="0" value={nv(p?.freight_dom)}
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Freight International ($)</label>
+            <input type="number" name="freight_intl" step="0.01" min="0" value={nv(p?.freight_intl)}
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Add Additional Handling?</label>
+          <div class="flex gap-4 text-sm">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="Add_Additional_Handling" value="1" checked={!!p?.Add_Additional_Handling} /> Yes
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="Add_Additional_Handling" value="0" checked={!p?.Add_Additional_Handling} /> No
+            </label>
+          </div>
+          <p class="text-xs text-gray-400 mt-1">For cylindrical tubes or rolls.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Package Dimensions -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Package Dimensions</h2>
+        <p class="text-xs text-gray-400 mt-0.5">For oversize items. Enter all or none per box. Packages 2–4 are for products that ship in multiple boxes.</p>
+      </div>
+      <div class="p-6 space-y-5">
+        <!-- Package 1: L/W/H only (weight is in Shipping section above) -->
+        <div>
+          <p class="text-xs font-medium text-gray-500 mb-2">Package 1</p>
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">Length (in)</label>
+              <input type="number" name="Pack_Length" step="0.01" min="0" value={nv(p?.Pack_Length)}
+                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">Width (in)</label>
+              <input type="number" name="Pack_Width" step="0.01" min="0" value={nv(p?.Pack_Width)}
+                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">Height (in)</label>
+              <input type="number" name="Pack_Height" step="0.01" min="0" value={nv(p?.Pack_Height)}
+                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+        </div>
+        <!-- Packages 2–4: weight + L/W/H -->
+        {[
+          { label: "Package 2", w: "Weight2", l: "Pack_Length2", wd: "Pack_Width2", h: "Pack_Height2",
+            wv: p?.Weight2, lv: p?.Pack_Length2, wdv: p?.Pack_Width2, hv: p?.Pack_Height2 },
+          { label: "Package 3", w: "Weight3", l: "Pack_Length3", wd: "Pack_Width3", h: "Pack_Height3",
+            wv: p?.Weight3, lv: p?.Pack_Length3, wdv: p?.Pack_Width3, hv: p?.Pack_Height3 },
+          { label: "Package 4", w: "Weight4", l: "Pack_Length4", wd: "Pack_Width4", h: "Pack_Height4",
+            wv: p?.Weight4, lv: p?.Pack_Length4, wdv: p?.Pack_Width4, hv: p?.Pack_Height4 },
+        ].map(box => (
+          <div>
+            <p class="text-xs font-medium text-gray-500 mb-2">{box.label}</p>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Weight (lbs)</label>
+                <input type="number" name={box.w} step="0.01" min="0" value={nv(box.wv)}
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Length (in)</label>
+                <input type="number" name={box.l} step="0.01" min="0" value={nv(box.lv)}
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Width (in)</label>
+                <input type="number" name={box.wd} step="0.01" min="0" value={nv(box.wdv)}
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Height (in)</label>
+                <input type="number" name={box.h} step="0.01" min="0" value={nv(box.hv)}
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
 

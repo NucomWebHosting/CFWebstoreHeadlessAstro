@@ -22,65 +22,15 @@ const v = (field: keyof ProductRow) => p?.[field] ?? "";
         <input type="text" name="name" required value={v("Name")}
           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">SKU</label>
-        <input type="text" name="sku" value={v("SKU")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">UPC</label>
-        <input type="text" name="upc" value={v("UPC")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">ALU</label>
-        <input type="text" name="alu" value={v("ALU")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Availability</label>
-        <input type="text" name="availability" value={v("Availability")} placeholder="e.g. Usually ships in 2-3 days"
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
     </div>
   </section>
 
-  <!-- Pricing & Inventory -->
+  <!-- Display Settings -->
   <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
     <div class="px-6 py-4 border-b border-gray-100">
-      <h2 class="font-semibold text-gray-800">Pricing & Inventory</h2>
+      <h2 class="font-semibold text-gray-800">Display Settings</h2>
     </div>
     <div class="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Base Price <span class="text-red-500">*</span></label>
-        <input type="number" name="base_price" step="0.01" min="0" required value={v("Base_Price")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Retail Price</label>
-        <input type="number" name="retail_price" step="0.01" min="0" value={v("Retail_Price")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">MAP Price</label>
-        <input type="number" name="map_price" step="0.01" min="0" value={v("MAP_Price")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Wholesale</label>
-        <input type="number" name="wholesale" step="0.01" min="0" value={v("Wholesale")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Stock Qty</label>
-        <input type="number" name="num_in_stock" min="0" value={v("NumInStock")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Weight (lbs)</label>
-        <input type="number" name="weight" step="0.01" min="0" value={v("Weight")}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
         <input type="number" name="priority" min="0" value={v("Priority") || 50}

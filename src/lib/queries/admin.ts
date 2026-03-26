@@ -147,15 +147,10 @@ export type ProductParams = Record<string, string | number | boolean | null>;
 function productParams(data: FormData): ProductParams {
   const s = (k: string) => (data.get(k) as string | null) ?? null;
   const sval = (k: string) => { const v = s(k); return v?.trim() || null; };
-  const n = (k: string, fallback = 0) => parseFloat(s(k) ?? "") || fallback;
-  const nopt = (k: string) => { const v = s(k); return v && v.trim() ? parseFloat(v) || null : null; };
   const b = (k: string) => data.get(k) === "on";
   const i = (k: string, fallback = 0) => parseInt(s(k) ?? "") || fallback;
   return {
     name:            s("name") ?? "",
-    sku:             sval("sku"),
-    upc:             sval("upc"),
-    alu:             sval("alu"),
     short_desc:      sval("short_desc"),
     long_desc:       sval("long_desc"),
     long_desc2:      sval("long_desc2"),
@@ -166,17 +161,10 @@ function productParams(data: FormData): ProductParams {
     bullet3:         sval("bullet3"),
     bullet4:         sval("bullet4"),
     bullet5:         sval("bullet5"),
-    base_price:      n("base_price"),
-    retail_price:    nopt("retail_price"),
-    wholesale:       nopt("wholesale"),
-    map_price:       nopt("map_price"),
-    num_in_stock:    i("num_in_stock"),
-    weight:          nopt("weight"),
     display:         b("display"),
     sale:            b("sale"),
     hot:             b("hot"),
     priority:        i("priority", 50),
-    availability:    sval("availability"),
     permalink:       sval("permalink"),
     metadescription: sval("metadescription"),
     keywords:        sval("keywords"),
@@ -188,17 +176,17 @@ export async function createProduct(data: FormData): Promise<number> {
   const p = productParams(data);
   const rows = await query<{ Product_ID: number }>(
     `INSERT INTO Products
-       (Name, SKU, UPC, ALU, Short_Desc, Long_Desc, Long_Desc2, Long_Desc3, Long_Desc4,
+       (Name, Short_Desc, Long_Desc, Long_Desc2, Long_Desc3, Long_Desc4,
         Bullet_point1, Bullet_point2, Bullet_point3, Bullet_point4, Bullet_point5,
-        Base_Price, Retail_Price, Wholesale, MAP_Price, NumInStock, Weight,
-        Display, Sale, Hot, Priority, Popularity, Availability,
+        Base_Price,
+        Display, Sale, Hot, Priority, Popularity,
         Permalink, Metadescription, Keywords, TitleTag, DateAdded)
      OUTPUT INSERTED.Product_ID
      VALUES
-       (@name, @sku, @upc, @alu, @short_desc, @long_desc, @long_desc2, @long_desc3, @long_desc4,
+       (@name, @short_desc, @long_desc, @long_desc2, @long_desc3, @long_desc4,
         @bullet1, @bullet2, @bullet3, @bullet4, @bullet5,
-        @base_price, @retail_price, @wholesale, @map_price, @num_in_stock, @weight,
-        @display, @sale, @hot, @priority, 0, @availability,
+        0,
+        @display, @sale, @hot, @priority, 0,
         @permalink, @metadescription, @keywords, @title_tag, GETDATE())`,
     p
   );
@@ -209,16 +197,13 @@ export async function updateProduct(id: number, data: FormData): Promise<void> {
   const p = productParams(data);
   await query(
     `UPDATE Products SET
-       Name = @name, SKU = @sku, UPC = @upc, ALU = @alu,
+       Name = @name,
        Short_Desc = @short_desc, Long_Desc = @long_desc,
        Long_Desc2 = @long_desc2, Long_Desc3 = @long_desc3, Long_Desc4 = @long_desc4,
        Bullet_point1 = @bullet1, Bullet_point2 = @bullet2, Bullet_point3 = @bullet3,
        Bullet_point4 = @bullet4, Bullet_point5 = @bullet5,
-       Base_Price = @base_price, Retail_Price = @retail_price,
-       Wholesale = @wholesale, MAP_Price = @map_price,
-       NumInStock = @num_in_stock, Weight = @weight,
        Display = @display, Sale = @sale, Hot = @hot,
-       Priority = @priority, Availability = @availability,
+       Priority = @priority,
        Permalink = @permalink, Metadescription = @metadescription,
        Keywords = @keywords, TitleTag = @title_tag
      WHERE Product_ID = @id`,
