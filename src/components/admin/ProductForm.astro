@@ -5,6 +5,8 @@ import type {
   ManufacturerRow,
   ProductTypeRow,
 } from "../../lib/queries/admin-product-tabs";
+import JoditField from "./JoditField";
+import ProductCategoryPicker from "./ProductCategoryPicker.astro";
 
 interface Props {
   product?: ProductRow | null;
@@ -119,49 +121,7 @@ const dGalleryStyle     = isNew ? 0 : (p?.gallery_image_style  ?? 0);
   </section>
 
   <!-- 3. Categories dual-listbox -->
-  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-    <div class="px-6 py-4 border-b border-gray-100">
-      <h2 class="font-semibold text-gray-800">Categories</h2>
-    </div>
-    <div class="p-6">
-      <div class="flex gap-4 items-start">
-        <!-- Available -->
-        <div class="flex-1 min-w-0">
-          <label class="block text-sm font-medium text-gray-700 mb-1">Available</label>
-          <input type="text" id="cat-search" placeholder="Search…"
-            class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          <select id="cat_available" multiple size={12}
-            class="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            {availableCats.map(c => (
-              <option value={c.Category_ID}>{c.FullPath}</option>
-            ))}
-          </select>
-        </div>
-        <!-- Buttons -->
-        <div class="flex flex-col gap-2 justify-center pt-10">
-          <button type="button" id="cat-add"
-            class="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 whitespace-nowrap">
-            Add &rarr;
-          </button>
-          <button type="button" id="cat-remove"
-            class="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 whitespace-nowrap">
-            &larr; Remove
-          </button>
-        </div>
-        <!-- Selected -->
-        <div class="flex-1 min-w-0">
-          <label class="block text-sm font-medium text-gray-700 mb-1">Selected</label>
-          <div class="mb-2 h-[30px]"></div><!-- spacer to align with available list -->
-          <select id="cat_selected" name="CID_list" multiple size={12}
-            class="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            {selectedCats.map(c => (
-              <option value={c.Category_ID}>{c.FullPath}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-    </div>
-  </section>
+  <ProductCategoryPicker availableCats={availableCats} selectedCats={selectedCats} />
 
   <!-- 4. Display Flags -->
   <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
@@ -358,6 +318,11 @@ const dGalleryStyle     = isNew ? 0 : (p?.gallery_image_style  ?? 0);
           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
       <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Algolia Popularity <span class="text-gray-400 font-normal">(1 lowest – 99 highest)</span></label>
+        <input type="number" name="popularity" min="1" max="99" step="1" value={p?.Popularity ?? 1}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">Parameters (Passparam)</label>
         <input type="text" name="Passparam" value={v("Passparam")}
           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -381,9 +346,7 @@ const dGalleryStyle     = isNew ? 0 : (p?.gallery_image_style  ?? 0);
       <h2 class="font-semibold text-gray-800">Short Description</h2>
     </div>
     <div class="p-6">
-      <textarea name="short_desc" rows={4}
-        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-      >{v("Short_Desc")}</textarea>
+      <JoditField client:load name="short_desc" value={String(v("Short_Desc") ?? "")} height={200} />
     </div>
   </section>
 
@@ -408,9 +371,7 @@ const dGalleryStyle     = isNew ? 0 : (p?.gallery_image_style  ?? 0);
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Tab {tab.n} Content (HTML)</label>
-            <textarea name={tab.bodyField} rows={8}
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-            >{p?.[tab.bodyVal as keyof ProductRow] ?? ""}</textarea>
+            <JoditField client:load name={tab.bodyField} value={String(p?.[tab.bodyVal as keyof ProductRow] ?? "")} height={350} />
           </div>
         </div>
       ))}
@@ -424,9 +385,10 @@ const dGalleryStyle     = isNew ? 0 : (p?.gallery_image_style  ?? 0);
     </div>
     <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-3">
       {([1,2,3,4,5] as const).map(n => (
-        <textarea name={`bullet_point${n}`} rows={2} placeholder={`Bullet point ${n}`}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-        >{p?.[`Bullet_point${n}` as keyof ProductRow] ?? ""}</textarea>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Bullet {n}</label>
+          <JoditField client:load name={`bullet_point${n}`} value={String(p?.[`Bullet_point${n}` as keyof ProductRow] ?? "")} height={120} minimal={true} />
+        </div>
       ))}
     </div>
   </section>
@@ -444,9 +406,7 @@ const dGalleryStyle     = isNew ? 0 : (p?.gallery_image_style  ?? 0);
       </div>
       <div class="md:col-span-2">
         <label class="block text-sm font-medium text-gray-700 mb-1">Meta Description</label>
-        <textarea name="metadescription" rows={2}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >{v("Metadescription")}</textarea>
+        <JoditField client:load name="metadescription" value={String(v("Metadescription") ?? "")} height={120} minimal={true} />
       </div>
       <div class="md:col-span-2">
         <label class="block text-sm font-medium text-gray-700 mb-1">Keywords</label>
@@ -468,77 +428,3 @@ const dGalleryStyle     = isNew ? 0 : (p?.gallery_image_style  ?? 0);
   </div>
 
 </form>
-
-<script>
-(function () {
-  const form     = document.getElementById("product-display-form") as HTMLFormElement | null;
-  const avail    = document.getElementById("cat_available")        as HTMLSelectElement | null;
-  const selected = document.getElementById("cat_selected")         as HTMLSelectElement | null;
-  const btnAdd   = document.getElementById("cat-add")              as HTMLButtonElement | null;
-  const btnRem   = document.getElementById("cat-remove")           as HTMLButtonElement | null;
-  const search   = document.getElementById("cat-search")           as HTMLInputElement | null;
-
-  if (!avail || !selected || !btnAdd || !btnRem || !search || !form) return;
-
-  function moveOptions(from: HTMLSelectElement, to: HTMLSelectElement) {
-    const toMove = Array.from(from.selectedOptions);
-    toMove.forEach(opt => {
-      from.removeChild(opt);
-      to.appendChild(opt);
-    });
-    sortSelect(to);
-  }
-
-  function sortSelect(sel: HTMLSelectElement) {
-    const opts = Array.from(sel.options).sort((a, b) => a.text.localeCompare(b.text));
-    opts.forEach(o => sel.appendChild(o));
-  }
-
-  btnAdd.addEventListener("click", () => moveOptions(avail, selected));
-  btnRem.addEventListener("click", () => moveOptions(selected, avail));
-
-  // Search filter on Available list
-  // We keep a hidden data store so filtering doesn't destroy options
-  let allAvailable: { value: string; text: string }[] = Array.from(avail.options).map(o => ({
-    value: o.value,
-    text: o.text,
-  }));
-
-  // Rebuild available list keeping track of full set
-  function rebuildAvailable(filter: string) {
-    // Collect currently-shown options back to master (they may not have moved)
-    const shownValues = new Set(Array.from(avail.options).map(o => o.value));
-    // Add any that are in allAvailable but not shown (were filtered out before)
-    // Actually we need to always work from allAvailable and exclude selected
-    const selectedValues = new Set(Array.from(selected.options).map(o => o.value));
-    const lower = filter.toLowerCase();
-    avail.innerHTML = "";
-    allAvailable
-      .filter(o => !selectedValues.has(o.value) && o.text.toLowerCase().includes(lower))
-      .forEach(o => {
-        const opt = document.createElement("option");
-        opt.value = o.value;
-        opt.text  = o.text;
-        avail.appendChild(opt);
-      });
-  }
-
-  // Keep allAvailable in sync when items move to selected
-  btnAdd.addEventListener("click", () => {
-    // After move, update allAvailable to reflect removals (they stay in allAvailable for re-filter)
-    // Nothing needed — allAvailable is the permanent master list.
-  });
-
-  search.addEventListener("input", () => rebuildAvailable(search.value));
-
-  // On Add, we need to re-sync allAvailable still contains everything;
-  // re-run filter after add so search result stays coherent
-  btnAdd.addEventListener("click", () => rebuildAvailable(search.value));
-  btnRem.addEventListener("click", () => rebuildAvailable(search.value));
-
-  // On form submit, select ALL options in "selected" so they're posted
-  form.addEventListener("submit", () => {
-    Array.from(selected.options).forEach(o => { o.selected = true; });
-  });
-})();
-</script>

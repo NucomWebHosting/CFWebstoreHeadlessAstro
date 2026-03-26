@@ -1,0 +1,98 @@
+---
+import type { CategoryPicklistRow } from "../../lib/queries/admin-product-tabs";
+
+interface Props {
+  availableCats: CategoryPicklistRow[];
+  selectedCats: CategoryPicklistRow[];
+}
+
+const { availableCats, selectedCats } = Astro.props;
+---
+
+<section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+  <div class="px-6 py-4 border-b border-gray-100">
+    <h2 class="font-semibold text-gray-800">Categories</h2>
+  </div>
+  <div class="p-6">
+    <div class="flex gap-4 items-start">
+      <div class="flex-1 min-w-0">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Available</label>
+        <input type="text" id="cat-search" placeholder="Search…"
+          class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <select id="cat_available" multiple size={12}
+          class="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          {availableCats.map(c => (
+            <option value={c.Category_ID}>{c.FullPath}</option>
+          ))}
+        </select>
+      </div>
+      <div class="flex flex-col gap-2 justify-center pt-10">
+        <button type="button" id="cat-add"
+          class="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 whitespace-nowrap">
+          Add &rarr;
+        </button>
+        <button type="button" id="cat-remove"
+          class="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 whitespace-nowrap">
+          &larr; Remove
+        </button>
+      </div>
+      <div class="flex-1 min-w-0">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Selected</label>
+        <div class="mb-2 h-[30px]"></div>
+        <select id="cat_selected" name="CID_list" multiple size={12}
+          class="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          {selectedCats.map(c => (
+            <option value={c.Category_ID}>{c.FullPath}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  const form     = document.getElementById("product-display-form") as HTMLFormElement | null;
+  const avail    = document.getElementById("cat_available")        as HTMLSelectElement | null;
+  const sel      = document.getElementById("cat_selected")         as HTMLSelectElement | null;
+  const btnAdd   = document.getElementById("cat-add")              as HTMLButtonElement | null;
+  const btnRem   = document.getElementById("cat-remove")           as HTMLButtonElement | null;
+  const search   = document.getElementById("cat-search")           as HTMLInputElement | null;
+
+  if (!avail || !sel || !btnAdd || !btnRem || !search || !form) return;
+
+  const allAvailable: { value: string; text: string }[] = Array.from(avail.options).map(o => ({
+    value: o.value,
+    text: o.text,
+  }));
+
+  function sortSelect(s: HTMLSelectElement) {
+    const opts = Array.from(s.options).sort((a, b) => a.text.localeCompare(b.text));
+    opts.forEach(o => s.appendChild(o));
+  }
+
+  function moveOptions(from: HTMLSelectElement, to: HTMLSelectElement) {
+    Array.from(from.selectedOptions).forEach(opt => { from.removeChild(opt); to.appendChild(opt); });
+    sortSelect(to);
+  }
+
+  function rebuildAvailable(filter: string) {
+    const selectedValues = new Set(Array.from(sel!.options).map(o => o.value));
+    const lower = filter.toLowerCase();
+    avail!.innerHTML = "";
+    allAvailable
+      .filter(o => !selectedValues.has(o.value) && o.text.toLowerCase().includes(lower))
+      .forEach(o => {
+        const opt = document.createElement("option");
+        opt.value = o.value;
+        opt.text  = o.text;
+        avail!.appendChild(opt);
+      });
+  }
+
+  btnAdd.addEventListener("click", () => { moveOptions(avail!, sel!); rebuildAvailable(search!.value); });
+  btnRem.addEventListener("click", () => { moveOptions(sel!, avail!); rebuildAvailable(search!.value); });
+  search.addEventListener("input", () => rebuildAvailable(search.value));
+  form.addEventListener("submit", () => { Array.from(sel!.options).forEach(o => { o.selected = true; }); });
+})();
+</script>

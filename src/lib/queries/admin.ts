@@ -187,6 +187,7 @@ function productParams(data: FormData): ProductParams {
     faq_list:               sval("FAQ_list"),
     related_products_title: sval("RelatedProducts_title"),
     priority:               i("priority", 50),
+    popularity:             i("popularity", 1),
     permalink:              sval("permalink"),
     metadescription:        sval("metadescription"),
     keywords:               sval("keywords"),
@@ -224,7 +225,7 @@ export async function createProduct(data: FormData): Promise<number> {
         @reviewable, @sell_on_amazon, @highlight2, @quick_checkout_only,
         @long_desc_position, @content_style, @gallery_image_style,
         @passparam, @faq_list, @related_products_title,
-        @priority, 0,
+        @priority, @popularity,
         @permalink, @metadescription, @keywords, @title_tag, GETDATE())`,
     p
   );
@@ -257,6 +258,7 @@ export async function updateProduct(id: number, data: FormData): Promise<void> {
        FAQ_list = @faq_list,
        RelatedProducts_title = @related_products_title,
        Priority = @priority,
+       Popularity = @popularity,
        Permalink = @permalink, Metadescription = @metadescription,
        Keywords = @keywords, TitleTag = @title_tag
      WHERE Product_ID = @id`,
