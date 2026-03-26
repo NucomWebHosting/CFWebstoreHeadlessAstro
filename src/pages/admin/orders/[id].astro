@@ -1,8 +1,9 @@
 ---
 export const prerender = false;
 import AdminLayout from "../../../components/layout/AdminLayout.astro";
-import { getOrderDetail, updateOrderStatus, saveOrderNotes, addShipment, deleteShipment, updateOrderUser, findUserBySearch } from "../../../lib/queries/admin-orders";
+import { getOrderDetail, updateOrderStatus, saveOrderNotes, addShipment, deleteShipment, updateOrderUser, findUserBySearch, voidPayment, addManualPayment } from "../../../lib/queries/admin-orders";
 import OrderShipmentsPanel from "../../../components/admin/OrderShipmentsPanel.astro";
+import OrderPaymentsPanel from "../../../components/admin/OrderPaymentsPanel.astro";
 
 const id = Number(Astro.params.id);
 if (!id) return new Response(null, { status: 404 });
@@ -24,6 +25,15 @@ if (Astro.request.method === "POST") {
   } else if (action === "delete_shipment") {
     const shipmentId = parseInt((data.get("shipment_id") as string) ?? "0");
     if (shipmentId) await deleteShipment(shipmentId);
+  } else if (action === "void_payment") {
+    const paymentId = parseInt((data.get("payment_id") as string) ?? "0");
+    if (paymentId) await voidPayment(paymentId);
+  } else if (action === "add_payment") {
+    await addManualPayment(id, {
+      amount: parseFloat((data.get("pay_amount") as string) ?? "0") || 0,
+      offlinePayment: (data.get("pay_type") as string) ?? "Offline",
+      authNumber: (data.get("pay_auth") as string) ?? "",
+    });
   } else if (action === "replace_user") {
     const search = (data.get("user_search") as string) ?? "";
     const found = await findUserBySearch(search);
@@ -100,11 +110,6 @@ function addrLines(c: typeof billing) {
 
 const unshippedItems = items.filter(i => i.Quantity > i.Quantity_shipped);
 
-function paymentLabel(p: typeof payments[0]) {
-  if (!p.OfflinePayment || p.OfflinePayment === "CreditCard" || p.OfflinePayment === "Online")
-    return p.CardType ?? "Credit Card";
-  return p.OfflinePayment;
-}
 ---
 
 <AdminLayout title={`Order #${order.Order_No}`}>
@@ -283,40 +288,12 @@ function paymentLabel(p: typeof payments[0]) {
       </div>
 
       <!-- Payments -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div class="px-5 py-3 border-b border-gray-100">
-          <h3 class="text-sm font-semibold text-gray-700">Payments</h3>
-        </div>
-        {payments.length === 0
-          ? <p class="px-5 py-4 text-sm text-gray-400">No payments recorded.</p>
-          : (
-            <table class="w-full text-sm">
-              <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
-                <tr>
-                  <th class="px-4 py-2 text-left">Date</th>
-                  <th class="px-4 py-2 text-right w-28">Amount</th>
-                  <th class="px-4 py-2 text-left">Type</th>
-                  <th class="px-4 py-2 text-left">Name on Card</th>
-                  <th class="px-4 py-2 text-left">Auth #</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                {payments.map(p => (
-                  <tr class="hover:bg-gray-50">
-                    <td class="px-4 py-2 text-xs text-gray-600">{fmtDateTime(p.PaymentDateTime)}</td>
-                    <td class={`px-4 py-2 text-right text-xs font-medium ${p.Amount < 0 ? "text-red-600" : ""}`}>
-                      {fmt(p.Amount)}
-                    </td>
-                    <td class="px-4 py-2 text-xs text-gray-600">{paymentLabel(p)}</td>
-                    <td class="px-4 py-2 text-xs text-gray-600">{p.NameOnCard ?? "—"}</td>
-                    <td class="px-4 py-2 text-xs text-gray-400 font-mono">{p.AuthNumber ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )
-        }
-      </div>
+      <OrderPaymentsPanel
+        payments={payments}
+        orderTotal={order.OrderTotal}
+        amountPaid={amountPaid}
+        billingName={[billing?.FirstName, billing?.LastName].filter(Boolean).join(" ")}
+      />
 
       <!-- Shipments -->
       <OrderShipmentsPanel

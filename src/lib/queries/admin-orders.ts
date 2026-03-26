@@ -256,12 +256,15 @@ export interface OrderPayment {
   Payment_ID: number;
   PaymentDateTime: Date;
   Amount: number;
+  OrgAmount: number | null;
   OfflinePayment: string | null;
   CardType: string | null;
   NameOnCard: string | null;
   CardNumber: string | null;
+  Expires: string | null;
   AuthNumber: string | null;
   TransactNum: string | null;
+  Voided: boolean;
 }
 
 export interface OrderShipment {
@@ -320,12 +323,15 @@ export async function getOrderDetail(orderNo: number): Promise<{
       { orderNo }
     ),
     query<OrderPayment>(
-      `SELECT P.Payment_ID, P.PaymentDateTime, P.Amount, P.OfflinePayment,
-         C.CardType, C.NameOnCard, C.CardNumber, P.AuthNumber, P.TransactNum
+      `SELECT P.Payment_ID, P.PaymentDateTime, P.Amount,
+         ISNULL(P.OrgAmount, 0) AS OrgAmount,
+         P.OfflinePayment, P.AuthNumber, P.TransactNum,
+         ISNULL(P.Voided, 0) AS Voided,
+         C.CardType, C.NameOnCard, C.CardNumber, C.Expires
        FROM Payment P
        LEFT JOIN CardData C ON P.CardData_ID = C.ID
        WHERE P.Order_No = @orderNo
-       ORDER BY P.Payment_ID DESC`,
+       ORDER BY P.Payment_ID ASC`,
       { orderNo }
     ),
     query<OrderShipment>(
@@ -457,4 +463,26 @@ export async function updateOrderStatus(orderNo: number, action: string): Promis
 
 export async function saveOrderNotes(orderNo: number, notes: string): Promise<void> {
   await query("UPDATE Order_No SET Notes=@notes WHERE Order_No=@orderNo", { orderNo, notes });
+}
+
+export async function voidPayment(paymentId: number): Promise<void> {
+  await query(`UPDATE Payment SET Voided=1, Status='CANCELED' WHERE Payment_ID=@paymentId`, { paymentId });
+}
+
+export interface ManualPaymentData {
+  amount: number;
+  offlinePayment: string; // Cash | Check | Purchase Order | Offline | Other
+  authNumber: string;
+}
+
+export async function addManualPayment(orderNo: number, d: ManualPaymentData): Promise<void> {
+  await query(
+    `INSERT INTO Payment (Order_No, PaymentDateTime, Amount, OfflinePayment, AuthNumber, Voided)
+     VALUES (@orderNo, GETDATE(), @amount, @offlinePayment, @authNumber, 0)`,
+    { orderNo, amount: d.amount, offlinePayment: d.offlinePayment || "Offline", authNumber: d.authNumber || "" } as Record<string, string | number>
+  );
+  await query(
+    `UPDATE Order_No SET Paid = CASE WHEN OrderTotal <= (SELECT ISNULL(SUM(Amount),0) FROM Payment WHERE Order_No=@orderNo AND Voided=0) THEN 1 ELSE Paid END WHERE Order_No=@orderNo`,
+    { orderNo }
+  );
 }

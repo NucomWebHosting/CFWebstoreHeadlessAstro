@@ -1,0 +1,204 @@
+---
+import type { OrderPayment } from "../../lib/queries/admin-orders";
+
+interface Props {
+  payments: OrderPayment[];
+  orderTotal: number;
+  amountPaid: number;
+  billingName: string;
+}
+
+const { payments, orderTotal, amountPaid, billingName } = Astro.props;
+
+const balance = orderTotal - amountPaid;
+const hasBalance = balance > 0.005;
+
+function fmt(n: number) {
+  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+function fmtDate(d: Date | null | undefined) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit" });
+}
+function fmtDateTime(d: Date | null | undefined) {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function paymentTypeLabel(p: OrderPayment): string {
+  const op = p.OfflinePayment ?? "";
+  if (op === "Offline") return "Offline Order";
+  if (op === "BillUser" || op === "Card on File") return `${p.CardType ?? ""} Card on File`.trim();
+  if (op === "PayPal") return "PayPal";
+  if (op === "Purchase Order") return "Purchase Order";
+  if (op === "Cash") return "Cash";
+  if (op === "Check") return "Check";
+  if (op === "Refund" || op === "REFUND") return "Refund";
+  if (op === "ACH") return p.CardType ?? "ACH";
+  if (op === "Amazon") return "Amazon";
+  if (op === "Square") return "Square";
+  if (op === "Sezzle") return "Sezzle";
+  return p.CardType ?? op || "—";
+}
+
+// Determine if a payment was made today (same calendar day)
+function isToday(d: Date | null | undefined): boolean {
+  if (!d) return false;
+  const now = new Date();
+  const pd = new Date(d);
+  return pd.getFullYear() === now.getFullYear() &&
+         pd.getMonth() === now.getMonth() &&
+         pd.getDate() === now.getDate();
+}
+
+function isCCType(op: string | null): boolean {
+  return op === "CreditCard" || op === "Online" || op === "BillUser" || op === "Card on File";
+}
+---
+
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+  <div class="px-5 py-3 border-b border-gray-100">
+    <h3 class="text-sm font-semibold text-gray-700">Payments</h3>
+  </div>
+
+  {payments.length === 0 && !hasBalance
+    ? <p class="px-5 py-4 text-sm text-gray-400">No payments recorded.</p>
+    : (
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-4 py-2 text-left">Date</th>
+            <th class="px-4 py-2 text-right w-28">Amount</th>
+            <th class="px-4 py-2 text-left">Type</th>
+            <th class="px-4 py-2 text-left">Name</th>
+            <th class="px-4 py-2 w-32"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {payments.map(p => (
+            <>
+              {/* Main payment row */}
+              <tr class={`border-t border-gray-100 hover:bg-gray-50 ${p.Voided ? "opacity-60" : ""}`}>
+                <td class="px-4 py-2 text-xs text-gray-600">{fmtDateTime(p.PaymentDateTime)}</td>
+                <td class={`px-4 py-2 text-right text-xs font-medium ${p.Amount < 0 ? "text-red-600" : ""}`}>
+                  {fmt(p.Amount)}
+                  {p.Amount === 0 && (p.OrgAmount ?? 0) > 0 && (
+                    <span class="text-gray-400 ml-1">({fmt(p.OrgAmount!)})</span>
+                  )}
+                </td>
+                <td class="px-4 py-2 text-xs text-gray-600">{paymentTypeLabel(p)}</td>
+                <td class="px-4 py-2 text-xs text-gray-600">
+                  {p.NameOnCard ?? billingName ?? "—"}
+                </td>
+                <td class="px-4 py-2 text-right">
+                  {p.Voided
+                    ? <span class="text-xs font-semibold text-red-600">Voided</span>
+                    : (
+                      <div class="flex gap-1 justify-end flex-wrap">
+                        {/* Void — same-day CC payments */}
+                        {isCCType(p.OfflinePayment) && isToday(p.PaymentDateTime) && (
+                          <form method="post">
+                            <input type="hidden" name="_action" value="void_payment" />
+                            <input type="hidden" name="payment_id" value={p.Payment_ID} />
+                            <button onclick="return confirm('Void this payment?')"
+                                    class="px-2 py-1 rounded text-xs bg-gray-100 text-gray-700 hover:bg-red-50 hover:text-red-600">
+                              Void
+                            </button>
+                          </form>
+                        )}
+                        {/* Refund — older CC payments with a transaction number */}
+                        {isCCType(p.OfflinePayment) && !isToday(p.PaymentDateTime) && p.TransactNum && (
+                          <a href={`?refund=${p.Payment_ID}&amount=${p.Amount}`}
+                             class="px-2 py-1 rounded text-xs bg-gray-100 text-gray-700 hover:bg-blue-50 hover:text-blue-600">
+                            Refund
+                          </a>
+                        )}
+                        {/* PayPal refund */}
+                        {p.OfflinePayment === "PayPal" && p.TransactNum && p.Amount > 0 && (
+                          <a href={`?refund=${p.Payment_ID}&amount=${p.Amount}&type=paypal`}
+                             class="px-2 py-1 rounded text-xs bg-gray-100 text-gray-700 hover:bg-blue-50 hover:text-blue-600">
+                            Refund
+                          </a>
+                        )}
+                      </div>
+                    )
+                  }
+                </td>
+              </tr>
+              {/* Detail sub-row */}
+              {(p.CardNumber || p.Expires || p.AuthNumber || p.TransactNum) && (
+                <tr class={`border-b border-gray-100 ${p.Voided ? "opacity-60" : ""}`}>
+                  <td colspan={5} class="px-4 pb-2">
+                    <div class="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-400">
+                      {p.CardNumber && (
+                        <span>
+                          {p.OfflinePayment === "ACH" ? `Routing: ${p.CardNumber}` : `CC: ...${p.CardNumber.slice(-8)}`}
+                        </span>
+                      )}
+                      {p.Expires && (
+                        <span>
+                          {p.OfflinePayment === "ACH" ? `Status: ${p.Expires}` : `Exp: ${p.Expires}`}
+                        </span>
+                      )}
+                      {p.AuthNumber && p.AuthNumber !== "0" && <span>Auth: {p.AuthNumber}</span>}
+                      {p.TransactNum && <span class="font-mono">Trans: {p.TransactNum}</span>}
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </>
+          ))}
+
+          {/* Balance rows when total ≠ paid */}
+          {hasBalance && (
+            <>
+              <tr class="border-t border-gray-200 bg-gray-50">
+                <td colspan={3} class="px-4 py-2 text-xs text-gray-500 text-right">Total Paid</td>
+                <td colspan={2} class="px-4 py-2 text-xs font-medium">{fmt(amountPaid)}</td>
+              </tr>
+              <tr class="bg-gray-50">
+                <td colspan={3} class="px-4 py-1.5 text-xs text-gray-500 text-right">Amount Due</td>
+                <td colspan={2} class="px-4 py-1.5 text-xs font-semibold text-red-600">({fmt(balance)})</td>
+              </tr>
+            </>
+          )}
+        </tbody>
+      </table>
+    )
+  }
+
+  {/* Add New Payment form — shown when there's a balance due */}
+  {hasBalance && (
+    <div class="border-t border-gray-100 px-5 py-4">
+      <h4 class="text-sm font-semibold text-gray-700 mb-3">Add Payment</h4>
+      <form method="post" class="space-y-3">
+        <input type="hidden" name="_action" value="add_payment" />
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Amount</label>
+            <input type="number" name="pay_amount" step="0.01" min="0.01" value={balance.toFixed(2)}
+                   class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Type</label>
+            <select name="pay_type" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+              <option value="Cash">Cash</option>
+              <option value="Check">Check</option>
+              <option value="Purchase Order">Purchase Order</option>
+              <option value="Offline">Offline</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Auth / Reference #</label>
+          <input type="text" name="pay_auth"
+                 class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+        <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-semibold hover:bg-blue-700">
+          Record Payment
+        </button>
+      </form>
+    </div>
+  )}
+</div>
