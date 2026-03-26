@@ -1,0 +1,106 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getStdOptions } from "../../../lib/queries/admin-std-options";
+import type { StdOptionFilters } from "../../../lib/queries/admin-std-options";
+
+const sp = Astro.url.searchParams;
+const filters: StdOptionFilters = {
+  name:     sp.get("name")     || undefined,
+  display:  sp.get("display")  || undefined,
+  required: sp.get("required") || undefined,
+};
+const hasFilters = Object.values(filters).some(Boolean);
+const options = await getStdOptions(filters);
+---
+
+<AdminLayout title="Standard Options">
+
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-xl font-semibold text-gray-800">Standard Options</h1>
+    <a href="/admin/standard-options/new"
+       class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">
+      + New Option
+    </a>
+  </div>
+
+  <form method="get" class="mb-6 bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-4 flex flex-wrap gap-4 items-end">
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Name</label>
+      <input type="text" name="name" value={filters.name ?? ""}
+             class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Display</label>
+      <select name="display" class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+        <option value="">All</option>
+        <option value="1" selected={filters.display === "1"}>Yes</option>
+        <option value="0" selected={filters.display === "0"}>No</option>
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Required</label>
+      <select name="required" class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+        <option value="">All</option>
+        <option value="1" selected={filters.required === "1"}>Yes</option>
+        <option value="0" selected={filters.required === "0"}>No</option>
+      </select>
+    </div>
+    <div class="flex gap-2">
+      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Search</button>
+      <a href="/admin/standard-options" class="px-4 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">Reset</a>
+    </div>
+  </form>
+
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    {options.length === 0 ? (
+      <p class="px-5 py-10 text-center text-sm text-gray-400">
+        {hasFilters ? "No options match your search." : "No standard options yet."}
+      </p>
+    ) : (
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-5 py-3 text-left">Name</th>
+            <th class="px-5 py-3 text-left">Prompt</th>
+            <th class="px-5 py-3 text-center">Display</th>
+            <th class="px-5 py-3 text-center">Required</th>
+            <th class="px-5 py-3 text-center">Show Price</th>
+            <th class="px-5 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {options.map(o => (
+            <tr class="hover:bg-gray-50">
+              <td class="px-5 py-3 font-medium text-gray-800">{o.Std_Name}</td>
+              <td class="px-5 py-3 text-xs text-gray-500">{o.Std_Prompt || "—"}</td>
+              <td class="px-5 py-3 text-center">
+                {o.Std_Display
+                  ? <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Yes</span>
+                  : <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">No</span>
+                }
+              </td>
+              <td class="px-5 py-3 text-center">
+                {o.Std_Required
+                  ? <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">Yes</span>
+                  : <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">No</span>
+                }
+              </td>
+              <td class="px-5 py-3 text-center text-xs text-gray-500">{o.Std_ShowPrice || "No"}</td>
+              <td class="px-5 py-3 text-right">
+                <a href={`/admin/standard-options/${o.Std_ID}`}
+                   class="px-3 py-1 text-xs rounded bg-slate-100 text-slate-700 hover:bg-slate-200">
+                  Edit
+                </a>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+    <div class="px-5 py-3 border-t border-gray-100 text-xs text-gray-400">
+      {options.length} option{options.length !== 1 ? "s" : ""}
+    </div>
+  </div>
+
+</AdminLayout>

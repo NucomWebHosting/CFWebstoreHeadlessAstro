@@ -1,0 +1,338 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import {
+  getStdOption, getStdOptChoices, updateStdOption,
+  updateChoice, addChoice, deleteChoice, deleteStdOption,
+  DISPLAY_STYLES, parseChoicesFromForm,
+} from "../../../lib/queries/admin-std-options";
+import type { StdOptionData } from "../../../lib/queries/admin-std-options";
+
+const id = parseInt(Astro.params.id ?? "0");
+let error = "";
+let successMsg = "";
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const action = form.get("action") as string;
+
+  if (action === "delete") {
+    try {
+      await deleteStdOption(id);
+      return Astro.redirect("/admin/standard-options");
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  } else {
+    const name = (form.get("std_name") as string ?? "").trim();
+    if (!name) {
+      error = "Option name is required.";
+    } else {
+      try {
+        const data: StdOptionData = {
+          Std_Name:              name,
+          Std_Prompt:            (form.get("std_prompt")    as string ?? "").trim() || "Choose One:",
+          Std_Desc:              (form.get("std_desc")      as string ?? "").trim(),
+          Std_ShowPrice:         (form.get("std_show_price") as string ?? "No"),
+          Std_Display:           form.get("std_display")   === "1" ? 1 : 0,
+          Std_Required:          form.get("std_required")  === "1" ? 1 : 0,
+          Std_ColorDisplay:      parseInt(form.get("std_color_display") as string) || 1,
+          Std_UseOptImageIncart: form.get("std_use_image") === "1" ? 1 : 0,
+          Std_Text:              (form.get("std_text")      as string ?? "").trim(),
+        };
+        await updateStdOption(id, data);
+
+        // Process choices
+        const count = parseInt(form.get("choice_count") as string) || 0;
+        const parsed = parseChoicesFromForm(form, count);
+        for (const c of parsed) {
+          if (c.delete && c.id) {
+            await deleteChoice(c.id, id);
+          } else if (c.id) {
+            await updateChoice(c.id, id, c.data);
+          } else if (!c.delete) {
+            await addChoice(id, c.data);
+          }
+        }
+        successMsg = "Option saved.";
+      } catch (e: unknown) {
+        error = e instanceof Error ? e.message : String(e);
+      }
+    }
+  }
+}
+
+const opt = await getStdOption(id);
+if (!opt) return Astro.redirect("/admin/standard-options");
+const choices = await getStdOptChoices(id);
+---
+
+<AdminLayout title={`Edit: ${opt.Std_Name}`}>
+  <div class="mb-5">
+    <a href="/admin/standard-options" class="text-sm text-blue-600 hover:underline">← Standard Options</a>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+  {successMsg && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">{successMsg}</div>
+  )}
+
+  <form method="post" class="space-y-6 max-w-4xl">
+    <input type="hidden" name="action" value="update" />
+    <input type="hidden" name="choice_count" id="choice_count" value={choices.length} />
+
+    {/* Option settings */}
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Option Settings</h2>
+      </div>
+      <div class="px-5 py-5 space-y-4">
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Name <span class="text-red-500">*</span></label>
+            <input type="text" name="std_name" value={opt.Std_Name} required
+                   class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Prompt <span class="text-gray-400">(shown to customer)</span></label>
+            <input type="text" name="std_prompt" value={opt.Std_Prompt ?? "Choose One:"}
+                   class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Description <span class="text-gray-400">(shown in cart)</span></label>
+          <input type="text" name="std_desc" value={opt.Std_Desc ?? ""}
+                 class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+
+        <div class="grid grid-cols-3 gap-6">
+          <div>
+            <label class="block text-xs text-gray-500 mb-2">Display in store?</label>
+            <div class="flex gap-4 text-sm">
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_display" value="1" checked={opt.Std_Display} /> Yes</label>
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_display" value="0" checked={!opt.Std_Display} /> No</label>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-2">Require a selection?</label>
+            <div class="flex gap-4 text-sm">
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_required" value="1" checked={opt.Std_Required} /> Yes</label>
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_required" value="0" checked={!opt.Std_Required} /> No</label>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-2">Use option image in cart?</label>
+            <div class="flex gap-4 text-sm">
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_use_image" value="1" checked={opt.Std_UseOptImageIncart} /> Yes</label>
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_use_image" value="0" checked={!opt.Std_UseOptImageIncart} /> No</label>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-2">Show price on selections?</label>
+          <div class="flex flex-wrap gap-4 text-sm">
+            {["No", "AddPrice", "Total"].map(v => (
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="std_show_price" value={v} checked={opt.Std_ShowPrice === v || (!opt.Std_ShowPrice && v === "No")} />
+                {v === "No" ? "No" : v === "AddPrice" ? "Add price (+$x.xx)" : "Total price"}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-2">Display style</label>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
+            {Object.entries(DISPLAY_STYLES).map(([val, label]) => (
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="std_color_display" value={val}
+                       checked={opt.Std_ColorDisplay === parseInt(val)} />
+                <span class="text-xs">{label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    {/* Choices */}
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="font-semibold text-gray-800">Choices <span class="text-xs font-normal text-gray-400 ml-1">({choices.length})</span></h2>
+        <button type="button" id="add-choice" class="text-sm text-blue-600 hover:underline font-medium">
+          + Add Choice
+        </button>
+      </div>
+
+      <div id="choices-body" class="divide-y divide-gray-100">
+        {choices.map((c, i) => (
+          <div class="choice-row px-5 py-4 space-y-3" data-index={i}>
+            <input type="hidden" name={`choice_id_${i}`} value={c.Choice_ID} />
+            <input type="hidden" name={`choice_delete_${i}`} value="0" class="delete-flag" />
+            <div class="grid grid-cols-6 gap-3 items-end">
+              <div class="col-span-2">
+                <label class="block text-xs text-gray-500 mb-1">Choice Name <span class="text-red-500">*</span></label>
+                <input type="text" name={`choice_name_${i}`} value={c.ChoiceName}
+                       class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Price (+$)</label>
+                <input type="number" name={`choice_price_${i}`} value={c.Price} step="0.01"
+                       class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Wholesale</label>
+                <input type="number" name={`choice_price_ws_${i}`} value={c.Price_Wholesale} step="0.01"
+                       class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Weight</label>
+                <input type="number" name={`choice_weight_${i}`} value={c.Weight} step="any" min="0"
+                       class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Priority</label>
+                <input type="number" name={`choice_sort_${i}`} value={c.SortOrder} min="0"
+                       class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+            </div>
+            <div class="grid grid-cols-6 gap-3 items-center">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Color (HEX)</label>
+                <input type="text" name={`choice_color_hex_${i}`} value={c.Color ?? ""} maxlength="10"
+                       class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Text Color</label>
+                <input type="text" name={`choice_color_text_${i}`} value={c.optionTextColor ?? ""}
+                       class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Sm Image</label>
+                <input type="text" name={`choice_sm_${i}`} value={c.Sm_Image1 ?? ""}
+                       class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Md Image</label>
+                <input type="text" name={`choice_md_${i}`} value={c.Md_Image1 ?? ""}
+                       class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Display</label>
+                <select name={`choice_display_${i}`}
+                        class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                  <option value="1" selected={c.Display}>Yes</option>
+                  <option value="0" selected={!c.Display}>No</option>
+                </select>
+              </div>
+              <div class="flex items-end pb-0.5">
+                <button type="button" class="remove-choice text-xs text-red-500 hover:text-red-700">Remove</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <div class="flex gap-3">
+      <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-700">
+        Save Changes
+      </button>
+      <a href="/admin/standard-options" class="px-5 py-2 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+        Cancel
+      </a>
+    </div>
+  </form>
+
+  {/* Danger Zone */}
+  <div class="max-w-4xl mt-6">
+    <div class="bg-white rounded-xl border border-red-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-red-100">
+        <h2 class="font-semibold text-red-700">Danger Zone</h2>
+      </div>
+      <div class="px-5 py-4">
+        <form method="post"
+              onsubmit="return confirm('Delete this option and all its choices? This cannot be undone.')">
+          <input type="hidden" name="action" value="delete" />
+          <button type="submit" class="bg-red-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-red-700">
+            Delete Option
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script define:vars={{ initialCount: choices.length }}>
+    const body = document.getElementById("choices-body");
+    const countInput = document.getElementById("choice_count");
+    let rowCount = initialCount;
+
+    function getRowTemplate(i) {
+      return `
+        <div class="choice-row px-5 py-4 space-y-3 border-t border-gray-100" data-index="${i}">
+          <input type="hidden" name="choice_id_${i}" value="" />
+          <input type="hidden" name="choice_delete_${i}" value="0" class="delete-flag" />
+          <div class="grid grid-cols-6 gap-3 items-end">
+            <div class="col-span-2">
+              <label class="block text-xs text-gray-500 mb-1">Choice Name <span class="text-red-500">*</span></label>
+              <input type="text" name="choice_name_${i}" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            </div>
+            <div><label class="block text-xs text-gray-500 mb-1">Price (+$)</label>
+              <input type="number" name="choice_price_${i}" value="0" step="0.01" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" /></div>
+            <div><label class="block text-xs text-gray-500 mb-1">Wholesale</label>
+              <input type="number" name="choice_price_ws_${i}" value="0" step="0.01" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" /></div>
+            <div><label class="block text-xs text-gray-500 mb-1">Weight</label>
+              <input type="number" name="choice_weight_${i}" value="0" step="any" min="0" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" /></div>
+            <div><label class="block text-xs text-gray-500 mb-1">Priority</label>
+              <input type="number" name="choice_sort_${i}" value="9999" min="0" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" /></div>
+          </div>
+          <div class="grid grid-cols-6 gap-3 items-center">
+            <div><label class="block text-xs text-gray-500 mb-1">Color (HEX)</label>
+              <input type="text" name="choice_color_hex_${i}" maxlength="10" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" /></div>
+            <div><label class="block text-xs text-gray-500 mb-1">Text Color</label>
+              <input type="text" name="choice_color_text_${i}" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" /></div>
+            <div><label class="block text-xs text-gray-500 mb-1">Sm Image</label>
+              <input type="text" name="choice_sm_${i}" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" /></div>
+            <div><label class="block text-xs text-gray-500 mb-1">Md Image</label>
+              <input type="text" name="choice_md_${i}" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" /></div>
+            <div><label class="block text-xs text-gray-500 mb-1">Display</label>
+              <select name="choice_display_${i}" class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+                <option value="1">Yes</option><option value="0">No</option>
+              </select></div>
+            <div class="flex items-end pb-0.5">
+              <button type="button" class="remove-choice text-xs text-red-500 hover:text-red-700">Remove</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    document.getElementById("add-choice").addEventListener("click", () => {
+      const div = document.createElement("div");
+      div.innerHTML = getRowTemplate(rowCount).trim();
+      body.appendChild(div.firstElementChild);
+      rowCount++;
+      countInput.value = String(rowCount);
+    });
+
+    body.addEventListener("click", (e) => {
+      const btn = e.target.closest(".remove-choice");
+      if (!btn) return;
+      const row = btn.closest(".choice-row");
+      const flagInput = row.querySelector(".delete-flag");
+      // If existing choice (has a choice_id), mark for deletion and hide row
+      const idInput = row.querySelector("input[name^='choice_id_']");
+      if (idInput && idInput.value) {
+        flagInput.value = "1";
+        row.style.display = "none";
+      } else {
+        row.remove();
+      }
+    });
+  </script>
+</AdminLayout>

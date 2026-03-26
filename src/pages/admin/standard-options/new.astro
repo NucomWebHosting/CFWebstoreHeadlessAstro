@@ -1,0 +1,294 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { createStdOption, DISPLAY_STYLES, parseChoicesFromForm } from "../../../lib/queries/admin-std-options";
+import type { StdOptionData } from "../../../lib/queries/admin-std-options";
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const name = (form.get("std_name") as string ?? "").trim();
+  if (!name) {
+    error = "Option name is required.";
+  } else {
+    const count = parseInt(form.get("choice_count") as string) || 0;
+    const choices = parseChoicesFromForm(form, count).filter(c => !c.delete).map(c => c.data);
+    if (!choices.length) {
+      error = "At least one choice is required.";
+    } else {
+      try {
+        const data: StdOptionData = {
+          Std_Name:              name,
+          Std_Prompt:            (form.get("std_prompt")    as string ?? "").trim() || "Choose One:",
+          Std_Desc:              (form.get("std_desc")      as string ?? "").trim(),
+          Std_ShowPrice:         (form.get("std_show_price") as string ?? "No"),
+          Std_Display:           form.get("std_display")   === "1" ? 1 : 0,
+          Std_Required:          form.get("std_required")  === "1" ? 1 : 0,
+          Std_ColorDisplay:      parseInt(form.get("std_color_display") as string) || 1,
+          Std_UseOptImageIncart: form.get("std_use_image") === "1" ? 1 : 0,
+          Std_Text:              (form.get("std_text")      as string ?? "").trim(),
+        };
+        const newId = await createStdOption(data, choices);
+        return Astro.redirect(`/admin/standard-options/${newId}`);
+      } catch (e: unknown) {
+        error = e instanceof Error ? e.message : String(e);
+      }
+    }
+  }
+}
+---
+
+<AdminLayout title="New Standard Option">
+  <div class="mb-5">
+    <a href="/admin/standard-options" class="text-sm text-blue-600 hover:underline">← Standard Options</a>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="space-y-6 max-w-4xl">
+    <input type="hidden" name="choice_count" id="choice_count" value="1" />
+
+    {/* Option settings */}
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Option Settings</h2>
+      </div>
+      <div class="px-5 py-5 space-y-4">
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Name <span class="text-red-500">*</span></label>
+            <input type="text" name="std_name" required
+                   class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Prompt <span class="text-gray-400">(shown to customer)</span></label>
+            <input type="text" name="std_prompt" value="Choose One:"
+                   class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Description <span class="text-gray-400">(shown in cart)</span></label>
+          <input type="text" name="std_desc"
+                 class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+
+        <div class="grid grid-cols-3 gap-6">
+          <div>
+            <label class="block text-xs text-gray-500 mb-2">Display in store?</label>
+            <div class="flex gap-4 text-sm">
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_display" value="1" checked /> Yes</label>
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_display" value="0" /> No</label>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-2">Require a selection?</label>
+            <div class="flex gap-4 text-sm">
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_required" value="1" /> Yes</label>
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_required" value="0" checked /> No</label>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-2">Use option image in cart?</label>
+            <div class="flex gap-4 text-sm">
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_use_image" value="1" /> Yes</label>
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_use_image" value="0" checked /> No</label>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-2">Show price on selections?</label>
+          <div class="flex flex-wrap gap-4 text-sm">
+            <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_show_price" value="No" checked /> No</label>
+            <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_show_price" value="AddPrice" /> Add price (+$x.xx)</label>
+            <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="std_show_price" value="Total" /> Total price</label>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-2">Display style</label>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
+            {Object.entries(DISPLAY_STYLES).map(([val, label]) => (
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="std_color_display" value={val} checked={val === "1"} />
+                <span class="text-xs">{label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    {/* Choices */}
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="font-semibold text-gray-800">Choices</h2>
+        <button type="button" id="add-choice"
+                class="text-sm text-blue-600 hover:underline font-medium">
+          + Add Choice
+        </button>
+      </div>
+
+      <div id="choices-body" class="divide-y divide-gray-100">
+        {/* Initial row */}
+        <div class="choice-row px-5 py-4 space-y-3" data-index="0">
+          <input type="hidden" name="choice_id_0" value="" />
+          <input type="hidden" name="choice_delete_0" value="0" class="delete-flag" />
+          <div class="grid grid-cols-6 gap-3 items-end">
+            <div class="col-span-2">
+              <label class="block text-xs text-gray-500 mb-1">Choice Name <span class="text-red-500">*</span></label>
+              <input type="text" name="choice_name_0"
+                     class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Price (+$)</label>
+              <input type="number" name="choice_price_0" value="0" step="0.01"
+                     class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Wholesale</label>
+              <input type="number" name="choice_price_ws_0" value="0" step="0.01"
+                     class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Weight</label>
+              <input type="number" name="choice_weight_0" value="0" step="any" min="0"
+                     class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Priority</label>
+              <input type="number" name="choice_sort_0" value="9999" min="0"
+                     class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            </div>
+          </div>
+          <div class="grid grid-cols-6 gap-3 items-center">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Color (HEX)</label>
+              <input type="text" name="choice_color_hex_0" placeholder="#FF0000" maxlength="10"
+                     class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Text Color</label>
+              <input type="text" name="choice_color_text_0"
+                     class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Sm Image</label>
+              <input type="text" name="choice_sm_0"
+                     class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Md Image</label>
+              <input type="text" name="choice_md_0"
+                     class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Display</label>
+              <select name="choice_display_0"
+                      class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                <option value="1">Yes</option>
+                <option value="0">No</option>
+              </select>
+            </div>
+            <div class="flex items-end pb-0.5">
+              <button type="button" class="remove-choice text-xs text-red-500 hover:text-red-700">Remove</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex gap-3">
+      <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-700">
+        Create Option
+      </button>
+      <a href="/admin/standard-options" class="px-5 py-2 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+        Cancel
+      </a>
+    </div>
+  </form>
+
+  <script>
+    const body = document.getElementById("choices-body")!;
+    const countInput = document.getElementById("choice_count") as HTMLInputElement;
+    let rowCount = 1;
+
+    function getRowTemplate(i: number): string {
+      return `
+        <div class="choice-row px-5 py-4 space-y-3" data-index="${i}">
+          <input type="hidden" name="choice_id_${i}" value="" />
+          <input type="hidden" name="choice_delete_${i}" value="0" class="delete-flag" />
+          <div class="grid grid-cols-6 gap-3 items-end">
+            <div class="col-span-2">
+              <label class="block text-xs text-gray-500 mb-1">Choice Name <span class="text-red-500">*</span></label>
+              <input type="text" name="choice_name_${i}" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Price (+$)</label>
+              <input type="number" name="choice_price_${i}" value="0" step="0.01" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Wholesale</label>
+              <input type="number" name="choice_price_ws_${i}" value="0" step="0.01" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Weight</label>
+              <input type="number" name="choice_weight_${i}" value="0" step="any" min="0" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Priority</label>
+              <input type="number" name="choice_sort_${i}" value="9999" min="0" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+            </div>
+          </div>
+          <div class="grid grid-cols-6 gap-3 items-center">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Color (HEX)</label>
+              <input type="text" name="choice_color_hex_${i}" placeholder="#FF0000" maxlength="10" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Text Color</label>
+              <input type="text" name="choice_color_text_${i}" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Sm Image</label>
+              <input type="text" name="choice_sm_${i}" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Md Image</label>
+              <input type="text" name="choice_md_${i}" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Display</label>
+              <select name="choice_display_${i}" class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+                <option value="1">Yes</option><option value="0">No</option>
+              </select>
+            </div>
+            <div class="flex items-end pb-0.5">
+              <button type="button" class="remove-choice text-xs text-red-500 hover:text-red-700">Remove</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    document.getElementById("add-choice")!.addEventListener("click", () => {
+      const div = document.createElement("div");
+      div.innerHTML = getRowTemplate(rowCount).trim();
+      body.appendChild(div.firstElementChild!);
+      rowCount++;
+      countInput.value = String(rowCount);
+    });
+
+    body.addEventListener("click", (e) => {
+      const btn = (e.target as HTMLElement).closest(".remove-choice");
+      if (!btn) return;
+      const row = btn.closest(".choice-row") as HTMLElement;
+      row.remove();
+    });
+  </script>
+</AdminLayout>
