@@ -1,0 +1,152 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getCertificates } from "../../../lib/queries/admin-gift-certificates";
+import type { CertFilters } from "../../../lib/queries/admin-gift-certificates";
+
+const sp = Astro.url.searchParams;
+const filters: CertFilters = {
+  code:          sp.get("code")          || undefined,
+  order_no:      sp.get("order_no")      || undefined,
+  recipient:     sp.get("recipient")     || undefined,
+  cust_name:     sp.get("cust_name")     || undefined,
+  certAmount:    sp.get("certAmount")    || undefined,
+  initialAmount: sp.get("initialAmount") || undefined,
+  valid:         sp.get("valid")         || undefined,
+  current:       sp.get("current")       || undefined,
+  type:          sp.get("type")          || undefined,
+};
+const hasFilters = Object.values(filters).some(Boolean);
+
+let certs = await getCertificates(filters);
+let fetchError = "";
+
+function fmtDate(d: Date | null) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+---
+
+<AdminLayout title="Gift Certificates">
+
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-xl font-semibold text-gray-800">Gift Certificates</h1>
+    <a href="/admin/gift-certificates/new"
+       class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">
+      + New Certificate
+    </a>
+  </div>
+
+  {/* Search filters */}
+  <form method="get" class="mb-6 bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-4">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-3">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Code</label>
+        <input type="text" name="code" value={filters.code ?? ""}
+               class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Order No</label>
+        <input type="number" name="order_no" value={filters.order_no ?? ""}
+               class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Recipient</label>
+        <input type="text" name="recipient" value={filters.recipient ?? ""}
+               class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Purchaser</label>
+        <input type="text" name="cust_name" value={filters.cust_name ?? ""}
+               class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Current Balance</label>
+        <input type="number" name="certAmount" step="0.01" value={filters.certAmount ?? ""}
+               class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Initial Amount</label>
+        <input type="number" name="initialAmount" step="0.01" value={filters.initialAmount ?? ""}
+               class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+    </div>
+    <div class="flex flex-wrap gap-3 items-end">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Valid</label>
+        <select name="valid" class="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          <option value="">All</option>
+          <option value="1" selected={filters.valid === "1"}>Yes</option>
+          <option value="0" selected={filters.valid === "0"}>No</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Status</label>
+        <select name="current" class="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          <option value="">All</option>
+          <option value="current"   selected={filters.current === "current"}>Current</option>
+          <option value="scheduled" selected={filters.current === "scheduled"}>Scheduled</option>
+          <option value="expired"   selected={filters.current === "expired"}>Expired</option>
+        </select>
+      </div>
+      <div class="flex gap-2">
+        <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Search</button>
+        <a href="/admin/gift-certificates" class="px-4 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">Reset</a>
+      </div>
+    </div>
+  </form>
+
+  {/* Table */}
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    {certs.length === 0 ? (
+      <p class="px-5 py-10 text-center text-sm text-gray-400">
+        {hasFilters ? "No certificates match your search." : "No gift certificates yet."}
+      </p>
+    ) : (
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-5 py-3 text-left">Code</th>
+            <th class="px-5 py-3 text-left">Purchaser</th>
+            <th class="px-5 py-3 text-left">Recipient</th>
+            <th class="px-5 py-3 text-right">Balance</th>
+            <th class="px-5 py-3 text-right">Initial</th>
+            <th class="px-5 py-3 text-center">Valid</th>
+            <th class="px-5 py-3 text-center">Start</th>
+            <th class="px-5 py-3 text-center">End</th>
+            <th class="px-5 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {certs.map(c => (
+            <tr class="hover:bg-gray-50">
+              <td class="px-5 py-3 font-mono text-xs text-gray-700">{c.Cert_Code}</td>
+              <td class="px-5 py-3 text-gray-700">{c.Cust_Name || "—"}</td>
+              <td class="px-5 py-3 text-gray-700">{c.Recipient || "—"}</td>
+              <td class="px-5 py-3 text-right font-mono text-xs font-medium text-gray-800">${c.CertAmount.toFixed(2)}</td>
+              <td class="px-5 py-3 text-right font-mono text-xs text-gray-500">${c.InitialAmount.toFixed(2)}</td>
+              <td class="px-5 py-3 text-center">
+                {c.Valid
+                  ? <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Yes</span>
+                  : <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">No</span>
+                }
+              </td>
+              <td class="px-5 py-3 text-center text-xs text-gray-500 whitespace-nowrap">{fmtDate(c.StartDate)}</td>
+              <td class="px-5 py-3 text-center text-xs text-gray-500 whitespace-nowrap">{fmtDate(c.EndDate)}</td>
+              <td class="px-5 py-3 text-right">
+                <a href={`/admin/gift-certificates/${c.Cert_ID}`}
+                   class="px-3 py-1 text-xs rounded bg-slate-100 text-slate-700 hover:bg-slate-200">
+                  Edit
+                </a>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+    <div class="px-5 py-3 border-t border-gray-100 text-xs text-gray-400">
+      {certs.length} certificate{certs.length !== 1 ? "s" : ""}
+    </div>
+  </div>
+
+</AdminLayout>
