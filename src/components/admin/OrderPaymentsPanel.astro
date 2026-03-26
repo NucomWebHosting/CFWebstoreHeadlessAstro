@@ -38,7 +38,7 @@ function paymentTypeLabel(p: OrderPayment): string {
   if (op === "Amazon") return "Amazon";
   if (op === "Square") return "Square";
   if (op === "Sezzle") return "Sezzle";
-  return p.CardType ?? op || "—";
+  return p.CardType ?? (op || "—");
 }
 
 // Determine if a payment was made today (same calendar day)
