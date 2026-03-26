@@ -59,8 +59,8 @@ export interface AssignedAddon {
 export async function getProductAddons(productId: number): Promise<AssignedAddon[]> {
   return query<AssignedAddon>(
     `SELECT pa.Addon_ID AS ProdAddon_ID, pa.Addon_ID,
-            COALESCE(sa.Std_Name, pa.Addon_Name) AS Addon_Name,
-            COALESCE(sa.Std_Type, pa.Addon_Type) AS Std_Type,
+            COALESCE(sa.Std_Prompt, pa.Prompt) AS Addon_Name,
+            COALESCE(sa.Std_Type, pa.AddonType) AS Std_Type,
             pa.Price AS Std_Price,
             CASE WHEN pa.Standard_ID IS NOT NULL AND pa.Standard_ID > 0 THEN 1 ELSE 0 END AS IsStandard,
             pa.Standard_ID AS Std_ID
