@@ -26,8 +26,9 @@ const sp = Astro.url.searchParams;
 
 // Date defaults: last 30 days
 function isoDate(d: Date) { return d.toISOString().split("T")[0]; }
+const now = new Date();
 const defaultAfter = isoDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
-const defaultBefore = isoDate(new Date());
+const defaultBefore = isoDate(now);
 
 const afterDate  = sp.get("after")  || defaultAfter;
 const beforeDate = sp.get("before") || defaultBefore;
@@ -36,6 +37,16 @@ const selectedStatuses = sp.getAll("status").length
   ? sp.getAll("status")
   : ["Pending", "Unshipped", "PartiallyShipped", "Shipped"];
 
+// Amazon requires LastUpdatedBefore to be at least 2 minutes in the past.
+// If the selected date is today, use now minus 3 minutes instead of end-of-day.
+function beforeIso(dateStr: string): string {
+  const today = isoDate(now);
+  if (dateStr >= today) {
+    return new Date(Date.now() - 3 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  }
+  return dateStr + "T23:59:59Z";
+}
+
 let orders: SPOrder[] = [];
 let nextPageToken: string | undefined;
 let fetchError = "";
@@ -43,7 +54,7 @@ let fetchError = "";
 try {
   const result = await getOrders({
     lastUpdatedAfter:  afterDate  ? afterDate  + "T00:00:00Z" : undefined,
-    lastUpdatedBefore: beforeDate ? beforeDate + "T23:59:59Z" : undefined,
+    lastUpdatedBefore: beforeDate ? beforeIso(beforeDate) : undefined,
     orderStatuses:     selectedStatuses,
     nextToken,
   });
