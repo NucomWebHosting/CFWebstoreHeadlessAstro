@@ -1,0 +1,55 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { createProductFilter } from "../../../lib/queries/admin-product-filters";
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const name = ((form.get("type_name") as string) ?? "").trim();
+  if (!name) {
+    error = "Type name is required.";
+  } else {
+    try {
+      const newId = await createProductFilter(name);
+      return Astro.redirect(`/admin/product-filters/${newId}`);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+}
+---
+
+<AdminLayout title="New Product Filter Type">
+  <div class="mb-5">
+    <a href="/admin/product-filters" class="text-sm text-blue-600 hover:underline">← Product Filters</a>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <div class="max-w-md bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="px-5 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">New Product Filter Type</h2>
+    </div>
+    <form method="post" class="px-5 py-5 space-y-4">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Type Name <span class="text-red-500">*</span></label>
+        <input type="text" name="type_name" maxlength="100" required autofocus
+               class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div class="pt-2 flex gap-3">
+        <button type="submit"
+                class="bg-blue-600 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-700">
+          Create
+        </button>
+        <a href="/admin/product-filters"
+           class="px-5 py-2 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+          Cancel
+        </a>
+      </div>
+    </form>
+  </div>
+</AdminLayout>

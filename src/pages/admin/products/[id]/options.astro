@@ -1,0 +1,110 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../components/layout/AdminLayout.astro";
+import ProductTabNav from "../../../../components/admin/ProductTabNav.astro";
+import { getProductByIdAdmin } from "../../../../lib/queries/admin";
+import { getProductOptions, getUnassignedStdOptions, removeProductOption } from "../../../../lib/queries/admin-product-tabs";
+
+const id = Number(Astro.params.id);
+if (!id) return new Response(null, { status: 404 });
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const action = form.get("action") as string;
+  try {
+    if (action === "remove") {
+      await removeProductOption(parseInt(form.get("prod_opt_id") as string));
+    }
+    return Astro.redirect(`/admin/products/${id}/options`);
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+const product = await getProductByIdAdmin(id);
+if (!product) return new Response(null, { status: 404 });
+
+const options    = await getProductOptions(id);
+const stdOptions = await getUnassignedStdOptions(id);
+---
+
+<AdminLayout title={`Options — ${product.Name}`}>
+  <ProductTabNav productId={id} currentTab="options" productName={product.Name} />
+
+  {error && <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+  <div class="space-y-6">
+
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div>
+          <h2 class="font-semibold text-gray-800">Product Options</h2>
+          <p class="text-xs text-gray-400 mt-0.5">Options allow customers to choose variants (size, color, etc.).</p>
+        </div>
+      </div>
+
+      {options.length === 0 ? (
+        <p class="px-5 py-8 text-center text-sm text-gray-400">No options assigned to this product.</p>
+      ) : (
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="px-5 py-3 text-left">Option Name</th>
+              <th class="px-5 py-3 text-left">Display Style</th>
+              <th class="px-5 py-3 text-center">Required</th>
+              <th class="px-5 py-3 text-center">Choices</th>
+              <th class="px-5 py-3 text-center">Type</th>
+              <th class="px-5 py-3"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {options.map(o => (
+              <tr class="hover:bg-gray-50">
+                <td class="px-5 py-3 font-medium text-gray-800">{o.Opt_Name}</td>
+                <td class="px-5 py-3 text-xs text-gray-500">{o.Display_Style ?? "—"}</td>
+                <td class="px-5 py-3 text-center">
+                  {o.Required
+                    ? <span class="inline-block px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700">Yes</span>
+                    : <span class="inline-block px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">No</span>
+                  }
+                </td>
+                <td class="px-5 py-3 text-center text-xs text-gray-500">{o.ChoiceCount}</td>
+                <td class="px-5 py-3 text-center">
+                  {o.IsStandard
+                    ? <span class="text-xs text-blue-600">Standard</span>
+                    : <span class="text-xs text-gray-500">Custom</span>
+                  }
+                </td>
+                <td class="px-5 py-3 text-right whitespace-nowrap">
+                  {o.IsStandard && o.Std_ID && (
+                    <a href={`/admin/standard-options/${o.Std_ID}`}
+                       class="text-xs text-blue-600 hover:underline mr-3">Edit</a>
+                  )}
+                  <form method="post" class="inline" onsubmit="return confirm('Remove this option from the product?')">
+                    <input type="hidden" name="action" value="remove" />
+                    <input type="hidden" name="prod_opt_id" value={o.ProdOpt_ID} />
+                    <button type="submit" class="text-xs text-red-500 hover:underline">Remove</button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {stdOptions.length > 0 && (
+        <div class="px-5 py-4 border-t border-gray-100">
+          <p class="text-xs font-medium text-gray-600 mb-2">Add Standard Option</p>
+          <p class="text-xs text-gray-400 mb-3">
+            Standard options are shared across products. To add a standard option, go to
+            <a href="/admin/standard-options" class="text-blue-600 hover:underline">Standard Options</a>
+            and use the "Assign to Products" feature, or contact your developer to implement product-level assignment.
+          </p>
+        </div>
+      )}
+    </div>
+
+  </div>
+</AdminLayout>

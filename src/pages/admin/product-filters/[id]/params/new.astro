@@ -1,0 +1,222 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../../components/layout/AdminLayout.astro";
+import {
+  getProductFilter,
+  createParam,
+  getAllParamsForType,
+  getAnswersForParam,
+} from "../../../../../lib/queries/admin-product-filters";
+import type { ParamData, AnswerRow } from "../../../../../lib/queries/admin-product-filters";
+
+const typeId = parseInt(Astro.params.id ?? "0");
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+
+  const name     = ((form.get("param_name")     as string) ?? "").trim();
+  const question = ((form.get("param_question") as string) ?? "").trim();
+  if (!name || !question) {
+    error = "Name and Question are required.";
+  } else {
+    const parentId  = parseInt(form.get("parent_id")  as string) || null;
+    const answerId  = parseInt(form.get("answer_id")  as string) || null;
+    const data: ParamData = {
+      name,
+      question,
+      priority:      parseInt(form.get("param_priority")  as string) || 0,
+      display:       form.get("param_display")       === "1",
+      alwaysOpen:    form.get("param_always_open")   === "1",
+      allowMultiple: form.get("param_allow_multiple") === "1",
+      parentId,
+      answerId,
+    };
+
+    const answerCount = parseInt(form.get("answer_count") as string) || 0;
+    const answers: AnswerRow[] = [];
+    for (let i = 0; i < answerCount; i++) {
+      const text = ((form.get(`answer_text_${i}`) as string) ?? "").trim();
+      if (!text) continue;
+      answers.push({
+        text,
+        priority: parseInt(form.get(`answer_priority_${i}`) as string) || 0,
+      });
+    }
+
+    try {
+      const newParamId = await createParam(typeId, data, answers);
+      return Astro.redirect(`/admin/product-filters/${typeId}/params/${newParamId}`);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+}
+
+const filter    = await getProductFilter(typeId);
+if (!filter) return Astro.redirect("/admin/product-filters");
+
+const allParams = await getAllParamsForType(typeId);
+---
+
+<AdminLayout title={`New Parameter — ${filter.TypeName}`}>
+  <div class="mb-5 flex gap-2 text-sm">
+    <a href="/admin/product-filters" class="text-blue-600 hover:underline">Product Filters</a>
+    <span class="text-gray-400">›</span>
+    <a href={`/admin/product-filters/${typeId}`} class="text-blue-600 hover:underline">{filter.TypeName}</a>
+    <span class="text-gray-400">›</span>
+    <span class="text-gray-500">New Parameter</span>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="max-w-2xl space-y-6">
+    <input type="hidden" name="answer_count" id="answer_count" value="0" />
+
+    <!-- Core Fields -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Parameter Details</h2>
+      </div>
+      <div class="px-5 py-5 space-y-4">
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Internal Name <span class="text-red-500">*</span></label>
+            <input type="text" name="param_name" maxlength="100" required
+                   class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Customer Question <span class="text-red-500">*</span></label>
+            <input type="text" name="param_question" maxlength="200" required
+                   class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Priority</label>
+          <input type="number" name="param_priority" value="0" min="0"
+                 class="w-24 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+
+        <div class="grid grid-cols-3 gap-6">
+          <div>
+            <label class="block text-xs text-gray-500 mb-2">Display?</label>
+            <div class="flex gap-4 text-sm">
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="param_display" value="1" checked /> Yes</label>
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="param_display" value="0" /> No</label>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-2">Always Open?</label>
+            <div class="flex gap-4 text-sm">
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="param_always_open" value="1" /> Yes</label>
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="param_always_open" value="0" checked /> No</label>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-2">Allow Multiple?</label>
+            <div class="flex gap-4 text-sm">
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="param_allow_multiple" value="1" /> Yes</label>
+              <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="param_allow_multiple" value="0" checked /> No</label>
+            </div>
+          </div>
+        </div>
+
+        {allParams.length > 0 && (
+          <div class="grid grid-cols-2 gap-4 pt-2 border-t border-gray-100">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Parent Filter <span class="text-gray-400">(optional)</span></label>
+              <select name="parent_id"
+                      class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                <option value="">— None —</option>
+                {allParams.map(p => (
+                  <option value={p.ProdTypeParam_ID}>{p.Name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Parent Answer <span class="text-gray-400">(optional)</span></label>
+              <input type="number" name="answer_id" placeholder="Answer ID"
+                     class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              <p class="text-xs text-gray-400 mt-1">Enter the AnswerId from the parent's answer list.</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+
+    <!-- Answers -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Answer Choices</h2>
+        <p class="text-xs text-gray-400 mt-0.5">The options customers can filter by.</p>
+      </div>
+
+      <table class="w-full text-sm" id="answers-table">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-5 py-3 text-left">Answer Text</th>
+            <th class="px-5 py-3 text-center w-24">Priority</th>
+            <th class="px-5 py-3 w-16"></th>
+          </tr>
+        </thead>
+        <tbody id="answers-tbody"></tbody>
+      </table>
+
+      <div class="px-5 py-3 border-t border-gray-100">
+        <button type="button" id="add-answer-btn" class="text-sm text-blue-600 hover:underline">
+          + Add Answer
+        </button>
+      </div>
+    </div>
+
+    <div class="flex gap-3">
+      <button type="submit"
+              class="bg-blue-600 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-700">
+        Create Parameter
+      </button>
+      <a href={`/admin/product-filters/${typeId}`}
+         class="px-5 py-2 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+        Cancel
+      </a>
+    </div>
+  </form>
+</AdminLayout>
+
+<script>
+  let answerCount = 0;
+
+  document.getElementById("add-answer-btn")!.addEventListener("click", () => {
+    const i = answerCount;
+    const tbody = document.getElementById("answers-tbody")!;
+    const tr = document.createElement("tr");
+    tr.className = "answer-row border-t border-gray-100";
+    tr.id = `answer-row-${i}`;
+    tr.innerHTML = `
+      <td class="px-5 py-3">
+        <input type="hidden" name="answer_id_${i}" value="" />
+        <input type="text" name="answer_text_${i}" placeholder="Answer text" maxlength="200" required
+               class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </td>
+      <td class="px-5 py-3 text-center">
+        <input type="number" name="answer_priority_${i}" value="${i * 10}" min="0"
+               class="w-16 border border-gray-300 rounded px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </td>
+      <td class="px-5 py-3 text-center">
+        <button type="button" onclick="removeAnswerRow(${i})"
+                class="text-xs text-red-500 hover:text-red-700 hover:underline">Remove</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+    answerCount++;
+    (document.getElementById("answer_count") as HTMLInputElement).value = String(answerCount);
+    tr.querySelector("input[type=text]")?.focus();
+  });
+
+  (window as any).removeAnswerRow = function(i: number) {
+    document.getElementById(`answer-row-${i}`)?.remove();
+  };
+</script>

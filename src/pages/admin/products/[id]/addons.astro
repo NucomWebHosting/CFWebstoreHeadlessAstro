@@ -1,0 +1,86 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../components/layout/AdminLayout.astro";
+import ProductTabNav from "../../../../components/admin/ProductTabNav.astro";
+import { getProductByIdAdmin } from "../../../../lib/queries/admin";
+import { getProductAddons, removeProductAddon } from "../../../../lib/queries/admin-product-tabs";
+
+const id = Number(Astro.params.id);
+if (!id) return new Response(null, { status: 404 });
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  try {
+    if (form.get("action") === "remove") {
+      await removeProductAddon(parseInt(form.get("prod_addon_id") as string));
+    }
+    return Astro.redirect(`/admin/products/${id}/addons`);
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+const product = await getProductByIdAdmin(id);
+if (!product) return new Response(null, { status: 404 });
+
+const addons = await getProductAddons(id);
+---
+
+<AdminLayout title={`Addons — ${product.Name}`}>
+  <ProductTabNav productId={id} currentTab="addons" productName={product.Name} />
+
+  {error && <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="px-5 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Product Addons</h2>
+      <p class="text-xs text-gray-400 mt-0.5">Addons are optional extras customers can add (gift wrap, engraving, etc.).</p>
+    </div>
+
+    {addons.length === 0 ? (
+      <p class="px-5 py-8 text-center text-sm text-gray-400">No addons assigned to this product.</p>
+    ) : (
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-5 py-3 text-left">Addon Name</th>
+            <th class="px-5 py-3 text-left">Type</th>
+            <th class="px-5 py-3 text-right">Price (+$)</th>
+            <th class="px-5 py-3 text-center">Source</th>
+            <th class="px-5 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {addons.map(a => (
+            <tr class="hover:bg-gray-50">
+              <td class="px-5 py-3 font-medium text-gray-800">{a.Addon_Name}</td>
+              <td class="px-5 py-3 text-xs text-gray-500">{a.Std_Type ?? "—"}</td>
+              <td class="px-5 py-3 text-right font-mono text-xs text-gray-700">
+                {a.Std_Price > 0 ? `+$${a.Std_Price.toFixed(2)}` : "—"}
+              </td>
+              <td class="px-5 py-3 text-center">
+                {a.IsStandard
+                  ? <span class="text-xs text-blue-600">Standard</span>
+                  : <span class="text-xs text-gray-500">Custom</span>
+                }
+              </td>
+              <td class="px-5 py-3 text-right whitespace-nowrap">
+                {a.IsStandard && a.Std_ID && (
+                  <a href={`/admin/standard-addons/${a.Std_ID}`}
+                     class="text-xs text-blue-600 hover:underline mr-3">Edit</a>
+                )}
+                <form method="post" class="inline" onsubmit="return confirm('Remove this addon from the product?')">
+                  <input type="hidden" name="action" value="remove" />
+                  <input type="hidden" name="prod_addon_id" value={a.ProdAddon_ID} />
+                  <button type="submit" class="text-xs text-red-500 hover:underline">Remove</button>
+                </form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+  </div>
+</AdminLayout>

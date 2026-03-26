@@ -1,0 +1,47 @@
+---
+interface Props {
+  productId: number;
+  currentTab: string;
+  productName?: string;
+}
+const { productId, currentTab, productName } = Astro.props;
+
+const tabs = [
+  { id: "display",       label: "Display",       href: `/admin/products/${productId}` },
+  { id: "pricing",       label: "Pricing",        href: `/admin/products/${productId}/pricing` },
+  { id: "images",        label: "Images",         href: `/admin/products/${productId}/images` },
+  { id: "files",         label: "Files",          href: `/admin/products/${productId}/files` },
+  { id: "info",          label: "Info",           href: `/admin/products/${productId}/info` },
+  { id: "group-prices",  label: "Group Prices",   href: `/admin/products/${productId}/group-prices` },
+  { id: "qty-discounts", label: "Qty Discounts",  href: `/admin/products/${productId}/qty-discounts` },
+  { id: "options",       label: "Options",        href: `/admin/products/${productId}/options` },
+  { id: "addons",        label: "Addons",         href: `/admin/products/${productId}/addons` },
+  { id: "related",       label: "Related",        href: `/admin/products/${productId}/related` },
+];
+---
+
+<div class="mb-6">
+  {productName && (
+    <div class="flex items-center justify-between mb-3">
+      <div class="flex items-center gap-2 text-sm">
+        <a href="/admin/products" class="text-blue-600 hover:underline">Products</a>
+        <span class="text-gray-400">›</span>
+        <span class="text-gray-600 truncate max-w-xs">{productName}</span>
+      </div>
+    </div>
+  )}
+  <div class="flex gap-0.5 flex-wrap bg-slate-800 rounded-lg p-1">
+    {tabs.map(tab => (
+      <a
+        href={tab.href}
+        class={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+          currentTab === tab.id
+            ? "bg-orange-600 text-white"
+            : "text-slate-300 hover:bg-slate-700 hover:text-white"
+        }`}
+      >
+        {tab.label}
+      </a>
+    ))}
+  </div>
+</div>

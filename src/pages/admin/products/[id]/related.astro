@@ -1,0 +1,161 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../components/layout/AdminLayout.astro";
+import ProductTabNav from "../../../../components/admin/ProductTabNav.astro";
+import { getProductByIdAdmin } from "../../../../lib/queries/admin";
+import {
+  getRelatedProducts, searchProductsForRelated,
+  addRelatedProduct, removeRelatedProduct,
+} from "../../../../lib/queries/admin-product-tabs";
+
+const id = Number(Astro.params.id);
+if (!id) return new Response(null, { status: 404 });
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const action = form.get("action") as string;
+  try {
+    if (action === "remove") {
+      await removeRelatedProduct(id, parseInt(form.get("item_id") as string));
+    } else if (action === "add") {
+      const ids = form.getAll("item_ids[]") as string[];
+      for (const itemId of ids) {
+        await addRelatedProduct(id, parseInt(itemId));
+      }
+    }
+    return Astro.redirect(`/admin/products/${id}/related`);
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+const product = await getProductByIdAdmin(id);
+if (!product) return new Response(null, { status: 404 });
+
+const related = await getRelatedProducts(id);
+
+const sp = Astro.url.searchParams;
+const searchName = sp.get("name") ?? "";
+const searchSku  = sp.get("sku")  ?? "";
+const searching  = searchName || searchSku;
+const results    = searching ? await searchProductsForRelated(id, searchName, searchSku) : [];
+---
+
+<AdminLayout title={`Related Products — ${product.Name}`}>
+  <ProductTabNav productId={id} currentTab="related" productName={product.Name} />
+
+  {error && <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+  <div class="space-y-6">
+
+    <!-- Currently related -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Related Products</h2>
+        <p class="text-xs text-gray-400 mt-0.5">{related.length} product{related.length !== 1 ? "s" : ""}</p>
+      </div>
+      {related.length === 0 ? (
+        <p class="px-5 py-8 text-center text-sm text-gray-400">No related products yet.</p>
+      ) : (
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="px-5 py-3 text-left">Name</th>
+              <th class="px-5 py-3 text-left">SKU</th>
+              <th class="px-5 py-3 text-center">Display</th>
+              <th class="px-5 py-3"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {related.map(r => (
+              <tr class="hover:bg-gray-50">
+                <td class="px-5 py-3 font-medium text-gray-800">{r.Name}</td>
+                <td class="px-5 py-3 text-xs text-gray-500 font-mono">{r.SKU ?? "—"}</td>
+                <td class="px-5 py-3 text-center">
+                  {r.Display
+                    ? <span class="inline-block px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">Yes</span>
+                    : <span class="inline-block px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">No</span>
+                  }
+                </td>
+                <td class="px-5 py-3 text-right">
+                  <form method="post" class="inline">
+                    <input type="hidden" name="action" value="remove" />
+                    <input type="hidden" name="item_id" value={r.Item_ID} />
+                    <button type="submit" class="text-xs text-red-500 hover:underline">Remove</button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+
+    <!-- Search & add -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Add Related Products</h2>
+      </div>
+      <div class="px-5 py-4">
+        <form method="get" class="flex gap-4 items-end flex-wrap mb-4">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Name</label>
+            <input type="text" name="name" value={searchName}
+                   class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">SKU</label>
+            <input type="text" name="sku" value={searchSku}
+                   class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Search</button>
+          {searching && <a href={`/admin/products/${id}/related`} class="px-4 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">Clear</a>}
+        </form>
+
+        {searching && results.length === 0 && (
+          <p class="text-sm text-gray-400 py-4">No products found.</p>
+        )}
+
+        {results.length > 0 && (
+          <form method="post">
+            <input type="hidden" name="action" value="add" />
+            <table class="w-full text-sm mb-4">
+              <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                  <th class="px-4 py-2 w-8"></th>
+                  <th class="px-4 py-2 text-left">Name</th>
+                  <th class="px-4 py-2 text-left">SKU</th>
+                  <th class="px-4 py-2 text-center">Display</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                {results.map(r => (
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2 text-center">
+                      <input type="checkbox" name="item_ids[]" value={r.Product_ID}
+                             class="w-4 h-4 rounded border-gray-300 text-blue-600" />
+                    </td>
+                    <td class="px-4 py-2 font-medium text-gray-800">{r.Name}</td>
+                    <td class="px-4 py-2 text-xs text-gray-500 font-mono">{r.SKU ?? "—"}</td>
+                    <td class="px-4 py-2 text-center">
+                      {r.Display
+                        ? <span class="inline-block px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">Yes</span>
+                        : <span class="inline-block px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">No</span>
+                      }
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">
+              Add Selected
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+
+  </div>
+</AdminLayout>

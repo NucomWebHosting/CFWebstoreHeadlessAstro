@@ -1,0 +1,282 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../components/layout/AdminLayout.astro";
+import ProductTabNav from "../../../../components/admin/ProductTabNav.astro";
+import { getProductByIdAdmin } from "../../../../lib/queries/admin";
+import {
+  getProductImages, addProductImage, updateProductImage, deleteProductImage,
+  getProductVideos, addProductVideo, deleteProductVideo,
+} from "../../../../lib/queries/admin-product-tabs";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+
+const id = Number(Astro.params.id);
+if (!id) return new Response(null, { status: 404 });
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const action = form.get("action") as string;
+
+  try {
+    if (action === "delete_image") {
+      await deleteProductImage(parseInt(form.get("image_id") as string));
+    } else if (action === "update_image") {
+      await updateProductImage(
+        parseInt(form.get("image_id") as string),
+        (form.get("caption") as string)?.trim() || null,
+        parseInt(form.get("priority") as string) || 1,
+        form.get("gallery") === "1"
+      );
+    } else if (action === "add_image") {
+      const file = form.get("image_file") as File | null;
+      if (!file || !file.name) throw new Error("Please select an image file.");
+      const ext = path.extname(file.name).toLowerCase();
+      if (![".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext)) throw new Error("Invalid image type.");
+      const uploadDir = path.join(process.cwd(), "public", "uploads", "products", String(id));
+      await fs.mkdir(uploadDir, { recursive: true });
+      const filename = `${Date.now()}${ext}`;
+      const bytes = await file.arrayBuffer();
+      await fs.writeFile(path.join(uploadDir, filename), Buffer.from(bytes));
+      const webPath = `/uploads/products/${id}/${filename}`;
+      await addProductImage(
+        id, webPath,
+        parseInt(form.get("priority") as string) || 99,
+        (form.get("caption") as string)?.trim() || null,
+        form.get("gallery") === "1"
+      );
+    } else if (action === "delete_video") {
+      await deleteProductVideo(parseInt(form.get("video_id") as string));
+    } else if (action === "add_video") {
+      await addProductVideo(id, {
+        name:        ((form.get("video_name")     as string) ?? "").trim(),
+        external:    ((form.get("video_external") as string) ?? "").trim(),
+        mp4:         ((form.get("video_mp4")      as string) ?? "").trim(),
+        priority:    parseInt(form.get("video_priority") as string) || 0,
+        description: ((form.get("video_desc")     as string) ?? "").trim(),
+      });
+    }
+    return Astro.redirect(`/admin/products/${id}/images`);
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+const product = await getProductByIdAdmin(id);
+if (!product) return new Response(null, { status: 404 });
+
+const images = await getProductImages(id);
+const videos = await getProductVideos(id);
+const editImageId = parseInt(Astro.url.searchParams.get("edit_img") ?? "0") || 0;
+---
+
+<AdminLayout title={`Images — ${product.Name}`}>
+  <ProductTabNav productId={id} currentTab="images" productName={product.Name} />
+
+  {error && <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+  <div class="space-y-6">
+
+    <!-- Images list -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Product Images</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Priority 1 = main product image.</p>
+      </div>
+
+      {images.length === 0 ? (
+        <p class="px-5 py-8 text-center text-sm text-gray-400">No images yet.</p>
+      ) : (
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="px-5 py-3 text-left w-20">Preview</th>
+              <th class="px-5 py-3 text-left">Filename</th>
+              <th class="px-5 py-3 text-center w-20">Priority</th>
+              <th class="px-5 py-3 text-left">Caption</th>
+              <th class="px-5 py-3 text-center w-24">Gallery</th>
+              <th class="px-5 py-3"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {images.map(img => (
+              <tr class="hover:bg-gray-50">
+                <td class="px-5 py-3">
+                  {img.sm_image && (
+                    <img src={img.sm_image} alt="" class="h-12 w-12 object-contain rounded border border-gray-200" />
+                  )}
+                </td>
+                <td class="px-5 py-3 text-xs text-gray-500 font-mono truncate max-w-xs">
+                  {img.filename ?? img.Original ?? "—"}
+                </td>
+                <td class="px-5 py-3 text-center text-sm">{img.priority}</td>
+                <td class="px-5 py-3 text-xs text-gray-600">{img.caption ?? "—"}</td>
+                <td class="px-5 py-3 text-center">
+                  {img.Gallery
+                    ? <span class="inline-block px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">Yes</span>
+                    : <span class="inline-block px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">No</span>
+                  }
+                </td>
+                <td class="px-5 py-3 text-right whitespace-nowrap">
+                  <a href={`?edit_img=${img.Image_ID}`} class="text-xs text-blue-600 hover:underline mr-3">Edit</a>
+                  <form method="post" class="inline" onsubmit="return confirm('Delete this image?')">
+                    <input type="hidden" name="action" value="delete_image" />
+                    <input type="hidden" name="image_id" value={img.Image_ID} />
+                    <button type="submit" class="text-xs text-red-500 hover:underline">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {editImageId > 0 && (() => {
+        const img = images.find(i => i.Image_ID === editImageId);
+        if (!img) return null;
+        return (
+          <div class="px-5 py-4 border-t border-gray-100 bg-blue-50">
+            <p class="text-xs font-medium text-blue-800 mb-3">Editing image #{editImageId}</p>
+            <form method="post" class="flex gap-4 items-end flex-wrap">
+              <input type="hidden" name="action" value="update_image" />
+              <input type="hidden" name="image_id" value={img.Image_ID} />
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Caption</label>
+                <input type="text" name="caption" value={img.caption ?? ""} maxlength="500"
+                       class="border border-gray-300 rounded px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Priority</label>
+                <input type="number" name="priority" value={img.priority} min="1"
+                       class="border border-gray-300 rounded px-3 py-1.5 text-sm w-20 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Gallery</label>
+                <select name="gallery" class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                  <option value="1" selected={img.Gallery}>Yes</option>
+                  <option value="0" selected={!img.Gallery}>No</option>
+                </select>
+              </div>
+              <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save</button>
+              <a href={`/admin/products/${id}/images`} class="px-4 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">Cancel</a>
+            </form>
+          </div>
+        );
+      })()}
+    </div>
+
+    <!-- Upload new image -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Upload Image</h2>
+      </div>
+      <form method="post" enctype="multipart/form-data" class="px-5 py-5">
+        <input type="hidden" name="action" value="add_image" />
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div class="md:col-span-2">
+            <label class="block text-xs text-gray-500 mb-1">Image File <span class="text-red-500">*</span></label>
+            <input type="file" name="image_file" accept="image/*" required
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Priority</label>
+            <input type="number" name="priority" value={images.length + 1} min="1"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Gallery?</label>
+            <select name="gallery" class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+              <option value="1">Yes</option>
+              <option value="0">No</option>
+            </select>
+          </div>
+          <div class="md:col-span-4">
+            <label class="block text-xs text-gray-500 mb-1">Caption</label>
+            <input type="text" name="caption" maxlength="500"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">
+          Upload Image
+        </button>
+      </form>
+    </div>
+
+    <!-- Videos -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Videos</h2>
+      </div>
+
+      {videos.length === 0 ? (
+        <p class="px-5 py-6 text-center text-sm text-gray-400">No videos yet.</p>
+      ) : (
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="px-5 py-3 text-left">Name</th>
+              <th class="px-5 py-3 text-left">URL / File</th>
+              <th class="px-5 py-3 text-center">Priority</th>
+              <th class="px-5 py-3"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {videos.map(v => (
+              <tr class="hover:bg-gray-50">
+                <td class="px-5 py-3 font-medium text-gray-800">{v.Name ?? "—"}</td>
+                <td class="px-5 py-3 text-xs text-gray-500 font-mono truncate max-w-xs">
+                  {v.video_external || v.video_mp4 || "—"}
+                </td>
+                <td class="px-5 py-3 text-center text-sm">{v.Priority}</td>
+                <td class="px-5 py-3 text-right">
+                  <form method="post" class="inline" onsubmit="return confirm('Delete this video?')">
+                    <input type="hidden" name="action" value="delete_video" />
+                    <input type="hidden" name="video_id" value={v.Video_Id} />
+                    <button type="submit" class="text-xs text-red-500 hover:underline">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <div class="px-5 py-4 border-t border-gray-100">
+        <p class="text-xs font-medium text-gray-600 mb-3">Add Video</p>
+        <form method="post" class="grid grid-cols-2 gap-3">
+          <input type="hidden" name="action" value="add_video" />
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Name</label>
+            <input type="text" name="video_name" maxlength="100"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Priority</label>
+            <input type="number" name="video_priority" value={videos.length} min="0"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="col-span-2">
+            <label class="block text-xs text-gray-500 mb-1">External URL (YouTube/Vimeo embed)</label>
+            <input type="text" name="video_external"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="col-span-2">
+            <label class="block text-xs text-gray-500 mb-1">MP4 File Path (server path or URL)</label>
+            <input type="text" name="video_mp4"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="col-span-2">
+            <label class="block text-xs text-gray-500 mb-1">Description</label>
+            <input type="text" name="video_desc" maxlength="500"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Add Video</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</AdminLayout>

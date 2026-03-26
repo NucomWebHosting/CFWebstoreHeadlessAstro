@@ -1,0 +1,131 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../components/layout/AdminLayout.astro";
+import ProductTabNav from "../../../../components/admin/ProductTabNav.astro";
+import { getProductByIdAdmin } from "../../../../lib/queries/admin";
+import { getPricingFields, updatePricingFields } from "../../../../lib/queries/admin-product-tabs";
+
+const id = Number(Astro.params.id);
+if (!id) return new Response(null, { status: 404 });
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  try {
+    await updatePricingFields(id, await Astro.request.formData());
+    return Astro.redirect(`/admin/products/${id}/pricing?saved=1`);
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+const product = await getProductByIdAdmin(id);
+if (!product) return new Response(null, { status: 404 });
+
+const pricing = await getPricingFields(id);
+const saved = Astro.url.searchParams.get("saved") === "1";
+
+function dateVal(d: Date | null | undefined) {
+  if (!d) return "";
+  const dt = new Date(d);
+  return dt.toISOString().split("T")[0];
+}
+---
+
+<AdminLayout title={`Pricing — ${product.Name}`}>
+  <ProductTabNav productId={id} currentTab="pricing" productName={product.Name} />
+
+  {error && <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
+  {saved && <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved successfully.</div>}
+
+  <form method="post" class="space-y-6 max-w-2xl">
+
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Sale Dates</h2>
+      </div>
+      <div class="p-6 grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Sale Start</label>
+          <input type="date" name="sale_start" value={dateVal(pricing?.Sale_Start)}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Sale End</label>
+          <input type="date" name="sale_end" value={dateVal(pricing?.Sale_End)}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Inventory</h2>
+      </div>
+      <div class="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Min Qty to Buy</label>
+          <input type="number" name="min_qty" min="0" value={pricing?.MinQty ?? ""}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Prep Days</label>
+          <input type="number" name="prep_days" min="0" value={pricing?.PrepDays ?? ""}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Reorder Level</label>
+          <input type="number" name="reorder" min="0" value={pricing?.ReorderLevel ?? ""}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Flat Shipping ($)</label>
+          <input type="number" name="shipping" step="0.01" min="0" value={pricing?.Shipping ?? ""}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+      <div class="px-6 pb-5">
+        <label class="block text-sm font-medium text-gray-700 mb-2">Require Multiples of Min Qty?</label>
+        <div class="flex gap-4 text-sm">
+          <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="req_mult" value="1" checked={pricing?.RequireMinQtyMultiple} /> Yes</label>
+          <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="req_mult" value="0" checked={!pricing?.RequireMinQtyMultiple} /> No</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Pack Dimensions</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Used for shipping rate calculations.</p>
+      </div>
+      <div class="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Length (in)</label>
+          <input type="number" name="pack_length" step="0.01" min="0" value={pricing?.Pack_Length ?? ""}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Width (in)</label>
+          <input type="number" name="pack_width" step="0.01" min="0" value={pricing?.Pack_Width ?? ""}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Height (in)</label>
+          <input type="number" name="pack_height" step="0.01" min="0" value={pricing?.Pack_Height ?? ""}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Pack Weight (lbs)</label>
+          <input type="number" name="pack_weight" step="0.01" min="0" value={pricing?.PackWeight ?? ""}
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+    </div>
+
+    <div class="flex gap-3">
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">
+        Save Pricing
+      </button>
+    </div>
+  </form>
+</AdminLayout>

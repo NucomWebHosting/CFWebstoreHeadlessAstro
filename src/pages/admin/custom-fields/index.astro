@@ -1,0 +1,175 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getCustomFields, saveCustomFields } from "../../../lib/queries/admin-custom-fields";
+import type { CustomFieldRow } from "../../../lib/queries/admin-custom-fields";
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const rowCount = parseInt(form.get("row_count") as string) || 0;
+
+  const rows: CustomFieldRow[] = [];
+  for (let i = 0; i < rowCount; i++) {
+    const name = ((form.get(`name_${i}`) as string) ?? "").trim();
+    const id = parseInt(form.get(`id_${i}`) as string) || undefined;
+    const del = form.get(`delete_${i}`) === "1";
+
+    if (!del && !name) continue; // skip empty unnamed new rows
+
+    rows.push({
+      id,
+      name,
+      display:    form.get(`display_${i}`)    === "1",
+      googleUse:  form.get(`google_use_${i}`) === "1",
+      googleCode: ((form.get(`google_code_${i}`) as string) ?? "").trim(),
+      delete: del,
+    });
+  }
+
+  try {
+    await saveCustomFields(rows);
+    return Astro.redirect("/admin/custom-fields");
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+const fields = await getCustomFields();
+---
+
+<AdminLayout title="Custom Fields">
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" id="cf-form">
+    <input type="hidden" name="row_count" id="row_count" value={fields.length} />
+
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-4">
+      <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div>
+          <h2 class="font-semibold text-gray-800">Custom Fields</h2>
+          <p class="text-xs text-gray-400 mt-0.5">These fields appear on product pages and can be sent to Google.</p>
+        </div>
+      </div>
+
+      <table class="w-full text-sm" id="cf-table">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-5 py-3 text-left w-64">Field Name</th>
+            <th class="px-5 py-3 text-center w-36">Display on<br/>Product Page</th>
+            <th class="px-5 py-3 text-center w-32">Send to<br/>Google</th>
+            <th class="px-5 py-3 text-left">Google Code</th>
+            <th class="px-5 py-3 w-16"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100" id="cf-tbody">
+          {fields.map((f, i) => (
+            <tr class="cf-row hover:bg-gray-50" id={`row-${i}`}>
+              <td class="px-5 py-3">
+                <input type="hidden" name={`id_${i}`} value={f.Custom_ID} />
+                <input type="hidden" name={`delete_${i}`} value="0" class="delete-flag" />
+                <input type="text" name={`name_${i}`} value={f.Custom_Name ?? ""} maxlength="50" required
+                       class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </td>
+              <td class="px-5 py-3 text-center">
+                <input type="checkbox" name={`display_${i}`} value="1" checked={f.Custom_Display}
+                       class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
+              </td>
+              <td class="px-5 py-3 text-center">
+                <input type="checkbox" name={`google_use_${i}`} value="1" checked={f.Google_Use}
+                       class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
+              </td>
+              <td class="px-5 py-3">
+                <input type="text" name={`google_code_${i}`} value={f.Google_Code ?? ""} maxlength="50"
+                       class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </td>
+              <td class="px-5 py-3 text-center">
+                <button type="button" onclick={`deleteRow(${i})`}
+                        class="text-xs text-red-500 hover:text-red-700 hover:underline">
+                  Delete
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div class="px-5 py-3 border-t border-gray-100 flex items-center gap-3">
+        <button type="button" id="add-btn"
+                class="text-sm text-blue-600 hover:underline">
+          + Add Field
+        </button>
+      </div>
+    </div>
+
+    <div class="flex gap-3">
+      <button type="submit"
+              class="bg-blue-600 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-700">
+        Save All
+      </button>
+    </div>
+  </form>
+
+</AdminLayout>
+
+<script>
+  let rowCount = parseInt((document.getElementById("row_count") as HTMLInputElement).value);
+
+  document.getElementById("add-btn")!.addEventListener("click", () => {
+    const i = rowCount;
+    const tbody = document.getElementById("cf-tbody")!;
+    const tr = document.createElement("tr");
+    tr.className = "cf-row hover:bg-gray-50";
+    tr.id = `row-${i}`;
+    tr.innerHTML = `
+      <td class="px-5 py-3">
+        <input type="hidden" name="id_${i}" value="" />
+        <input type="hidden" name="delete_${i}" value="0" class="delete-flag" />
+        <input type="text" name="name_${i}" maxlength="50" required placeholder="Field name"
+               class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </td>
+      <td class="px-5 py-3 text-center">
+        <input type="checkbox" name="display_${i}" value="1"
+               class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
+      </td>
+      <td class="px-5 py-3 text-center">
+        <input type="checkbox" name="google_use_${i}" value="1"
+               class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
+      </td>
+      <td class="px-5 py-3">
+        <input type="text" name="google_code_${i}" maxlength="50" placeholder="e.g. custom_label_0"
+               class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </td>
+      <td class="px-5 py-3 text-center">
+        <button type="button" onclick="deleteRow(${i})"
+                class="text-xs text-red-500 hover:text-red-700 hover:underline">
+          Delete
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+    rowCount++;
+    (document.getElementById("row_count") as HTMLInputElement).value = String(rowCount);
+    tr.querySelector("input[type=text]")?.focus();
+  });
+
+  (window as any).deleteRow = function(i: number) {
+    const row = document.getElementById(`row-${i}`);
+    if (!row) return;
+    const idInput = row.querySelector<HTMLInputElement>(`input[name="id_${i}"]`);
+    const isExisting = idInput && idInput.value !== "";
+    if (isExisting) {
+      if (!confirm("Delete this field? This will also remove all product values for this field.")) return;
+      const deleteFlag = row.querySelector<HTMLInputElement>(".delete-flag");
+      if (deleteFlag) deleteFlag.value = "1";
+      row.style.opacity = "0.3";
+      row.querySelectorAll("input:not([type=hidden]), button").forEach(el => (el as HTMLElement).setAttribute("disabled", "true"));
+    } else {
+      row.remove();
+    }
+  };
+</script>

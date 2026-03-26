@@ -1,0 +1,69 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getProductFilters } from "../../../lib/queries/admin-product-filters";
+
+const search = Astro.url.searchParams.get("q") || undefined;
+const filters = await getProductFilters(search);
+---
+
+<AdminLayout title="Product Filters">
+
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-xl font-semibold text-gray-800">Product Filters</h1>
+    <a href="/admin/product-filters/new"
+       class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">
+      + New Filter Type
+    </a>
+  </div>
+
+  <form method="get" class="mb-6 bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-4 flex gap-4 items-end">
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Name</label>
+      <input type="text" name="q" value={search ?? ""}
+             class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+    <div class="flex gap-2">
+      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Search</button>
+      <a href="/admin/product-filters" class="px-4 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">Reset</a>
+    </div>
+  </form>
+
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    {filters.length === 0 ? (
+      <p class="px-5 py-10 text-center text-sm text-gray-400">
+        {search ? "No filter types match your search." : "No product filter types yet."}
+      </p>
+    ) : (
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-5 py-3 text-left">Type Name</th>
+            <th class="px-5 py-3 text-center">Specs</th>
+            <th class="px-5 py-3 text-center">Parameters</th>
+            <th class="px-5 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {filters.map(f => (
+            <tr class="hover:bg-gray-50">
+              <td class="px-5 py-3 font-medium text-gray-800">{f.TypeName}</td>
+              <td class="px-5 py-3 text-center text-xs text-gray-500">{f.SpecCount}</td>
+              <td class="px-5 py-3 text-center text-xs text-gray-500">{f.ParamCount}</td>
+              <td class="px-5 py-3 text-right">
+                <a href={`/admin/product-filters/${f.ProdType_ID}`}
+                   class="px-3 py-1 text-xs rounded bg-slate-100 text-slate-700 hover:bg-slate-200">
+                  Edit
+                </a>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+    <div class="px-5 py-3 border-t border-gray-100 text-xs text-gray-400">
+      {filters.length} type{filters.length !== 1 ? "s" : ""}
+    </div>
+  </div>
+
+</AdminLayout>
