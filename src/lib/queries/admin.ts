@@ -145,30 +145,52 @@ export async function getProductByIdAdmin(id: number): Promise<ProductRow | null
 export type ProductParams = Record<string, string | number | boolean | null>;
 
 function productParams(data: FormData): ProductParams {
-  const s = (k: string) => (data.get(k) as string | null) ?? null;
+  const s    = (k: string) => (data.get(k) as string | null) ?? null;
   const sval = (k: string) => { const v = s(k); return v?.trim() || null; };
-  const b = (k: string) => data.get(k) === "on";
-  const i = (k: string, fallback = 0) => parseInt(s(k) ?? "") || fallback;
+  const r    = (k: string) => data.get(k) === "1";
+  const iopt = (k: string) => { const v = s(k); return v?.trim() ? parseInt(v) || null : null; };
+  const i    = (k: string, fallback = 0) => parseInt(s(k) ?? "") || fallback;
   return {
-    name:            s("name") ?? "",
-    short_desc:      sval("short_desc"),
-    long_desc:       sval("long_desc"),
-    long_desc2:      sval("long_desc2"),
-    long_desc3:      sval("long_desc3"),
-    long_desc4:      sval("long_desc4"),
-    bullet1:         sval("bullet1"),
-    bullet2:         sval("bullet2"),
-    bullet3:         sval("bullet3"),
-    bullet4:         sval("bullet4"),
-    bullet5:         sval("bullet5"),
-    display:         b("display"),
-    sale:            b("sale"),
-    hot:             b("hot"),
-    priority:        i("priority", 50),
-    permalink:       sval("permalink"),
-    metadescription: sval("metadescription"),
-    keywords:        sval("keywords"),
-    title_tag:       sval("title_tag"),
+    name:                   s("name") ?? "",
+    prod_type:              s("prod_type") || "product",
+    prodtype_id:            i("ProdType_ID"),
+    mfg_account_id:         iopt("mfg_account_id"),
+    short_desc:             sval("short_desc"),
+    long_desc:              sval("long_desc"),
+    long_desc_title:        sval("long_desc_title"),
+    long_desc2:             sval("long_desc2"),
+    long_desc2_title:       sval("long_desc2_title"),
+    long_desc3:             sval("long_desc3"),
+    long_desc3_title:       sval("long_desc3_title"),
+    long_desc4:             sval("long_desc4"),
+    long_desc4_title:       sval("long_desc4_title"),
+    bullet1:                sval("bullet_point1"),
+    bullet2:                sval("bullet_point2"),
+    bullet3:                sval("bullet_point3"),
+    bullet4:                sval("bullet_point4"),
+    bullet5:                sval("bullet_point5"),
+    display:                r("display"),
+    sale:                   r("sale"),
+    hot:                    r("hot"),
+    highlight:              r("Highlight"),
+    pos_only:               r("POSonly"),
+    package_only:           r("PackageOnly"),
+    hazardous:              r("Hazardous"),
+    reviewable:             r("Reviewable"),
+    sell_on_amazon:         r("sell_on_Amazon"),
+    highlight2:             r("Highlight2"),
+    quick_checkout_only:    r("QuickCheckoutOnly"),
+    long_desc_position:     data.get("long_desc_position") === "1" ? 1 : 0,
+    content_style:          i("content_style"),
+    gallery_image_style:    data.get("gallery_image_style") === "1" ? 1 : 0,
+    passparam:              sval("Passparam"),
+    faq_list:               sval("FAQ_list"),
+    related_products_title: sval("RelatedProducts_title"),
+    priority:               i("priority", 50),
+    permalink:              sval("permalink"),
+    metadescription:        sval("metadescription"),
+    keywords:               sval("keywords"),
+    title_tag:              sval("title_tag"),
   };
 }
 
@@ -176,17 +198,33 @@ export async function createProduct(data: FormData): Promise<number> {
   const p = productParams(data);
   const rows = await query<{ Product_ID: number }>(
     `INSERT INTO Products
-       (Name, Short_Desc, Long_Desc, Long_Desc2, Long_Desc3, Long_Desc4,
+       (Name, Prod_Type, ProdType_ID, mfg_account_id,
+        Short_Desc, Long_Desc, Long_Desc_Title,
+        Long_Desc2, Long_Desc2_Title,
+        Long_Desc3, Long_Desc3_Title,
+        Long_Desc4, Long_Desc4_Title,
         Bullet_point1, Bullet_point2, Bullet_point3, Bullet_point4, Bullet_point5,
         Base_Price,
-        Display, Sale, Hot, Priority, Popularity,
+        Display, Sale, Hot, Highlight, POSonly, PackageOnly, Hazardous,
+        Reviewable, sell_on_Amazon, Highlight2, QuickCheckoutOnly,
+        Long_Desc_Position, Content_style, gallery_image_style,
+        Passparam, FAQ_list, RelatedProducts_title,
+        Priority, Popularity,
         Permalink, Metadescription, Keywords, TitleTag, DateAdded)
      OUTPUT INSERTED.Product_ID
      VALUES
-       (@name, @short_desc, @long_desc, @long_desc2, @long_desc3, @long_desc4,
+       (@name, @prod_type, @prodtype_id, @mfg_account_id,
+        @short_desc, @long_desc, @long_desc_title,
+        @long_desc2, @long_desc2_title,
+        @long_desc3, @long_desc3_title,
+        @long_desc4, @long_desc4_title,
         @bullet1, @bullet2, @bullet3, @bullet4, @bullet5,
         0,
-        @display, @sale, @hot, @priority, 0,
+        @display, @sale, @hot, @highlight, @pos_only, @package_only, @hazardous,
+        @reviewable, @sell_on_amazon, @highlight2, @quick_checkout_only,
+        @long_desc_position, @content_style, @gallery_image_style,
+        @passparam, @faq_list, @related_products_title,
+        @priority, 0,
         @permalink, @metadescription, @keywords, @title_tag, GETDATE())`,
     p
   );
@@ -198,11 +236,26 @@ export async function updateProduct(id: number, data: FormData): Promise<void> {
   await query(
     `UPDATE Products SET
        Name = @name,
-       Short_Desc = @short_desc, Long_Desc = @long_desc,
-       Long_Desc2 = @long_desc2, Long_Desc3 = @long_desc3, Long_Desc4 = @long_desc4,
+       Prod_Type = @prod_type,
+       ProdType_ID = @prodtype_id,
+       mfg_account_id = @mfg_account_id,
+       Short_Desc = @short_desc, Long_Desc = @long_desc, Long_Desc_Title = @long_desc_title,
+       Long_Desc2 = @long_desc2, Long_Desc2_Title = @long_desc2_title,
+       Long_Desc3 = @long_desc3, Long_Desc3_Title = @long_desc3_title,
+       Long_Desc4 = @long_desc4, Long_Desc4_Title = @long_desc4_title,
        Bullet_point1 = @bullet1, Bullet_point2 = @bullet2, Bullet_point3 = @bullet3,
        Bullet_point4 = @bullet4, Bullet_point5 = @bullet5,
        Display = @display, Sale = @sale, Hot = @hot,
+       Highlight = @highlight, POSonly = @pos_only,
+       PackageOnly = @package_only, Hazardous = @hazardous,
+       Reviewable = @reviewable, sell_on_Amazon = @sell_on_amazon,
+       Highlight2 = @highlight2, QuickCheckoutOnly = @quick_checkout_only,
+       Long_Desc_Position = @long_desc_position,
+       Content_style = @content_style,
+       gallery_image_style = @gallery_image_style,
+       Passparam = @passparam,
+       FAQ_list = @faq_list,
+       RelatedProducts_title = @related_products_title,
        Priority = @priority,
        Permalink = @permalink, Metadescription = @metadescription,
        Keywords = @keywords, TitleTag = @title_tag

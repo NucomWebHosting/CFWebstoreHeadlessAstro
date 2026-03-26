@@ -121,6 +121,28 @@ export interface ProductRow {
   TitleTag: string | null;
   Availability: string | null;
   Sm_image?: string | null;  // joined from Product_Images (first image thumbnail)
+  Prod_Type: string | null;
+  ProdType_ID: number | null;
+  mfg_account_id: number | null;
+  Highlight: boolean | null;
+  POSonly: boolean | null;
+  Reviewable: boolean | null;
+  sell_on_Amazon: boolean | null;
+  Long_Desc_Position: number | null;
+  gallery_image_style: number | null;
+  Content_style: number | null;
+  Hazardous: boolean | null;
+  PackageOnly: boolean | null;
+  Passparam: string | null;
+  Long_Desc_Title: string | null;
+  Long_Desc2_Title: string | null;
+  Long_Desc3_Title: string | null;
+  Long_Desc4_Title: string | null;
+  color_id: number | null;
+  Highlight2: boolean | null;
+  QuickCheckoutOnly: boolean | null;
+  FAQ_list: string | null;
+  RelatedProducts_title: string | null;
 }
 
 export interface ProductImageRow {

@@ -1,17 +1,67 @@
 ---
 import type { ProductRow } from "../../lib/types";
+import type {
+  CategoryPicklistRow,
+  ManufacturerRow,
+  ProductTypeRow,
+} from "../../lib/queries/admin-product-tabs";
 
 interface Props {
   product?: ProductRow | null;
   action: string;
   cancelHref: string;
+  categories?: CategoryPicklistRow[];
+  selectedCatIds?: number[];
+  manufacturers?: ManufacturerRow[];
+  productTypes?: ProductTypeRow[];
 }
-const { product: p, action, cancelHref } = Astro.props;
-const v = (field: keyof ProductRow) => p?.[field] ?? "";
----
-<form method="post" action={action} class="space-y-8">
 
-  <!-- Basic Info -->
+const {
+  product: p,
+  action,
+  cancelHref,
+  categories = [],
+  selectedCatIds = [],
+  manufacturers = [],
+  productTypes = [],
+} = Astro.props;
+
+const isNew = !p;
+const v = (field: keyof ProductRow) => p?.[field] ?? "";
+
+// Radio helper: returns "1" or "0" depending on product field,
+// or a given default for new products.
+function radioVal(field: keyof ProductRow, defaultYes: boolean): boolean {
+  if (isNew) return defaultYes;
+  const val = p?.[field];
+  return val === true || val === 1;
+}
+
+const selectedCatSet = new Set(selectedCatIds);
+const availableCats = categories.filter(c => !selectedCatSet.has(c.Category_ID));
+const selectedCats  = categories.filter(c =>  selectedCatSet.has(c.Category_ID));
+
+// Defaults for new products
+const dDisplay          = radioVal("Display",           true);
+const dSale             = radioVal("Sale",              false);
+const dHot              = radioVal("Hot",               false);
+const dHighlight        = radioVal("Highlight",         false);
+const dPOSonly          = radioVal("POSonly",           false);
+const dPackageOnly      = radioVal("PackageOnly",       false);
+const dHazardous        = radioVal("Hazardous",         false);
+const dHighlight2       = radioVal("Highlight2",        false);
+const dQuickCheckout    = radioVal("QuickCheckoutOnly", false);
+const dReviewable       = radioVal("Reviewable",        true);
+const dSellAmazon       = radioVal("sell_on_Amazon",    true);
+
+const dLongDescPos      = isNew ? 0 : (p?.Long_Desc_Position   ?? 0);
+const dContentStyle     = isNew ? 0 : (p?.Content_style        ?? 0);
+const dGalleryStyle     = isNew ? 0 : (p?.gallery_image_style  ?? 0);
+---
+
+<form method="post" action={action} class="space-y-8" id="product-display-form">
+
+  <!-- 1. Basic Info -->
   <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
     <div class="px-6 py-4 border-b border-gray-100">
       <h2 class="font-semibold text-gray-800">Basic Information</h2>
@@ -22,106 +72,371 @@ const v = (field: keyof ProductRow) => p?.[field] ?? "";
         <input type="text" name="name" required value={v("Name")}
           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
-    </div>
-  </section>
-
-  <!-- Display Settings -->
-  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-    <div class="px-6 py-4 border-b border-gray-100">
-      <h2 class="font-semibold text-gray-800">Display Settings</h2>
-    </div>
-    <div class="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-        <input type="number" name="priority" min="0" value={v("Priority") || 50}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-    </div>
-    <div class="px-6 pb-5 flex gap-6">
-      <label class="flex items-center gap-2 text-sm cursor-pointer">
-        <input type="checkbox" name="display" checked={!!p?.Display} class="rounded" />
-        <span>Display (active)</span>
-      </label>
-      <label class="flex items-center gap-2 text-sm cursor-pointer">
-        <input type="checkbox" name="sale" checked={!!p?.Sale} class="rounded" />
-        <span>On Sale</span>
-      </label>
-      <label class="flex items-center gap-2 text-sm cursor-pointer">
-        <input type="checkbox" name="hot" checked={!!p?.Hot} class="rounded" />
-        <span>Hot Item</span>
-      </label>
-    </div>
-  </section>
-
-  <!-- Description -->
-  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-    <div class="px-6 py-4 border-b border-gray-100">
-      <h2 class="font-semibold text-gray-800">Description</h2>
-    </div>
-    <div class="p-6 space-y-4">
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Short Description</label>
-        <textarea name="short_desc" rows="3"
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-        >{v("Short_Desc")}</textarea>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Long Description (HTML)</label>
-        <textarea name="long_desc" rows="8"
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-        >{v("Long_Desc")}</textarea>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Details Tab (Long Desc 2)</label>
-          <textarea name="long_desc2" rows="4"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-          >{v("Long_Desc2")}</textarea>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Specs Tab (Long Desc 3)</label>
-          <textarea name="long_desc3" rows="4"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-          >{v("Long_Desc3")}</textarea>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Additional Tab (Long Desc 4)</label>
-          <textarea name="long_desc4" rows="4"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-          >{v("Long_Desc4")}</textarea>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Bullet Points -->
-  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-    <div class="px-6 py-4 border-b border-gray-100">
-      <h2 class="font-semibold text-gray-800">Bullet Points</h2>
-    </div>
-    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-3">
-      {([1,2,3,4,5] as const).map((n) => (
-        <input
-          type="text" name={`bullet${n}`}
-          value={p?.[`Bullet_point${n}` as keyof ProductRow] ?? ""}
-          placeholder={`Bullet point ${n}`}
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      ))}
-    </div>
-  </section>
-
-  <!-- SEO -->
-  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
-    <div class="px-6 py-4 border-b border-gray-100">
-      <h2 class="font-semibold text-gray-800">SEO & URL</h2>
-    </div>
-    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
       <div class="md:col-span-2">
         <label class="block text-sm font-medium text-gray-700 mb-1">Permalink (slug)</label>
         <input type="text" name="permalink" value={v("Permalink")}
           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
+    </div>
+  </section>
+
+  <!-- 2. Product Type & Classification -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Product Type &amp; Classification</h2>
+    </div>
+    <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Product Type</label>
+        <select name="prod_type"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          {["product","membership","download","certificate"].map(t => (
+            <option value={t} selected={v("Prod_Type") === t || (isNew && t === "product")}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Product Filter</label>
+        <select name="ProdType_ID"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="0">(none)</option>
+          {productTypes.map(pt => (
+            <option value={pt.ProdType_ID} selected={p?.ProdType_ID === pt.ProdType_ID}>{pt.TypeName}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Manufacturer</label>
+        <select name="mfg_account_id"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="">(none)</option>
+          {manufacturers.map(m => (
+            <option value={m.account_id} selected={p?.mfg_account_id === m.account_id}>{m.Account_name}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Categories dual-listbox -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Categories</h2>
+    </div>
+    <div class="p-6">
+      <div class="flex gap-4 items-start">
+        <!-- Available -->
+        <div class="flex-1 min-w-0">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Available</label>
+          <input type="text" id="cat-search" placeholder="Search…"
+            class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <select id="cat_available" multiple size={12}
+            class="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            {availableCats.map(c => (
+              <option value={c.Category_ID}>{c.FullPath}</option>
+            ))}
+          </select>
+        </div>
+        <!-- Buttons -->
+        <div class="flex flex-col gap-2 justify-center pt-10">
+          <button type="button" id="cat-add"
+            class="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 whitespace-nowrap">
+            Add &rarr;
+          </button>
+          <button type="button" id="cat-remove"
+            class="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 whitespace-nowrap">
+            &larr; Remove
+          </button>
+        </div>
+        <!-- Selected -->
+        <div class="flex-1 min-w-0">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Selected</label>
+          <div class="mb-2 h-[30px]"></div><!-- spacer to align with available list -->
+          <select id="cat_selected" name="CID_list" multiple size={12}
+            class="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            {selectedCats.map(c => (
+              <option value={c.Category_ID}>{c.FullPath}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Display Flags -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Display Flags</h2>
+    </div>
+    <div class="p-6 grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-4">
+      <!-- display -->
+      <div>
+        <p class="text-sm font-medium text-gray-700 mb-1">Display (active)</p>
+        <label class="inline-flex items-center gap-1.5 text-sm mr-4 cursor-pointer">
+          <input type="radio" name="display" value="1" checked={dDisplay} class="accent-blue-600" /> Yes
+        </label>
+        <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+          <input type="radio" name="display" value="0" checked={!dDisplay} class="accent-blue-600" /> No
+        </label>
+      </div>
+      <!-- sale -->
+      <div>
+        <p class="text-sm font-medium text-gray-700 mb-1">On Sale</p>
+        <label class="inline-flex items-center gap-1.5 text-sm mr-4 cursor-pointer">
+          <input type="radio" name="sale" value="1" checked={dSale} class="accent-blue-600" /> Yes
+        </label>
+        <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+          <input type="radio" name="sale" value="0" checked={!dSale} class="accent-blue-600" /> No
+        </label>
+      </div>
+      <!-- hot = Made in the USA -->
+      <div>
+        <p class="text-sm font-medium text-gray-700 mb-1">Made in the USA</p>
+        <label class="inline-flex items-center gap-1.5 text-sm mr-4 cursor-pointer">
+          <input type="radio" name="hot" value="1" checked={dHot} class="accent-blue-600" /> Yes
+        </label>
+        <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+          <input type="radio" name="hot" value="0" checked={!dHot} class="accent-blue-600" /> No
+        </label>
+      </div>
+      <!-- Highlight = New -->
+      <div>
+        <p class="text-sm font-medium text-gray-700 mb-1">New</p>
+        <label class="inline-flex items-center gap-1.5 text-sm mr-4 cursor-pointer">
+          <input type="radio" name="Highlight" value="1" checked={dHighlight} class="accent-blue-600" /> Yes
+        </label>
+        <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+          <input type="radio" name="Highlight" value="0" checked={!dHighlight} class="accent-blue-600" /> No
+        </label>
+      </div>
+      <!-- Reviewable -->
+      <div>
+        <p class="text-sm font-medium text-gray-700 mb-1">Allow Reviews</p>
+        <label class="inline-flex items-center gap-1.5 text-sm mr-4 cursor-pointer">
+          <input type="radio" name="Reviewable" value="1" checked={dReviewable} class="accent-blue-600" /> Yes
+        </label>
+        <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+          <input type="radio" name="Reviewable" value="0" checked={!dReviewable} class="accent-blue-600" /> No
+        </label>
+      </div>
+      <!-- sell_on_Amazon -->
+      <div>
+        <p class="text-sm font-medium text-gray-700 mb-1">Sell on Amazon</p>
+        <label class="inline-flex items-center gap-1.5 text-sm mr-4 cursor-pointer">
+          <input type="radio" name="sell_on_Amazon" value="1" checked={dSellAmazon} class="accent-blue-600" /> Yes
+        </label>
+        <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+          <input type="radio" name="sell_on_Amazon" value="0" checked={!dSellAmazon} class="accent-blue-600" /> No
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Behavior Flags -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Behavior Flags</h2>
+    </div>
+    <div class="p-6 grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-4">
+      <!-- POSonly -->
+      <div>
+        <p class="text-sm font-medium text-gray-700 mb-1">POS Order Only</p>
+        <label class="inline-flex items-center gap-1.5 text-sm mr-4 cursor-pointer">
+          <input type="radio" name="POSonly" value="1" checked={dPOSonly} class="accent-blue-600" /> Yes
+        </label>
+        <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+          <input type="radio" name="POSonly" value="0" checked={!dPOSonly} class="accent-blue-600" /> No
+        </label>
+      </div>
+      <!-- PackageOnly -->
+      <div>
+        <p class="text-sm font-medium text-gray-700 mb-1">Package Only</p>
+        <label class="inline-flex items-center gap-1.5 text-sm mr-4 cursor-pointer">
+          <input type="radio" name="PackageOnly" value="1" checked={dPackageOnly} class="accent-blue-600" /> Yes
+        </label>
+        <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+          <input type="radio" name="PackageOnly" value="0" checked={!dPackageOnly} class="accent-blue-600" /> No
+        </label>
+      </div>
+      <!-- Hazardous -->
+      <div>
+        <p class="text-sm font-medium text-gray-700 mb-1">Hazardous</p>
+        <label class="inline-flex items-center gap-1.5 text-sm mr-4 cursor-pointer">
+          <input type="radio" name="Hazardous" value="1" checked={dHazardous} class="accent-blue-600" /> Yes
+        </label>
+        <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+          <input type="radio" name="Hazardous" value="0" checked={!dHazardous} class="accent-blue-600" /> No
+        </label>
+      </div>
+      <!-- Highlight2 = Shroud Page -->
+      <div>
+        <p class="text-sm font-medium text-gray-700 mb-1">Shroud Page</p>
+        <label class="inline-flex items-center gap-1.5 text-sm mr-4 cursor-pointer">
+          <input type="radio" name="Highlight2" value="1" checked={dHighlight2} class="accent-blue-600" /> Yes
+        </label>
+        <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+          <input type="radio" name="Highlight2" value="0" checked={!dHighlight2} class="accent-blue-600" /> No
+        </label>
+      </div>
+      <!-- QuickCheckoutOnly -->
+      <div>
+        <p class="text-sm font-medium text-gray-700 mb-1">Quick Order Only</p>
+        <label class="inline-flex items-center gap-1.5 text-sm mr-4 cursor-pointer">
+          <input type="radio" name="QuickCheckoutOnly" value="1" checked={dQuickCheckout} class="accent-blue-600" /> Yes
+        </label>
+        <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+          <input type="radio" name="QuickCheckoutOnly" value="0" checked={!dQuickCheckout} class="accent-blue-600" /> No
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Layout -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Layout</h2>
+    </div>
+    <div class="p-6 space-y-5">
+      <!-- long_desc_position -->
+      <div>
+        <p class="text-sm font-medium text-gray-700 mb-2">Content Position</p>
+        <div class="flex gap-6">
+          <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+            <input type="radio" name="long_desc_position" value="1" checked={dLongDescPos === 1} class="accent-blue-600" />
+            Full Width
+          </label>
+          <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+            <input type="radio" name="long_desc_position" value="0" checked={dLongDescPos !== 1} class="accent-blue-600" />
+            Right Column
+          </label>
+        </div>
+      </div>
+      <!-- content_style -->
+      <div>
+        <p class="text-sm font-medium text-gray-700 mb-2">Content Style</p>
+        <div class="flex flex-wrap gap-x-6 gap-y-2">
+          {([
+            { label: "Accordion 1", val: 0 },
+            { label: "Accordion 2", val: 1 },
+            { label: "Accordion 3", val: 4 },
+            { label: "Tab 1",       val: 2 },
+            { label: "Tab 2",       val: 3 },
+          ] as const).map(opt => (
+            <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+              <input type="radio" name="content_style" value={opt.val} checked={dContentStyle === opt.val} class="accent-blue-600" />
+              {opt.label}
+            </label>
+          ))}
+        </div>
+      </div>
+      <!-- gallery_image_style -->
+      <div>
+        <p class="text-sm font-medium text-gray-700 mb-2">Gallery Image Style</p>
+        <div class="flex gap-6">
+          <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+            <input type="radio" name="gallery_image_style" value="1" checked={dGalleryStyle === 1} class="accent-blue-600" />
+            Scroll
+          </label>
+          <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+            <input type="radio" name="gallery_image_style" value="0" checked={dGalleryStyle !== 1} class="accent-blue-600" />
+            Unorganized
+          </label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. Priority & Custom -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Priority &amp; Custom</h2>
+    </div>
+    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+        <input type="number" name="priority" min="0" value={v("Priority") || 50}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Parameters (Passparam)</label>
+        <input type="text" name="Passparam" value={v("Passparam")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">FAQ List</label>
+        <input type="text" name="FAQ_list" value={v("FAQ_list")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Related Products Title</label>
+        <input type="text" name="RelatedProducts_title" value={v("RelatedProducts_title")}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. Short Description -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Short Description</h2>
+    </div>
+    <div class="p-6">
+      <textarea name="short_desc" rows={4}
+        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+      >{v("Short_Desc")}</textarea>
+    </div>
+  </section>
+
+  <!-- 9. Full Description (4 tabs) -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Full Description</h2>
+    </div>
+    <div class="p-6 space-y-6">
+      {([
+        { n: 1, titleField: "long_desc_title",  titleVal: "Long_Desc_Title",  bodyField: "long_desc",  bodyVal: "Long_Desc"  },
+        { n: 2, titleField: "long_desc2_title", titleVal: "Long_Desc2_Title", bodyField: "long_desc2", bodyVal: "Long_Desc2" },
+        { n: 3, titleField: "long_desc3_title", titleVal: "Long_Desc3_Title", bodyField: "long_desc3", bodyVal: "Long_Desc3" },
+        { n: 4, titleField: "long_desc4_title", titleVal: "Long_Desc4_Title", bodyField: "long_desc4", bodyVal: "Long_Desc4" },
+      ] as const).map(tab => (
+        <div class="border border-gray-100 rounded-lg p-4 space-y-3">
+          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Tab {tab.n}</p>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Tab {tab.n} Title</label>
+            <input type="text" name={tab.titleField} value={p?.[tab.titleVal as keyof ProductRow] ?? ""}
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Tab {tab.n} Content (HTML)</label>
+            <textarea name={tab.bodyField} rows={8}
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+            >{p?.[tab.bodyVal as keyof ProductRow] ?? ""}</textarea>
+          </div>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <!-- 10. Bullet Points -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Bullet Points</h2>
+    </div>
+    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-3">
+      {([1,2,3,4,5] as const).map(n => (
+        <textarea name={`bullet_point${n}`} rows={2} placeholder={`Bullet point ${n}`}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+        >{p?.[`Bullet_point${n}` as keyof ProductRow] ?? ""}</textarea>
+      ))}
+    </div>
+  </section>
+
+  <!-- 11. SEO -->
+  <section class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">SEO</h2>
+    </div>
+    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
       <div class="md:col-span-2">
         <label class="block text-sm font-medium text-gray-700 mb-1">Title Tag</label>
         <input type="text" name="title_tag" value={v("TitleTag")}
@@ -129,7 +444,7 @@ const v = (field: keyof ProductRow) => p?.[field] ?? "";
       </div>
       <div class="md:col-span-2">
         <label class="block text-sm font-medium text-gray-700 mb-1">Meta Description</label>
-        <textarea name="metadescription" rows="2"
+        <textarea name="metadescription" rows={2}
           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >{v("Metadescription")}</textarea>
       </div>
@@ -142,12 +457,88 @@ const v = (field: keyof ProductRow) => p?.[field] ?? "";
   </section>
 
   <div class="flex gap-3">
-    <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">
+    <button type="submit"
+      class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">
       Save Product
     </button>
-    <a href={cancelHref} class="px-6 py-2 rounded-lg text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+    <a href={cancelHref}
+      class="px-6 py-2 rounded-lg text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
       Cancel
     </a>
   </div>
 
 </form>
+
+<script>
+(function () {
+  const form     = document.getElementById("product-display-form") as HTMLFormElement | null;
+  const avail    = document.getElementById("cat_available")        as HTMLSelectElement | null;
+  const selected = document.getElementById("cat_selected")         as HTMLSelectElement | null;
+  const btnAdd   = document.getElementById("cat-add")              as HTMLButtonElement | null;
+  const btnRem   = document.getElementById("cat-remove")           as HTMLButtonElement | null;
+  const search   = document.getElementById("cat-search")           as HTMLInputElement | null;
+
+  if (!avail || !selected || !btnAdd || !btnRem || !search || !form) return;
+
+  function moveOptions(from: HTMLSelectElement, to: HTMLSelectElement) {
+    const toMove = Array.from(from.selectedOptions);
+    toMove.forEach(opt => {
+      from.removeChild(opt);
+      to.appendChild(opt);
+    });
+    sortSelect(to);
+  }
+
+  function sortSelect(sel: HTMLSelectElement) {
+    const opts = Array.from(sel.options).sort((a, b) => a.text.localeCompare(b.text));
+    opts.forEach(o => sel.appendChild(o));
+  }
+
+  btnAdd.addEventListener("click", () => moveOptions(avail, selected));
+  btnRem.addEventListener("click", () => moveOptions(selected, avail));
+
+  // Search filter on Available list
+  // We keep a hidden data store so filtering doesn't destroy options
+  let allAvailable: { value: string; text: string }[] = Array.from(avail.options).map(o => ({
+    value: o.value,
+    text: o.text,
+  }));
+
+  // Rebuild available list keeping track of full set
+  function rebuildAvailable(filter: string) {
+    // Collect currently-shown options back to master (they may not have moved)
+    const shownValues = new Set(Array.from(avail.options).map(o => o.value));
+    // Add any that are in allAvailable but not shown (were filtered out before)
+    // Actually we need to always work from allAvailable and exclude selected
+    const selectedValues = new Set(Array.from(selected.options).map(o => o.value));
+    const lower = filter.toLowerCase();
+    avail.innerHTML = "";
+    allAvailable
+      .filter(o => !selectedValues.has(o.value) && o.text.toLowerCase().includes(lower))
+      .forEach(o => {
+        const opt = document.createElement("option");
+        opt.value = o.value;
+        opt.text  = o.text;
+        avail.appendChild(opt);
+      });
+  }
+
+  // Keep allAvailable in sync when items move to selected
+  btnAdd.addEventListener("click", () => {
+    // After move, update allAvailable to reflect removals (they stay in allAvailable for re-filter)
+    // Nothing needed — allAvailable is the permanent master list.
+  });
+
+  search.addEventListener("input", () => rebuildAvailable(search.value));
+
+  // On Add, we need to re-sync allAvailable still contains everything;
+  // re-run filter after add so search result stays coherent
+  btnAdd.addEventListener("click", () => rebuildAvailable(search.value));
+  btnRem.addEventListener("click", () => rebuildAvailable(search.value));
+
+  // On form submit, select ALL options in "selected" so they're posted
+  form.addEventListener("submit", () => {
+    Array.from(selected.options).forEach(o => { o.selected = true; });
+  });
+})();
+</script>

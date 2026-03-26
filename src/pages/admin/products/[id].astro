@@ -4,6 +4,13 @@ import AdminLayout from "../../../components/layout/AdminLayout.astro";
 import ProductForm from "../../../components/admin/ProductForm.astro";
 import ProductTabNav from "../../../components/admin/ProductTabNav.astro";
 import { getProductByIdAdmin, updateProduct, deleteProduct } from "../../../lib/queries/admin";
+import {
+  getCategoryPicklist,
+  getProductCategoryIds,
+  getManufacturers,
+  getProductTypes,
+  saveProductCategories,
+} from "../../../lib/queries/admin-product-tabs";
 
 const id = Number(Astro.params.id);
 if (!id) return new Response(null, { status: 404 });
@@ -16,13 +23,21 @@ if (Astro.request.method === "POST") {
   }
   try {
     await updateProduct(id, data);
+    const catIds = data.getAll("CID_list").map(v => parseInt(v as string)).filter(Boolean);
+    await saveProductCategories(id, catIds);
     return Astro.redirect(`/admin/products/${id}?saved=1`);
   } catch (e) {
     // fall through to re-render with error
   }
 }
 
-const product = await getProductByIdAdmin(id);
+const [product, categories, selectedCatIds, manufacturers, productTypes] = await Promise.all([
+  getProductByIdAdmin(id),
+  getCategoryPicklist(),
+  getProductCategoryIds(id),
+  getManufacturers(),
+  getProductTypes(),
+]);
 if (!product) return new Response(null, { status: 404 });
 
 const saved = Astro.url.searchParams.get("saved") === "1";
@@ -36,7 +51,15 @@ const saved = Astro.url.searchParams.get("saved") === "1";
     </div>
   )}
 
-  <ProductForm product={product} action={`/admin/products/${id}`} cancelHref="/admin/products" />
+  <ProductForm
+    product={product}
+    action={`/admin/products/${id}`}
+    cancelHref="/admin/products"
+    categories={categories}
+    selectedCatIds={selectedCatIds}
+    manufacturers={manufacturers}
+    productTypes={productTypes}
+  />
 
   <div class="mt-8 pt-6 border-t border-red-100">
     <h3 class="text-sm font-semibold text-red-700 mb-2">Danger Zone</h3>

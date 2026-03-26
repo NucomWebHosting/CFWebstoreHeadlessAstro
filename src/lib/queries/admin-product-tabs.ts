@@ -665,3 +665,67 @@ export async function saveSpecValues(productId: number, values: { specId: number
     }
   }
 }
+
+// ─── Display Tab Support Queries ──────────────────────────────────────────────
+
+export interface CategoryPicklistRow {
+  Category_ID: number;
+  Name: string;
+  FullPath: string;
+}
+
+export async function getCategoryPicklist(): Promise<CategoryPicklistRow[]> {
+  // 3-level self-join to build breadcrumb path; covers most category trees
+  return query<CategoryPicklistRow>(`
+    SELECT c.Category_ID, c.Name,
+      CASE
+        WHEN gp.Name IS NOT NULL THEN gp.Name + ' \u00bb ' + p.Name + ' \u00bb ' + c.Name
+        WHEN p.Name  IS NOT NULL THEN p.Name + ' \u00bb ' + c.Name
+        ELSE c.Name
+      END AS FullPath
+    FROM Categories c
+    LEFT JOIN Categories p  ON p.Category_ID  = c.Parent_ID AND c.Parent_ID > 0
+    LEFT JOIN Categories gp ON gp.Category_ID = p.Parent_ID AND p.Parent_ID > 0
+    ORDER BY FullPath
+  `);
+}
+
+export interface ManufacturerRow {
+  account_id: number;
+  Account_name: string;
+}
+
+export async function getManufacturers(): Promise<ManufacturerRow[]> {
+  return query<ManufacturerRow>(
+    `SELECT account_id, Account_name FROM Accounts WHERE Type1 = 'manufacturer' ORDER BY Account_name`
+  );
+}
+
+export interface ProductTypeRow {
+  ProdType_ID: number;
+  TypeName: string;
+}
+
+export async function getProductTypes(): Promise<ProductTypeRow[]> {
+  return query<ProductTypeRow>(
+    `SELECT ProdType_ID, TypeName FROM ProdTypes ORDER BY TypeName`
+  );
+}
+
+export async function getProductCategoryIds(productId: number): Promise<number[]> {
+  const rows = await query<{ Category_ID: number }>(
+    `SELECT Category_ID FROM Product_Category WHERE Product_ID = @productId`,
+    { productId }
+  );
+  return rows.map(r => r.Category_ID);
+}
+
+export async function saveProductCategories(productId: number, newIds: number[]): Promise<void> {
+  await query(`DELETE FROM Product_Category WHERE Product_ID = @productId`, { productId });
+  for (const catId of newIds) {
+    await query(
+      `INSERT INTO Product_Category (Product_ID, Category_ID) VALUES (@productId, @catId)`,
+      { productId, catId } as Record<string, number>
+    );
+  }
+}
