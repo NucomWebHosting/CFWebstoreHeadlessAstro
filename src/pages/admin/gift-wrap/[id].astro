@@ -1,0 +1,149 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getGiftwrap, updateGiftwrap, deleteGiftwrap } from "../../../lib/queries/admin-giftwrap";
+
+const id = parseInt(Astro.params.id ?? "0");
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const action = form.get("action");
+
+  if (action === "delete") {
+    try {
+      await deleteGiftwrap(id);
+      return Astro.redirect("/admin/gift-wrap");
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  } else {
+    const name = (form.get("name") as string ?? "").trim();
+    if (!name) {
+      error = "Name is required.";
+    } else {
+      try {
+        await updateGiftwrap(id, {
+          Name:       name,
+          Short_Desc: (form.get("short_desc") as string ?? "").trim(),
+          Sm_Image:   (form.get("sm_image")   as string ?? "").trim(),
+          Price:      parseFloat(form.get("price")    as string) || 0,
+          Weight:     parseFloat(form.get("weight")   as string) || 0,
+          Priority:   parseInt(form.get("priority")   as string) || 9999,
+          Display:    form.get("display") === "1" ? 1 : 0,
+        });
+        return Astro.redirect("/admin/gift-wrap");
+      } catch (e: unknown) {
+        error = e instanceof Error ? e.message : String(e);
+      }
+    }
+  }
+}
+
+const wrap = await getGiftwrap(id);
+if (!wrap) return Astro.redirect("/admin/gift-wrap");
+---
+
+<AdminLayout title={`Edit: ${wrap.Name}`}>
+
+  <div class="mb-5">
+    <a href="/admin/gift-wrap" class="text-sm text-blue-600 hover:underline">← Giftwrapping</a>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <div class="max-w-xl space-y-6">
+
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800">Edit Giftwrapping Option</h2>
+      </div>
+      <form method="post" class="px-5 py-5 space-y-4">
+        <input type="hidden" name="action" value="update" />
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Name <span class="text-red-500">*</span></label>
+          <input type="text" name="name" value={wrap.Name} required
+                 class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Image filename</label>
+          <input type="text" name="sm_image" value={wrap.Sm_Image ?? ""}
+                 class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Description</label>
+          <textarea name="short_desc" rows="3"
+                    class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    set:html={wrap.Short_Desc ?? ""} />
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Price ($)</label>
+            <input type="number" name="price" value={wrap.Price} min="0" step="0.01"
+                   class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Weight</label>
+            <input type="number" name="weight" value={wrap.Weight} min="0" step="any"
+                   class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Priority <span class="text-gray-400">(1 = highest)</span></label>
+            <input type="number" name="priority" value={wrap.Priority} min="0" max="9999" step="1"
+                   class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-2">Display</label>
+            <div class="flex gap-4 text-sm">
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="display" value="1" checked={wrap.Display} /> Yes
+              </label>
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="display" value="0" checked={!wrap.Display} /> No
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="pt-2 flex gap-3">
+          <button type="submit"
+                  class="bg-blue-600 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-700">
+            Save Changes
+          </button>
+          <a href="/admin/gift-wrap"
+             class="px-5 py-2 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+            Cancel
+          </a>
+        </div>
+      </form>
+    </div>
+
+    <!-- Danger Zone -->
+    <div class="bg-white rounded-xl border border-red-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-red-100">
+        <h2 class="font-semibold text-red-700">Danger Zone</h2>
+      </div>
+      <div class="px-5 py-4">
+        <form method="post"
+              onsubmit="return confirm('Delete this giftwrapping option? This cannot be undone.')">
+          <input type="hidden" name="action" value="delete" />
+          <button type="submit"
+                  class="bg-red-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-red-700">
+            Delete Option
+          </button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+
+</AdminLayout>

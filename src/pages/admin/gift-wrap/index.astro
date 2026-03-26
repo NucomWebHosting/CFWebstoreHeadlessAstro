@@ -1,0 +1,66 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getGiftwraps } from "../../../lib/queries/admin-giftwrap";
+
+const wraps = await getGiftwraps();
+---
+
+<AdminLayout title="Giftwrapping">
+
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-xl font-semibold text-gray-800">Giftwrapping Options</h1>
+    <a href="/admin/gift-wrap/new"
+       class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">
+      + Add Option
+    </a>
+  </div>
+
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    {wraps.length === 0 ? (
+      <p class="px-5 py-10 text-center text-sm text-gray-400">No giftwrapping options yet.</p>
+    ) : (
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-5 py-3 text-left">Name</th>
+            <th class="px-5 py-3 text-center">Display</th>
+            <th class="px-5 py-3 text-right">Price</th>
+            <th class="px-5 py-3 text-right">Weight</th>
+            <th class="px-5 py-3 text-center">Priority</th>
+            <th class="px-5 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {wraps.map(w => (
+            <tr class="hover:bg-gray-50">
+              <td class="px-5 py-3">
+                <p class="font-medium text-gray-800">{w.Name}</p>
+                {w.Short_Desc && (
+                  <p class="text-xs text-gray-400 mt-0.5 line-clamp-1"
+                     set:html={w.Short_Desc} />
+                )}
+              </td>
+              <td class="px-5 py-3 text-center">
+                {w.Display
+                  ? <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Yes</span>
+                  : <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">No</span>
+                }
+              </td>
+              <td class="px-5 py-3 text-right font-mono text-xs text-gray-700">${w.Price.toFixed(2)}</td>
+              <td class="px-5 py-3 text-right font-mono text-xs text-gray-500">{w.Weight || "—"}</td>
+              <td class="px-5 py-3 text-center text-xs text-gray-500">{w.Priority || "—"}</td>
+              <td class="px-5 py-3 text-right">
+                <a href={`/admin/gift-wrap/${w.Giftwrap_ID}`}
+                   class="px-3 py-1 text-xs rounded bg-slate-100 text-slate-700 hover:bg-slate-200">
+                  Edit
+                </a>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+  </div>
+
+</AdminLayout>
