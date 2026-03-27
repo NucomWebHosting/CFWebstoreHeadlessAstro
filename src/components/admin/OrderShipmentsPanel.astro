@@ -79,9 +79,10 @@ function fmtDate(d: Date | null | undefined) {
                   </td>
                   <td class="px-4 py-2">
                     <div class="flex flex-wrap gap-1 justify-end">
-                      <a href={`/admin/orders/${orderId}/packing-slip/${s.Shipment_ID}`} target="_blank"
+                      <a href={`/admin/print?type=packlist&order=${orderId}&shipment=${s.Shipment_ID}`}
+                         onclick={`window.open(this.href,'packslip_${s.Shipment_ID}','width=900,height=700,scrollbars=yes,resizable=yes');return false;`}
                          class={`px-2 py-1 rounded text-xs ${s.Printed_Pack ? "bg-gray-100 text-gray-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
-                        Packing Slip
+                        {s.Printed_Pack ? "Reprint Slip" : "Packing Slip"}
                       </a>
                       {!s.Tracking && (
                         <a href={`/admin/orders/${orderId}/add-tracking/${s.Shipment_ID}`}
