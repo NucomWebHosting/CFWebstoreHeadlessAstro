@@ -426,3 +426,18 @@ export async function updateOrderStatus(orderNo: number, action: string): Promis
 export async function saveOrderNotes(orderNo: number, notes: string): Promise<void> {
   await query("UPDATE Order_No SET Notes=@notes WHERE Order_No=@orderNo", { orderNo, notes });
 }
+
+export async function batchUpdateOrders(orderNos: number[], action: string): Promise<void> {
+  if (orderNos.length === 0) return;
+  const ph     = orderNos.map((_, i) => `@o${i}`).join(",");
+  const params = Object.fromEntries(orderNos.map((id, i) => [`o${i}`, id]));
+  const sqls: Record<string, string> = {
+    process:        `UPDATE Order_No SET Process=1, Filled=0, Void=0 WHERE Order_No IN (${ph})`,
+    pending:        `UPDATE Order_No SET Process=0, Filled=0, Void=0 WHERE Order_No IN (${ph})`,
+    fill:           `UPDATE Order_No SET Filled=1, DateFilled=GETDATE(), Process=0 WHERE Order_No IN (${ph})`,
+    "void-cancelled": `UPDATE Order_No SET Void=1, Status='CANCELED', Process=0, Filled=0 WHERE Order_No IN (${ph})`,
+    "void-fraud":   `UPDATE Order_No SET Void=1, Status='FRAUD',    Process=0, Filled=0 WHERE Order_No IN (${ph})`,
+  };
+  if (!sqls[action]) throw new Error(`Unknown batch action: ${action}`);
+  await query(sqls[action]!, params);
+}

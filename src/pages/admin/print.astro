@@ -1,81 +1,146 @@
 ---
 export const prerender = false;
 import { getPacklistData, markShipmentPrinted } from "../../lib/queries/admin-order-shipments";
+import type { PacklistData } from "../../lib/queries/admin-order-shipments";
 
-const type       = Astro.url.searchParams.get("type")     ?? "";
-const orderId    = parseInt(Astro.url.searchParams.get("order")    ?? "", 10) || 0;
-const shipmentId = parseInt(Astro.url.searchParams.get("shipment") ?? "", 10) || null;
+const type = Astro.url.searchParams.get("type") ?? "";
+if (type !== "packlist") return new Response(null, { status: 404 });
 
-if (!orderId || type !== "packlist") return new Response(null, { status: 404 });
+// Support single: ?order=24&shipment=5  OR  batch: ?orders=24,25,26
+const singleOrder   = parseInt(Astro.url.searchParams.get("order")    ?? "", 10) || 0;
+const shipmentId    = parseInt(Astro.url.searchParams.get("shipment") ?? "", 10) || null;
+const batchOrdersRaw = Astro.url.searchParams.get("orders") ?? "";
 
-const data = await getPacklistData(orderId, shipmentId);
-if (!data) return new Response(null, { status: 404 });
+const orderIds: number[] = batchOrdersRaw
+  ? batchOrdersRaw.split(",").map(s => parseInt(s.trim(), 10)).filter(n => n > 0)
+  : singleOrder ? [singleOrder] : [];
 
+if (orderIds.length === 0) return new Response(null, { status: 404 });
+
+// Fetch all packing slips in parallel
+const results = await Promise.all(
+  orderIds.map(id => getPacklistData(id, id === singleOrder ? shipmentId : null))
+);
+const slips = results.filter((d): d is PacklistData => d !== null);
+if (slips.length === 0) return new Response(null, { status: 404 });
+
+// Mark printed (single-shipment flow only)
 if (shipmentId) await markShipmentPrinted(shipmentId);
 
-// Build HTML as a string so we return a clean bare document with no Astro wrapper
-const { shipTo, store, items } = data;
+// ── HTML helpers ──────────────────────────────────────────────────────────────
 
-const logo = store.logoPrint || store.logoDesktop;
-const logoHtml = logo
-  ? `<img src="${store.imageBase}/${logo}" alt="${store.name ?? ""}" style="max-height:80px;">`
-  : `<span style="font-size:2em;font-weight:bold;">${store.name ?? ""}</span>`;
+function buildSlip(data: PacklistData): string {
+  const { shipTo, store, items } = data;
 
-const orderDate = new Date(data.dateOrdered).toLocaleDateString("en-US", {
-  month: "long", day: "numeric", year: "numeric",
-});
+  const logo = store.logoPrint || store.logoDesktop;
+  const logoHtml = logo
+    ? `<img src="${store.imageBase}/${logo}" alt="${store.name ?? ""}" style="max-height:80px;">`
+    : `<span style="font-size:2em;font-weight:bold;">${store.name ?? ""}</span>`;
 
-const shipToLines = [
-  [shipTo.firstName, shipTo.lastName].filter(Boolean).join(" "),
-  shipTo.company ?? "",
-  shipTo.address1 ?? "",
-  shipTo.address2 ?? "",
-  [shipTo.city, shipTo.state, shipTo.zip].filter(Boolean).join(", "),
-  (shipTo.country && shipTo.country !== "US") ? shipTo.country : "",
-].filter(Boolean).map(l => `${l}<br>`).join("");
+  const orderDate = new Date(data.dateOrdered).toLocaleDateString("en-US", {
+    month: "long", day: "numeric", year: "numeric",
+  });
 
-const storeLines = [
-  store.name ?? "",
-  store.address1 ?? "",
-  store.address2 ?? "",
-  [store.city, store.state, store.postalCode].filter(Boolean).join(", "),
-  store.phone ? `Phone: ${store.phone}` : "",
-  store.email ?? "",
-].filter(Boolean).map(l => `${l}<br>`).join("");
+  const shipToLines = [
+    [shipTo.firstName, shipTo.lastName].filter(Boolean).join(" "),
+    shipTo.company ?? "",
+    shipTo.address1 ?? "",
+    shipTo.address2 ?? "",
+    [shipTo.city, shipTo.state, shipTo.zip].filter(Boolean).join(", "),
+    (shipTo.country && shipTo.country !== "US") ? shipTo.country : "",
+  ].filter(Boolean).map(l => `${l}<br>`).join("");
 
-const itemRows = items.map(item => {
-  const detail = [
-    item.Options ? `<div style="font-size:.9em;color:#555;"><em>Options: ${item.Options}</em></div>` : "",
-    item.Addons  ? `<div style="font-size:.9em;color:#555;"><em>${item.Addons}</em></div>` : "",
-    item.ProdType === "certificate" ? `<div><strong>Delivered Electronically</strong></div>` : "",
-  ].join("");
-  return `<tr>
-    <td>${item.Name}${detail}</td>
-    <td>${item.SKU ?? "—"}</td>
-    <td>${item.UPC ?? "—"}</td>
-    <td style="text-align:center;">${item.Quantity}</td>
-  </tr>`;
-}).join("");
+  const storeLines = [
+    store.name ?? "",
+    store.address1 ?? "",
+    store.address2 ?? "",
+    [store.city, store.state, store.postalCode].filter(Boolean).join(", "),
+    store.phone ? `Phone: ${store.phone}` : "",
+    store.email ?? "",
+  ].filter(Boolean).map(l => `${l}<br>`).join("");
 
-const commentsHtml = data.comments
-  ? `<p><strong>Comments:</strong> ${data.comments}</p>` : "";
-const shipTypeHtml = data.shipType
-  ? `<p style="margin-top:16px;"><strong>Shipping Method:</strong> ${data.shipType}</p>` : "";
+  const itemRows = items.map(item => {
+    const detail = [
+      item.Options ? `<div style="font-size:.9em;color:#555;"><em>Options: ${item.Options}</em></div>` : "",
+      item.Addons  ? `<div style="font-size:.9em;color:#555;"><em>${item.Addons}</em></div>` : "",
+      item.ProdType === "certificate" ? `<div><strong>Delivered Electronically</strong></div>` : "",
+    ].join("");
+    return `<tr>
+      <td>${item.Name}${detail}</td>
+      <td>${item.SKU ?? "—"}</td>
+      <td>${item.UPC ?? "—"}</td>
+      <td style="text-align:center;">${item.Quantity}</td>
+    </tr>`;
+  }).join("");
+
+  const shipTypeHtml = data.shipType
+    ? `<p style="margin-top:16px;"><strong>Shipping Method:</strong> ${data.shipType}</p>` : "";
+  const commentsHtml = data.comments
+    ? `<p><strong>Comments:</strong> ${data.comments}</p>` : "";
+
+  return `
+  <div class="slip">
+    <div class="header">
+      <div>${logoHtml}</div>
+      <div class="order-info">
+        <div class="label">PACKING SLIP</div>
+        <div class="number">Order No. ${data.friendlyOrderNo}</div>
+        <div class="date">${orderDate}</div>
+      </div>
+    </div>
+
+    <div class="addresses">
+      <div><strong>Ship To</strong>${shipToLines}</div>
+      <div><strong>Ship From</strong>${storeLines}</div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th style="width:120px;">SKU</th>
+          <th style="width:120px;">UPC</th>
+          <th style="width:60px;text-align:center;">Qty</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemRows || '<tr><td colspan="4" style="text-align:center;color:#999;">No items</td></tr>'}
+      </tbody>
+    </table>
+
+    ${shipTypeHtml}
+    ${commentsHtml}
+
+    <div class="signatures">
+      <div>Packed by</div>
+      <div>Checked by</div>
+    </div>
+  </div>`;
+}
+
+const slipHtml = slips.map((d, i) =>
+  buildSlip(d) + (i < slips.length - 1 ? '<div class="page-break"></div>' : "")
+).join("\n");
+
+const title = slips.length === 1
+  ? `Packing Slip — Order #${slips[0]!.friendlyOrderNo}`
+  : `Packing Slips — ${slips.length} orders`;
 
 const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Packing Slip — Order #${data.friendlyOrderNo}</title>
+  <title>${title}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; padding: 24px; color: #111; }
+    .slip { padding-bottom: 32px; }
     .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; }
     .order-info { text-align: right; }
-    .order-info .label { font-size: 2em; font-weight: 800; letter-spacing: .05em; }
+    .order-info .label  { font-size: 2em; font-weight: 800; letter-spacing: .05em; }
     .order-info .number { font-size: 1.4em; font-weight: 700; margin-top: 4px; }
-    .order-info .date { font-size: 1em; color: #444; margin-top: 2px; }
+    .order-info .date   { font-size: 1em; color: #444; margin-top: 2px; }
     .addresses { display: flex; gap: 40px; margin-bottom: 28px; }
     .addresses > div { flex: 1; }
     .addresses strong { display: block; font-size: .9em; letter-spacing: .08em; text-transform: uppercase; color: #666; margin-bottom: 6px; }
@@ -85,6 +150,7 @@ const html = `<!DOCTYPE html>
     th { font-size: .85em; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
     .signatures { display: flex; gap: 60px; margin-top: 40px; padding-top: 16px; border-top: 1px solid #ccc; }
     .signatures div { flex: 1; padding-top: 24px; border-top: 1px solid #999; font-size: .9em; color: #555; }
+    .page-break { page-break-after: always; break-after: page; }
     @media print {
       body { padding: 0; }
       @page { margin: 0.5in; }
@@ -92,49 +158,8 @@ const html = `<!DOCTYPE html>
   </style>
 </head>
 <body>
-  <div class="header">
-    <div>${logoHtml}</div>
-    <div class="order-info">
-      <div class="label">PACKING SLIP</div>
-      <div class="number">Order No. ${data.friendlyOrderNo}</div>
-      <div class="date">${orderDate}</div>
-    </div>
-  </div>
-
-  <div class="addresses">
-    <div>
-      <strong>Ship To</strong>
-      ${shipToLines}
-    </div>
-    <div>
-      <strong>Ship From</strong>
-      ${storeLines}
-    </div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Item</th>
-        <th style="width:120px;">SKU</th>
-        <th style="width:120px;">UPC</th>
-        <th style="width:60px;text-align:center;">Qty</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${itemRows || '<tr><td colspan="4" style="text-align:center;color:#999;">No items</td></tr>'}
-    </tbody>
-  </table>
-
-  ${shipTypeHtml}
-  ${commentsHtml}
-
-  <div class="signatures">
-    <div>Packed by</div>
-    <div>Checked by</div>
-  </div>
-
-  <script>window.onload = function() { window.print(); };</script>
+${slipHtml}
+<script>window.onload = function() { window.print(); };</script>
 </body>
 </html>`;
 

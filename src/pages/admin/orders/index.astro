@@ -1,9 +1,29 @@
 ---
 export const prerender = false;
 import AdminLayout from "../../../components/layout/AdminLayout.astro";
-import { getOrdersAdmin } from "../../../lib/queries/admin-orders";
+import { getOrdersAdmin, batchUpdateOrders } from "../../../lib/queries/admin-orders";
 
 const PER_PAGE = 40;
+
+// ── Batch POST handler ─────────────────────────────────────────────────────────
+let batchError = "";
+if (Astro.request.method === "POST") {
+  const form   = await Astro.request.formData();
+  const action = (form.get("act") as string) ?? "";
+  const ids    = (form.getAll("order_ids") as string[]).map(s => parseInt(s, 10)).filter(n => n > 0);
+
+  if (ids.length === 0) {
+    batchError = "No orders selected.";
+  } else if (["process","pending","fill","void-cancelled","void-fraud"].includes(action)) {
+    try {
+      await batchUpdateOrders(ids, action);
+      const currentTab = (form.get("_tab") as string) ?? "pending";
+      return Astro.redirect(`/admin/orders?tab=${currentTab}`);
+    } catch (e) {
+      batchError = e instanceof Error ? e.message : String(e);
+    }
+  }
+}
 
 // ── Params ────────────────────────────────────────────────────────────────────
 const tab         = Astro.url.searchParams.get("tab")         ?? "pending";
@@ -46,9 +66,7 @@ function filterQS(overrides: Record<string, string | number | null> = {}) {
   return qs ? `?${qs}` : "";
 }
 
-function tabHref(t: string) {
-  return `?tab=${t}`;
-}
+function tabHref(t: string) { return `?tab=${t}`; }
 
 function pageWindow(current: number, total: number, size = 5) {
   const half  = Math.floor(size / 2);
@@ -73,12 +91,35 @@ const totalOrderTot  = orders.reduce((s, o) => s + o.OrderTotal, 0);
 const totalAmtPaid   = orders.reduce((s, o) => s + o.AmountPaid, 0);
 const totalBalDue    = orders.reduce((s, o) => s + Math.max(0, o.OrderTotal - o.AmountPaid), 0);
 
-const showDateRange = tab === "filled" || tab === "search";
-const showQuickDate = tab === "pending" || tab === "process";
+const showDateRange    = tab === "filled" || tab === "search";
+const showQuickDate    = tab === "pending" || tab === "process";
 const showVoidFilter   = tab === "filled";
 const showStatusFilter = tab === "search";
 const showStatusCol    = tab === "search";
-const showPackingCol   = tab === "pending" || tab === "process";
+const showBatchBar     = true; // show on all tabs
+
+// Batch actions vary by tab
+const batchActions = tab === "pending"
+  ? [
+      { value: "packlist",       label: "Print Packing Slips" },
+      { value: "process",        label: "Move to In-Process"  },
+      { value: "fill",           label: "Move to Filled"      },
+      { value: "void-cancelled", label: "Void — Cancelled"    },
+      { value: "void-fraud",     label: "Void — Fraud"        },
+    ]
+  : tab === "process"
+  ? [
+      { value: "packlist",       label: "Print Packing Slips" },
+      { value: "pending",        label: "Move to Pending"     },
+      { value: "fill",           label: "Move to Filled"      },
+      { value: "void-cancelled", label: "Void — Cancelled"    },
+      { value: "void-fraud",     label: "Void — Fraud"        },
+    ]
+  : [
+      { value: "packlist",       label: "Print Packing Slips" },
+    ];
+
+const colCount = showStatusCol ? 11 : 10; // including checkbox column
 
 const tabs = [
   { key: "pending", label: "Pending"     },
@@ -107,7 +148,6 @@ const tabs = [
   <form method="get" action="/admin/orders" class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
     <input type="hidden" name="tab" value={tab} />
 
-    <!-- Always-visible row -->
     <div class="flex flex-wrap gap-3 items-end mb-3">
       <button type="submit" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700">
         Search
@@ -147,7 +187,6 @@ const tabs = [
       </a>
     </div>
 
-    <!-- Advanced filters (collapsible) -->
     <details class={orderNo || customer || paid || source || voidStatus || orderStatus ? "open" : ""}>
       <summary class="text-xs text-gray-400 cursor-pointer hover:text-gray-600 mb-2">Advanced filters</summary>
       <div class="border-t border-gray-100 pt-3 flex flex-wrap gap-3 items-end">
@@ -214,137 +253,222 @@ const tabs = [
     </details>
   </form>
 
-  <!-- Results table -->
-  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+  <!-- Batch form wraps controls + table -->
+  <form method="post" id="batch-form" onsubmit="return batchSubmit(this)">
+    <input type="hidden" name="_tab" value={tab} />
 
-    <!-- Count + pagination top -->
-    <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between text-xs text-gray-500">
-      <span>{total} {total === 1 ? "order" : "orders"}{total > PER_PAGE ? `, page ${pageParam} of ${totalPages}` : ""}</span>
+    {batchError && (
+      <div class="mb-3 rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">{batchError}</div>
+    )}
+
+    <!-- Batch controls bar -->
+    <div class="flex items-center justify-between mb-3 px-1">
+      <div class="flex gap-3 text-xs text-gray-500">
+        <button type="button" onclick="selectAll(true)"
+                class="hover:text-blue-600 underline underline-offset-2">Check All</button>
+        <span class="text-gray-300">|</span>
+        <button type="button" onclick="selectAll(false)"
+                class="hover:text-blue-600 underline underline-offset-2">Uncheck All</button>
+      </div>
+      <div class="flex items-center gap-2">
+        <select name="act"
+                class="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          <option value="">— batch action —</option>
+          {batchActions.map(a => <option value={a.value}>{a.label}</option>)}
+        </select>
+        <button type="submit"
+                class="bg-slate-700 text-white px-3 py-1.5 rounded text-sm hover:bg-slate-800">
+          Apply to Checked
+        </button>
+      </div>
+    </div>
+
+    <!-- Results table -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+
+      <!-- Count + pagination top -->
+      <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between text-xs text-gray-500">
+        <span>{total} {total === 1 ? "order" : "orders"}{total > PER_PAGE ? `, page ${pageParam} of ${totalPages}` : ""}</span>
+        {totalPages > 1 && (
+          <div class="flex gap-1 items-center">
+            {pageParam > 1
+              ? <a href={filterQS({ page: pageParam - 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&lsaquo;</a>
+              : <span class="px-2 py-1 border rounded text-gray-300 cursor-default">&lsaquo;</span>}
+            {winStart > 1 && <span class="px-1 text-gray-400">…</span>}
+            {Array.from({ length: winEnd - winStart + 1 }, (_, i) => winStart + i).map((p) => (
+              <a href={filterQS({ page: p })}
+                 class={`px-2 py-1 border rounded ${p === pageParam ? "bg-blue-600 text-white border-blue-600" : "hover:bg-gray-50"}`}>
+                {p}
+              </a>
+            ))}
+            {winEnd < totalPages && <span class="px-1 text-gray-400">…</span>}
+            {pageParam < totalPages
+              ? <a href={filterQS({ page: pageParam + 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&rsaquo;</a>
+              : <span class="px-2 py-1 border rounded text-gray-300 cursor-default">&rsaquo;</span>}
+          </div>
+        )}
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="px-3 py-3 w-8">
+                <input type="checkbox" id="select-all-cb" title="Select all on this page"
+                       class="rounded border-gray-300 cursor-pointer"
+                       onchange="selectAll(this.checked)" />
+              </th>
+              <th class="px-4 py-3 text-left w-24">Order No.</th>
+              <th class="px-4 py-3 text-left w-24">Date</th>
+              <th class="px-4 py-3 text-left">Customer</th>
+              <th class="px-4 py-3 text-right w-20">To Fill</th>
+              <th class="px-4 py-3 text-right w-28">Order Total</th>
+              <th class="px-4 py-3 text-right w-28">Amt Paid</th>
+              <th class="px-4 py-3 text-right w-28">Balance Due</th>
+              <th class="px-4 py-3 text-center w-16">Paid</th>
+              <th class="px-4 py-3 text-left w-32">Shipping</th>
+              {showStatusCol && <th class="px-4 py-3 text-left w-24">Status</th>}
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {orders.length === 0 && (
+              <tr>
+                <td colspan={colCount} class="px-5 py-10 text-center text-gray-400">
+                  No orders found.
+                </td>
+              </tr>
+            )}
+            {orders.map((o) => {
+              const balance = o.OrderTotal - o.AmountPaid;
+              return (
+                <tr class="hover:bg-gray-50">
+                  <td class="px-3 py-3 text-center">
+                    <input type="checkbox" name="order_ids" value={o.Order_No}
+                           class="rounded border-gray-300 cursor-pointer order-cb" />
+                  </td>
+                  <td class="px-4 py-3 font-mono text-xs">
+                    <a href={`/admin/orders/${o.Order_No}`} class="text-blue-600 hover:underline">
+                      {o.Order_No}
+                    </a>
+                  </td>
+                  <td class="px-4 py-3 text-xs text-gray-600">{fmtDate(o.DateOrdered)}</td>
+                  <td class="px-4 py-3">
+                    <div class="font-medium text-gray-800">{o.FirstName} {o.LastName}</div>
+                    <div class="text-xs text-gray-400">
+                      {o.TotalProds} product{o.TotalProds !== 1 ? "s" : ""} ({o.TotalItems} items)
+                    </div>
+                  </td>
+                  <td class="px-4 py-3 text-right text-xs">
+                    {o.ToFill > 0
+                      ? <span class="text-red-600 font-bold">{o.ToFill}</span>
+                      : <span class="text-gray-400">{o.ToFill}</span>}
+                  </td>
+                  <td class="px-4 py-3 text-right text-xs">{fmt(o.OrderTotal)}</td>
+                  <td class="px-4 py-3 text-right text-xs">{fmt(o.AmountPaid)}</td>
+                  <td class={`px-4 py-3 text-right text-xs ${balance > 0.005 ? "text-red-600 font-medium" : "text-gray-400"}`}>
+                    {fmt(balance)}
+                  </td>
+                  <td class="px-4 py-3 text-center">
+                    {o.Paid
+                      ? <span class="text-green-600 font-bold text-xs">✓</span>
+                      : <span class="text-red-400 text-xs">✗</span>}
+                  </td>
+                  <td class="px-4 py-3 text-xs text-gray-500">{o.ShipType ?? "—"}</td>
+                  {showStatusCol && (
+                    <td class="px-4 py-3 text-xs text-gray-500">
+                      {o.Status || (o.Filled ? "Filled" : o.Process ? "In Process" : "Pending")}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+          {orders.length > 0 && (
+            <tfoot class="bg-gray-50 text-xs font-semibold border-t border-gray-200">
+              <tr>
+                <td></td>
+                <td class="px-4 py-2 text-right text-gray-500" colspan={3}>Totals:</td>
+                <td class="px-4 py-2 text-right">{totalToFill}</td>
+                <td class="px-4 py-2 text-right">{fmt(totalOrderTot)}</td>
+                <td class="px-4 py-2 text-right">{fmt(totalAmtPaid)}</td>
+                <td class={`px-4 py-2 text-right ${totalBalDue > 0.005 ? "text-red-600" : "text-gray-400"}`}>
+                  {fmt(totalBalDue)}
+                </td>
+                <td colspan={showStatusCol ? 3 : 2}></td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+
+      <!-- Pagination bottom -->
       {totalPages > 1 && (
-        <div class="flex gap-1 items-center">
-          {pageParam > 1
-            ? <a href={filterQS({ page: pageParam - 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&lsaquo;</a>
-            : <span class="px-2 py-1 border rounded text-gray-300 cursor-default">&lsaquo;</span>}
-          {winStart > 1 && <span class="px-1 text-gray-400">…</span>}
-          {Array.from({ length: winEnd - winStart + 1 }, (_, i) => winStart + i).map((p) => (
-            <a href={filterQS({ page: p })}
-               class={`px-2 py-1 border rounded ${p === pageParam ? "bg-blue-600 text-white border-blue-600" : "hover:bg-gray-50"}`}>
-              {p}
-            </a>
-          ))}
-          {winEnd < totalPages && <span class="px-1 text-gray-400">…</span>}
-          {pageParam < totalPages
-            ? <a href={filterQS({ page: pageParam + 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&rsaquo;</a>
-            : <span class="px-2 py-1 border rounded text-gray-300 cursor-default">&rsaquo;</span>}
+        <div class="px-5 py-3 border-t border-gray-100 flex justify-end">
+          <div class="flex gap-1 text-xs items-center">
+            {pageParam > 1
+              ? <a href={filterQS({ page: pageParam - 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&lsaquo;</a>
+              : <span class="px-2 py-1 border rounded text-gray-300 cursor-default">&lsaquo;</span>}
+            {winStart > 1 && <span class="px-1 text-gray-400">…</span>}
+            {Array.from({ length: winEnd - winStart + 1 }, (_, i) => winStart + i).map((p) => (
+              <a href={filterQS({ page: p })}
+                 class={`px-2 py-1 border rounded ${p === pageParam ? "bg-blue-600 text-white border-blue-600" : "hover:bg-gray-50"}`}>
+                {p}
+              </a>
+            ))}
+            {winEnd < totalPages && <span class="px-1 text-gray-400">…</span>}
+            {pageParam < totalPages
+              ? <a href={filterQS({ page: pageParam + 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&rsaquo;</a>
+              : <span class="px-2 py-1 border rounded text-gray-300 cursor-default">&rsaquo;</span>}
+          </div>
         </div>
       )}
     </div>
+  </form>
 
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
-          <tr>
-            <th class="px-4 py-3 text-left w-24">Order No.</th>
-            <th class="px-4 py-3 text-left w-24">Date</th>
-            <th class="px-4 py-3 text-left">Customer</th>
-            <th class="px-4 py-3 text-right w-20">To Fill</th>
-            <th class="px-4 py-3 text-right w-28">Order Total</th>
-            <th class="px-4 py-3 text-right w-28">Amt Paid</th>
-            <th class="px-4 py-3 text-right w-28">Balance Due</th>
-            <th class="px-4 py-3 text-center w-16">Paid</th>
-            <th class="px-4 py-3 text-left w-32">Shipping</th>
-            {showStatusCol && <th class="px-4 py-3 text-left w-24">Status</th>}
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100">
-          {orders.length === 0 && (
-            <tr>
-              <td colspan={showStatusCol ? "10" : "9"} class="px-5 py-10 text-center text-gray-400">
-                No orders found.
-              </td>
-            </tr>
-          )}
-          {orders.map((o) => {
-            const balance = o.OrderTotal - o.AmountPaid;
-            return (
-              <tr class="hover:bg-gray-50">
-                <td class="px-4 py-3 font-mono text-xs">
-                  <a href={`/admin/orders/${o.Order_No}`} class="text-blue-600 hover:underline">
-                    {o.Order_No}
-                  </a>
-                </td>
-                <td class="px-4 py-3 text-xs text-gray-600">{fmtDate(o.DateOrdered)}</td>
-                <td class="px-4 py-3">
-                  <div class="font-medium text-gray-800">
-                    {o.FirstName} {o.LastName}
-                  </div>
-                  <div class="text-xs text-gray-400">
-                    {o.TotalProds} product{o.TotalProds !== 1 ? "s" : ""} ({o.TotalItems} items)
-                  </div>
-                </td>
-                <td class="px-4 py-3 text-right text-xs">
-                  {o.ToFill > 0
-                    ? <span class="text-red-600 font-bold">{o.ToFill}</span>
-                    : <span class="text-gray-400">{o.ToFill}</span>}
-                </td>
-                <td class="px-4 py-3 text-right text-xs">{fmt(o.OrderTotal)}</td>
-                <td class="px-4 py-3 text-right text-xs">{fmt(o.AmountPaid)}</td>
-                <td class={`px-4 py-3 text-right text-xs ${balance > 0.005 ? "text-red-600 font-medium" : "text-gray-400"}`}>
-                  {fmt(balance)}
-                </td>
-                <td class="px-4 py-3 text-center">
-                  {o.Paid
-                    ? <span class="text-green-600 font-bold text-xs">✓</span>
-                    : <span class="text-red-400 text-xs">✗</span>}
-                </td>
-                <td class="px-4 py-3 text-xs text-gray-500">{o.ShipType ?? "—"}</td>
-                {showStatusCol && (
-                  <td class="px-4 py-3 text-xs text-gray-500">
-                    {o.Status || (o.Filled ? "Filled" : o.Process ? "In Process" : "Pending")}
-                  </td>
-                )}
-              </tr>
-            );
-          })}
-        </tbody>
-        {orders.length > 0 && (
-          <tfoot class="bg-gray-50 text-xs font-semibold border-t border-gray-200">
-            <tr>
-              <td class="px-4 py-2 text-right text-gray-500" colspan={showStatusCol ? "3" : "3"}>Totals:</td>
-              <td class="px-4 py-2 text-right">{totalToFill}</td>
-              <td class="px-4 py-2 text-right">{fmt(totalOrderTot)}</td>
-              <td class="px-4 py-2 text-right">{fmt(totalAmtPaid)}</td>
-              <td class={`px-4 py-2 text-right ${totalBalDue > 0.005 ? "text-red-600" : "text-gray-400"}`}>
-                {fmt(totalBalDue)}
-              </td>
-              <td colspan={showStatusCol ? "3" : "2"}></td>
-            </tr>
-          </tfoot>
-        )}
-      </table>
-    </div>
+  <script>
+    function selectAll(checked: boolean) {
+      const cbs = document.querySelectorAll<HTMLInputElement>('.order-cb');
+      cbs.forEach(cb => cb.checked = checked);
+      const master = document.getElementById('select-all-cb') as HTMLInputElement | null;
+      if (master) master.checked = checked;
+    }
 
-    <!-- Pagination bottom -->
-    {totalPages > 1 && (
-      <div class="px-5 py-3 border-t border-gray-100 flex justify-end">
-        <div class="flex gap-1 text-xs items-center">
-          {pageParam > 1
-            ? <a href={filterQS({ page: pageParam - 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&lsaquo;</a>
-            : <span class="px-2 py-1 border rounded text-gray-300 cursor-default">&lsaquo;</span>}
-          {winStart > 1 && <span class="px-1 text-gray-400">…</span>}
-          {Array.from({ length: winEnd - winStart + 1 }, (_, i) => winStart + i).map((p) => (
-            <a href={filterQS({ page: p })}
-               class={`px-2 py-1 border rounded ${p === pageParam ? "bg-blue-600 text-white border-blue-600" : "hover:bg-gray-50"}`}>
-              {p}
-            </a>
-          ))}
-          {winEnd < totalPages && <span class="px-1 text-gray-400">…</span>}
-          {pageParam < totalPages
-            ? <a href={filterQS({ page: pageParam + 1 })} class="px-2 py-1 border rounded hover:bg-gray-50">&rsaquo;</a>
-            : <span class="px-2 py-1 border rounded text-gray-300 cursor-default">&rsaquo;</span>}
-        </div>
-      </div>
-    )}
-  </div>
+    // Keep master checkbox in sync when individual rows change
+    document.addEventListener('change', (e) => {
+      const target = e.target as HTMLInputElement;
+      if (!target.classList.contains('order-cb')) return;
+      const all  = document.querySelectorAll<HTMLInputElement>('.order-cb');
+      const chkd = document.querySelectorAll<HTMLInputElement>('.order-cb:checked');
+      const master = document.getElementById('select-all-cb') as HTMLInputElement | null;
+      if (master) {
+        master.checked = all.length > 0 && all.length === chkd.length;
+        master.indeterminate = chkd.length > 0 && chkd.length < all.length;
+      }
+    });
+
+    function batchSubmit(form: HTMLFormElement): boolean {
+      const act = (form.querySelector<HTMLSelectElement>('[name="act"]'))?.value ?? '';
+      if (!act) { alert('Please select a batch action.'); return false; }
+
+      const checked = [...form.querySelectorAll<HTMLInputElement>('.order-cb:checked')];
+      if (checked.length === 0) { alert('No orders selected.'); return false; }
+
+      if (act === 'packlist') {
+        const ids = checked.map(cb => cb.value).join(',');
+        window.open(
+          `/admin/print?type=packlist&orders=${ids}`,
+          'batch_print',
+          'width=900,height=700,scrollbars=yes,resizable=yes'
+        );
+        return false; // Don't submit form for print actions
+      }
+
+      if (act.startsWith('void')) {
+        return confirm(`Void ${checked.length} order${checked.length > 1 ? 's' : ''}?`);
+      }
+
+      return true;
+    }
+  </script>
 
 </AdminLayout>
