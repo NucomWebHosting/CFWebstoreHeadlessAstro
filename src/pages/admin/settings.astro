@@ -58,11 +58,13 @@ function sectionHead(title: string) {
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Domain Name</label>
-          <input type="text" name="domain_name" value={String(v("DomainName"))} placeholder="https://example.com/" class={inpMono} />
+          <input type="text" name="domain_name" value={String(v("DomainName"))} placeholder="https://example.com" class={inpMono} />
+          <p class="mt-1 text-xs text-gray-400">Used for emails, OG tags, and sitemaps only — not used for image src paths in the browser.</p>
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Default Images Path</label>
           <input type="text" name="default_images" value={String(v("DefaultImages"))} placeholder="/images" class={inpMono} />
+          <p class="mt-1 text-xs text-gray-400">Root-relative folder where images are stored and served (e.g. <code>/images</code>). Must match the upload folder.</p>
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Desktop Logo (filename)</label>

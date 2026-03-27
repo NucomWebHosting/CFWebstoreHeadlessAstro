@@ -287,20 +287,35 @@ export interface SettingsRow {
   alert_message: string | null;
 }
 
-// Build the image base URL from Settings: DomainName + DefaultImages
-// Mirrors CF's: Request.ImagePath = request.domainname & AppSettings.defaultimages & "/"
-// Falls back to IMAGE_BASE_URL env var when the DB fields aren't populated yet.
-export function getImageBaseUrl(settings: SettingsRow | null): string {
-  // IMAGE_BASE_URL env var takes priority — used as a temporary override
-  // while images are hosted on a different domain than Settings.DomainName.
-  const envOverride = (import.meta.env.IMAGE_BASE_URL as string | undefined) ?? "";
-  if (envOverride) return envOverride.replace(/\/$/, "");
-  if (!settings) return "";
-  const domain = settings.DomainName?.replace(/\/$/, "") ?? "";
-  const folder = settings.DefaultImages?.replace(/^\//, "").replace(/\/$/, "") ?? "";
-  if (!domain) return "";
-  return folder ? `${domain}/${folder}` : domain;
+/**
+ * Root-relative image path for use in browser <img> tags (never includes domain).
+ * e.g. "/images"  →  <img src="/images/product.jpg">
+ *
+ * DefaultImages in Settings is the subfolder (default "/images").
+ * DomainName is NOT used here — relative paths work in any browser context
+ * and avoid breakage when the domain changes.
+ */
+export function getImagePath(settings: SettingsRow | null): string {
+  // IMAGE_BASE_URL env var: strip domain portion if present, keep path only
+  const envVal = (import.meta.env.IMAGE_BASE_URL as string | undefined) ?? "";
+  if (envVal) return envVal.replace(/^https?:\/\/[^/]+/, "").replace(/\/$/, "") || "/images";
+  const folder = settings?.DefaultImages?.replace(/\/$/, "") ?? "";
+  return folder || "/images";
 }
+
+/**
+ * Absolute image URL for email templates, OG tags, and sitemaps.
+ * Combines DomainName + the image path (which may already include DefaultImages).
+ * Pass the full relative path including subfolder, e.g. "/images/product.jpg".
+ */
+export function getAbsoluteImageUrl(settings: SettingsRow | null, path: string): string {
+  const domain = settings?.DomainName?.replace(/\/$/, "") ?? "";
+  const file   = path.startsWith("/") ? path : `/${path}`;
+  return domain ? `${domain}${file}` : file;
+}
+
+// Backward-compatible alias — existing call sites get relative paths automatically
+export const getImageBaseUrl = getImagePath;
 
 export interface NavItem {
   id: number;
