@@ -1,0 +1,185 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getTwilioSettings, saveTwilioSettings } from "../../../lib/queries/admin-sms";
+
+let settings = await getTwilioSettings();
+let error = "";
+let success = "";
+
+let posted = {
+  PhoneNumber:       settings?.PhoneNumber       ?? "",
+  Account_SID:       settings?.Account_SID       ?? "",
+  Auth_token:        settings?.Auth_token         ?? "",
+  nucomServicesURL:  settings?.nucomServicesURL   ?? "",
+  nucomClientkey:    settings?.nucomClientkey     ?? "",
+  nucomClientSecret: settings?.nucomClientSecret  ?? "",
+  nucomApiKey:       settings?.nucomApiKey        ?? "",
+  cfWebstoreUrl:     settings?.cfWebstoreUrl      ?? "",
+};
+
+if (Astro.request.method === "POST") {
+  const data = await Astro.request.formData();
+  const g = (k: string) => (data.get(k) as string ?? "").trim();
+
+  posted = {
+    PhoneNumber:       g("PhoneNumber"),
+    Account_SID:       g("Account_SID"),
+    Auth_token:        g("Auth_token"),
+    nucomServicesURL:  g("nucomServicesURL"),
+    nucomClientkey:    g("nucomClientkey"),
+    nucomClientSecret: g("nucomClientSecret"),
+    nucomApiKey:       g("nucomApiKey"),
+    cfWebstoreUrl:     g("cfWebstoreUrl"),
+  };
+
+  if (!posted.Account_SID || !posted.Auth_token) {
+    error = "Account SID and Authorization Token are required.";
+  } else {
+    await saveTwilioSettings(posted);
+    success = "Settings saved.";
+    settings = await getTwilioSettings();
+  }
+}
+---
+
+<AdminLayout title="Twilio Settings">
+  <h1 class="text-xl font-semibold text-gray-800 mb-6">Twilio Settings</h1>
+
+  {success && (
+    <div class="mb-5 max-w-2xl bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-lg">
+      {success}
+    </div>
+  )}
+  {error && (
+    <div class="mb-5 max-w-2xl bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">
+      {error}
+    </div>
+  )}
+
+  <form method="post" class="max-w-2xl space-y-6">
+
+    <!-- Twilio Connection -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-3">
+        <span class="text-sm font-semibold text-gray-700">Twilio Connection</span>
+        <div class="flex-1 border-t border-gray-200"></div>
+      </div>
+      <div class="px-5 py-4 space-y-4">
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right" for="PhoneNumber">
+            Twilio Phone Number:
+          </label>
+          <div class="col-span-2">
+            <input id="PhoneNumber" name="PhoneNumber" type="text" value={posted.PhoneNumber}
+              maxlength="50" placeholder="1XXXXXXXXXX"
+              class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <p class="mt-1 text-xs text-gray-400">Numeric characters only.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right" for="Account_SID">
+            Account SID <span class="text-red-500">*</span>
+          </label>
+          <div class="col-span-2">
+            <input id="Account_SID" name="Account_SID" type="text" value={posted.Account_SID}
+              maxlength="50" required
+              class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right" for="Auth_token">
+            Authorization Token <span class="text-red-500">*</span>
+          </label>
+          <div class="col-span-2">
+            <input id="Auth_token" name="Auth_token" type="text" value={posted.Auth_token}
+              maxlength="50" required
+              class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Nucom Keys -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-3">
+        <span class="text-sm font-semibold text-gray-700">Nucom Keys</span>
+        <div class="flex-1 border-t border-gray-200"></div>
+      </div>
+      <div class="px-5 py-4 space-y-4">
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right" for="nucomServicesURL">
+            Nucom Services URL:
+          </label>
+          <div class="col-span-2">
+            <input id="nucomServicesURL" name="nucomServicesURL" type="text" value={posted.nucomServicesURL}
+              maxlength="250" placeholder="https://www.nucomwebhosting.com"
+              class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right" for="nucomClientkey">
+            Nucom Client Key:
+          </label>
+          <div class="col-span-2">
+            <input id="nucomClientkey" name="nucomClientkey" type="text" value={posted.nucomClientkey}
+              maxlength="100"
+              class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right" for="nucomClientSecret">
+            Nucom Client Secret:
+          </label>
+          <div class="col-span-2">
+            <input id="nucomClientSecret" name="nucomClientSecret" type="text" value={posted.nucomClientSecret}
+              maxlength="100"
+              class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right" for="nucomApiKey">
+            Nucom API Key:
+          </label>
+          <div class="col-span-2">
+            <input id="nucomApiKey" name="nucomApiKey" type="text" value={posted.nucomApiKey}
+              maxlength="100"
+              class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right" for="cfWebstoreUrl">
+            CFWebstore URL:
+          </label>
+          <div class="col-span-2">
+            <input id="cfWebstoreUrl" name="cfWebstoreUrl" type="url" value={posted.cfWebstoreUrl}
+              maxlength="100" placeholder="https://www.mydomain.com"
+              class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="flex gap-3">
+      <button type="submit"
+        class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors">
+        Save Changes
+      </button>
+      <a href="/admin"
+        class="bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-medium px-5 py-2 rounded-lg transition-colors">
+        Cancel
+      </a>
+    </div>
+
+  </form>
+</AdminLayout>

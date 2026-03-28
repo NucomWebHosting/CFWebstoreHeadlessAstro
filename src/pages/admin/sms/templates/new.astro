@@ -1,0 +1,103 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../components/layout/AdminLayout.astro";
+import { createSmsText } from "../../../../lib/queries/admin-sms";
+
+let error = "";
+let posted = { SMSText_Name: "", SMSText_Message: "", Subscribe_SMS: "1" };
+
+if (Astro.request.method === "POST") {
+  const data = await Astro.request.formData();
+  const g = (k: string) => (data.get(k) as string ?? "").trim();
+
+  posted.SMSText_Name    = g("SMSText_Name");
+  posted.SMSText_Message = (data.get("SMSText_Message") as string ?? "").trim();
+  posted.Subscribe_SMS   = g("Subscribe_SMS");
+
+  if (!posted.SMSText_Name) {
+    error = "Message Name is required.";
+  } else {
+    const newId = await createSmsText({
+      SMSText_Name:    posted.SMSText_Name,
+      SMSText_Message: posted.SMSText_Message,
+      Subscribe_SMS:   Number(posted.Subscribe_SMS),
+    });
+    return Astro.redirect(`/admin/sms/templates/${newId}`);
+  }
+}
+---
+
+<AdminLayout title="Add SMS Template">
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-xl font-semibold text-gray-800">Add SMS Template</h1>
+    <a href="/admin/sms/templates" class="text-sm text-gray-500 hover:text-gray-800 transition-colors">
+      &larr; Back to Templates
+    </a>
+  </div>
+
+  {error && (
+    <div class="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg max-w-2xl">
+      {error}
+    </div>
+  )}
+
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-2xl">
+    <form method="post" class="space-y-5">
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="SMSText_Name">
+          Message Name <span class="text-red-500">*</span>
+        </label>
+        <input
+          id="SMSText_Name"
+          name="SMSText_Name"
+          type="text"
+          value={posted.SMSText_Name}
+          maxlength="50"
+          required
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="SMSText_Message">
+          Message <span class="text-red-500">*</span>
+        </label>
+        <textarea
+          id="SMSText_Message"
+          name="SMSText_Message"
+          rows={8}
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >{posted.SMSText_Message}</textarea>
+        <p class="mt-1 text-xs text-gray-400">
+          Merge fields: %firstname%, %SiteName%, %SiteURL%, %Date%, %Username%, %shipper%, %tracking%, %OrderNum%
+        </p>
+      </div>
+
+      <div>
+        <span class="block text-sm font-medium text-gray-700 mb-2">Active <span class="text-red-500">*</span></span>
+        <div class="flex gap-5">
+          <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="radio" name="Subscribe_SMS" value="1" checked={posted.Subscribe_SMS === "1"}
+              class="text-blue-600 focus:ring-blue-500" required />
+            Yes
+          </label>
+          <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="radio" name="Subscribe_SMS" value="0" checked={posted.Subscribe_SMS === "0"}
+              class="text-blue-600 focus:ring-blue-500" />
+            No
+          </label>
+        </div>
+      </div>
+
+      <div class="pt-2 border-t border-gray-100">
+        <button
+          type="submit"
+          class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
+        >
+          Add
+        </button>
+      </div>
+    </form>
+  </div>
+</AdminLayout>
