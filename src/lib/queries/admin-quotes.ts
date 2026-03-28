@@ -362,3 +362,44 @@ export async function addProductToQuote(
   `, { orderNo, ...data } as Record<string, string | number | null>);
   await recalcQuoteTotal(orderNo);
 }
+
+export async function createFullQuote(
+  customerId: number,
+  items: Array<{ Product_ID: number; Name: string; SKU: string | null; Quantity: number; Price: number }>,
+  totals: { ShipType: string; Shipping: number; Tax: number; AdminCredit: number; AdminCreditText: string }
+): Promise<number> {
+  await query(`
+    INSERT INTO Order_No_Quote
+      (Customer_ID, User_ID, ShipTo, OrderTotal, OriginalTotal,
+       Shipping, Tax, AdminCredit, AdminCreditText,
+       ShipType, Notes, Process, Filled, Paid, Void,
+       InvoiceNum, Comments, Printed_quote, DateOrdered)
+    VALUES
+      (@customerId, 0, 0, 0, 0,
+       @Shipping, @Tax, @AdminCredit, @AdminCreditText,
+       @ShipType, '', 0, 0, 0, 0,
+       '', '', 0, GETDATE())
+  `, { customerId, ...totals } as Record<string, string | number>);
+
+  const rows = await query<{ newOrderNo: number }>(
+    `SELECT CAST(SCOPE_IDENTITY() AS INT) AS newOrderNo`, {}
+  );
+  const orderNo = rows[0]?.newOrderNo ?? 0;
+  if (!orderNo) throw new Error("Failed to create quote.");
+
+  for (const item of items) {
+    await query(`
+      INSERT INTO Order_Items_Quote
+        (Item_ID, Order_No, Product_ID, Name, SKU, Quantity, Price,
+         OptPrice, AddonMultP, DiscAmount, Per_Item_Weight)
+      VALUES (
+        ISNULL((SELECT MAX(Item_ID) FROM Order_Items_Quote), 0) + 1,
+        @orderNo, @Product_ID, @Name, @SKU, @Quantity, @Price, 0, 0, 0,
+        ISNULL((SELECT Weight FROM Products WHERE Product_ID = @Product_ID), 0)
+      )
+    `, { orderNo, ...item } as Record<string, string | number | null>);
+  }
+
+  await recalcQuoteTotal(orderNo);
+  return orderNo;
+}

@@ -1,24 +1,98 @@
 ---
 export const prerender = false;
 import AdminLayout from "../../../components/layout/AdminLayout.astro";
-import { createBlankQuote } from "../../../lib/queries/admin-quotes";
+import { createFullQuote } from "../../../lib/queries/admin-quotes";
+import { createCustomer, getStates, getCountries } from "../../../lib/queries/admin-customers";
+
+const [states, countries] = await Promise.all([getStates(), getCountries()]);
 
 let error = "";
+let fieldErrors: Record<string, string> = {};
+let postedCustomerMode = "existing";
+let postedCustomerId = 0;
+let postedNc = {
+  Firstname: "", LastName: "", Company: "", Address1: "", Address2: "",
+  City: "", County: "", State: "Unlisted", State2: "", Zip: "",
+  Country: "US^United States", Phone: "", Phone2: "", Fax: "", Email: "", Residence: "0",
+};
+let postedTotals = { ShipType: "", Shipping: "", Tax: "", AdminCredit: "", AdminCreditText: "" };
+let postedCartItems: Array<{ product_id: number; name: string; sku: string | null; quantity: number; price: number }> = [];
 
 if (Astro.request.method === "POST") {
   const d = await Astro.request.formData();
-  const customerId = parseInt(d.get("customer_id") as string) || 0;
-  if (!customerId) {
-    error = "Please select a customer.";
+  const g = (k: string) => ((d.get(k) as string) ?? "").trim();
+
+  postedCustomerMode = g("customer_mode") || "existing";
+
+  // Restore totals for re-render
+  postedTotals = {
+    ShipType: g("ShipType"), Shipping: g("Shipping"),
+    Tax: g("Tax"), AdminCredit: g("AdminCredit"), AdminCreditText: g("AdminCreditText"),
+  };
+
+  // Restore cart for re-render
+  const itemCount = parseInt(g("items_count")) || 0;
+  for (let i = 0; i < itemCount; i++) {
+    postedCartItems.push({
+      product_id: parseInt(g(`item_${i}_product_id`)) || 0,
+      name:       g(`item_${i}_name`),
+      sku:        g(`item_${i}_sku`) || null,
+      quantity:   parseInt(g(`item_${i}_quantity`)) || 1,
+      price:      parseFloat(g(`item_${i}_price`)) || 0,
+    });
+  }
+
+  let customerId = 0;
+  let hasError = false;
+
+  if (postedCustomerMode === "existing") {
+    customerId = parseInt(g("customer_id")) || 0;
+    postedCustomerId = customerId;
+    if (!customerId) { error = "Please select a customer."; hasError = true; }
   } else {
+    postedNc = {
+      Firstname: g("nc_Firstname"), LastName: g("nc_LastName"), Company: g("nc_Company"),
+      Address1: g("nc_Address1"), Address2: g("nc_Address2"), City: g("nc_City"),
+      County: g("nc_County"), State: g("nc_State") || "Unlisted", State2: g("nc_State2"),
+      Zip: g("nc_Zip"), Country: g("nc_Country") || "US^United States",
+      Phone: g("nc_Phone"), Phone2: g("nc_Phone2"), Fax: g("nc_Fax"),
+      Email: g("nc_Email"), Residence: g("nc_Residence") || "0",
+    };
+    if (!postedNc.Firstname) { fieldErrors.Firstname = "Required"; hasError = true; }
+    if (!postedNc.LastName)  { fieldErrors.LastName  = "Required"; hasError = true; }
+    if (!hasError) {
+      try {
+        customerId = await createCustomer({
+          User_ID: 0, ...postedNc, Residence: postedNc.Residence === "1",
+        });
+      } catch (e: unknown) {
+        error = e instanceof Error ? e.message : String(e);
+        hasError = true;
+      }
+    }
+  }
+
+  if (!hasError) {
     try {
-      const newOrderNo = await createBlankQuote(customerId);
-      return Astro.redirect(`/admin/quotes/${newOrderNo}/edit`);
+      const items = postedCartItems
+        .filter(i => i.product_id > 0)
+        .map(i => ({ Product_ID: i.product_id, Name: i.name, SKU: i.sku, Quantity: i.quantity, Price: i.price }));
+      const totals = {
+        ShipType:        postedTotals.ShipType,
+        Shipping:        parseFloat(postedTotals.Shipping) || 0,
+        Tax:             parseFloat(postedTotals.Tax) || 0,
+        AdminCredit:     parseFloat(postedTotals.AdminCredit) || 0,
+        AdminCreditText: postedTotals.AdminCreditText,
+      };
+      const newOrderNo = await createFullQuote(customerId, items, totals);
+      return Astro.redirect(`/admin/quotes/${newOrderNo}`);
     } catch (e: unknown) {
       error = e instanceof Error ? e.message : String(e);
     }
   }
 }
+
+const showNewCustomer = postedCustomerMode === "new";
 ---
 
 <AdminLayout title="New Quote">
@@ -29,123 +103,458 @@ if (Astro.request.method === "POST") {
   <h1 class="text-xl font-semibold text-gray-800 mb-6">New Quote</h1>
 
   {error && (
-    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+    <div class="mb-5 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
   )}
 
-  <!-- Customer Search -->
-  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6 max-w-2xl">
-    <h3 class="text-sm font-semibold text-gray-700 mb-3">Select Customer</h3>
-    <div class="relative mb-2">
-      <input
-        id="customer-search"
-        type="text"
-        placeholder="Search by name, email, or company…"
-        autocomplete="off"
-        autofocus
-        class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
-      />
-      <div id="search-spinner" class="absolute right-3 top-2.5 hidden">
-        <svg class="animate-spin h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-        </svg>
+  <form id="quote-form" method="post">
+
+    {/* ── Section 1: Customer ── */}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
+      <h2 class="text-sm font-semibold text-gray-700 mb-4">Customer</h2>
+
+      {/* Tab buttons */}
+      <div class="flex gap-2 mb-4">
+        <button type="button" id="tab-existing"
+                class={`px-4 py-1.5 text-xs font-medium rounded ${!showNewCustomer ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                onclick="switchMode('existing')">
+          Find Existing Customer
+        </button>
+        <button type="button" id="tab-new"
+                class={`px-4 py-1.5 text-xs font-medium rounded ${showNewCustomer ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                onclick="switchMode('new')">
+          New Customer
+        </button>
+      </div>
+
+      <input type="hidden" name="customer_mode" id="f-customer_mode" value={postedCustomerMode} />
+
+      {/* Existing customer panel */}
+      <div id="panel-existing" class={showNewCustomer ? "hidden" : ""}>
+        <div class="relative mb-2 max-w-lg">
+          <input id="cust-search" type="text" autocomplete="off"
+                 placeholder="Search by name, email, or company…"
+                 class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          <div id="cust-spinner" class="absolute right-3 top-2.5 hidden">
+            <svg class="animate-spin h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+            </svg>
+          </div>
+        </div>
+        <p class="text-xs text-gray-400 mb-2">Type at least 2 characters to search.</p>
+        <ul id="cust-results" class="hidden border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100 mb-3 max-w-lg max-h-60 overflow-y-auto"></ul>
+        <div id="cust-selected" class={`rounded-lg bg-blue-50 border border-blue-200 px-4 py-2.5 text-sm flex items-center justify-between max-w-lg ${postedCustomerId ? "" : "hidden"}`}>
+          <div>
+            <span class="font-medium text-blue-900" id="cust-name"></span>
+            <span class="ml-2 text-blue-600 text-xs" id="cust-email"></span>
+          </div>
+          <button type="button" id="cust-clear" class="text-blue-400 hover:text-blue-600 text-lg leading-none ml-3">&times;</button>
+        </div>
+        <input type="hidden" name="customer_id" id="f-customer_id" value={postedCustomerId || ""} />
+      </div>
+
+      {/* New customer panel */}
+      <div id="panel-new" class={showNewCustomer ? "" : "hidden"}>
+        <div class="grid grid-cols-2 gap-4 max-w-2xl">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">First Name <span class="text-red-500">*</span></label>
+            <input type="text" name="nc_Firstname" value={postedNc.Firstname} maxlength="50"
+                   class={`w-full border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 ${fieldErrors.Firstname ? "border-red-400" : "border-gray-300"}`} />
+            {fieldErrors.Firstname && <p class="text-xs text-red-500 mt-1">{fieldErrors.Firstname}</p>}
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Last Name <span class="text-red-500">*</span></label>
+            <input type="text" name="nc_LastName" value={postedNc.LastName} maxlength="100"
+                   class={`w-full border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 ${fieldErrors.LastName ? "border-red-400" : "border-gray-300"}`} />
+            {fieldErrors.LastName && <p class="text-xs text-red-500 mt-1">{fieldErrors.LastName}</p>}
+          </div>
+          <div class="col-span-2">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Company</label>
+            <input type="text" name="nc_Company" value={postedNc.Company} maxlength="150"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="col-span-2">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Address 1</label>
+            <input type="text" name="nc_Address1" value={postedNc.Address1} maxlength="150"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="col-span-2">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Address 2</label>
+            <input type="text" name="nc_Address2" value={postedNc.Address2} maxlength="150"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">City</label>
+            <input type="text" name="nc_City" value={postedNc.City} maxlength="150"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">State</label>
+            <select name="nc_State" class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+              <option value="Unlisted" selected={postedNc.State === "Unlisted"}>Unlisted / None</option>
+              <option value="Unlisted">───────────────</option>
+              {states.map(s => (
+                <option value={s.Abb} selected={postedNc.State === s.Abb}>{s.Name} ({s.Abb})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Zip</label>
+            <input type="text" name="nc_Zip" value={postedNc.Zip} maxlength="50"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Country</label>
+            <select name="nc_Country" class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+              <option value="US^United States" selected={postedNc.Country === "US^United States"}>United States</option>
+              <option value="US^United States">───────────────</option>
+              {countries.map(c => {
+                const val = `${c.Abbrev}^${c.Country}`;
+                return <option value={val} selected={postedNc.Country === val}>{c.Country}</option>;
+              })}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Phone</label>
+            <input type="tel" name="nc_Phone" value={postedNc.Phone} maxlength="50"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Email</label>
+            <input type="email" name="nc_Email" value={postedNc.Email} maxlength="150"
+                   class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
       </div>
     </div>
-    <p class="text-xs text-gray-400 mb-3">Type at least 2 characters to search.</p>
 
-    <!-- Dropdown results -->
-    <ul id="customer-results" class="hidden border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100 mb-4 max-h-72 overflow-y-auto"></ul>
+    {/* ── Section 2: Products / Cart ── */}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
+      <h2 class="text-sm font-semibold text-gray-700 mb-4">Products</h2>
 
-    <!-- Selected customer card -->
-    <div id="selected-card" class="hidden rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-900 flex items-center justify-between">
-      <div>
-        <span class="font-medium" id="selected-name"></span>
-        <span class="ml-2 text-blue-600 text-xs" id="selected-email"></span>
+      <div class="relative mb-2 max-w-lg">
+        <input id="prod-search" type="text" autocomplete="off"
+               placeholder="Search by name, SKU, or UPC…"
+               class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <div id="prod-spinner" class="absolute right-3 top-2.5 hidden">
+          <svg class="animate-spin h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+          </svg>
+        </div>
       </div>
-      <button type="button" id="clear-customer" class="text-blue-400 hover:text-blue-600 text-lg leading-none">&times;</button>
-    </div>
-  </div>
+      <p class="text-xs text-gray-400 mb-3">Type at least 2 characters to search.</p>
+      <ul id="prod-results" class="hidden border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100 mb-4 max-w-lg max-h-60 overflow-y-auto"></ul>
 
-  <!-- Create button (hidden until customer selected) -->
-  <form method="post" id="create-form">
-    <input type="hidden" name="customer_id" id="f-customer_id" />
-    <button type="submit" id="create-btn" disabled
-            class="px-5 py-2 bg-green-600 text-white text-sm font-semibold rounded hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed">
-      Create Quote
-    </button>
-    <a href="/admin/quotes"
-       class="ml-3 px-5 py-2 bg-gray-100 text-gray-700 text-sm font-semibold rounded hover:bg-gray-200">
-      Cancel
-    </a>
+      {/* Cart table */}
+      <div id="cart-empty" class="py-6 text-center text-sm text-gray-400">No products added yet.</div>
+      <div id="cart-wrap" class="hidden overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="px-4 py-2 text-left">Product</th>
+              <th class="px-4 py-2 text-left w-28">SKU</th>
+              <th class="px-4 py-2 text-center w-20">Qty</th>
+              <th class="px-4 py-2 text-right w-28">Unit Price</th>
+              <th class="px-4 py-2 text-right w-28">Line Total</th>
+              <th class="px-4 py-2 w-10"></th>
+            </tr>
+          </thead>
+          <tbody id="cart-body" class="divide-y divide-gray-100"></tbody>
+        </table>
+        <div class="flex justify-end px-4 py-3 border-t border-gray-100">
+          <span class="text-xs text-gray-500 mr-3 self-center">Subtotal</span>
+          <span id="cart-subtotal" class="text-sm font-semibold text-gray-800">$0.00</span>
+        </div>
+      </div>
+
+      <input type="hidden" name="items_count" id="f-items-count" value="0" />
+    </div>
+
+    {/* ── Section 3: Quote Totals ── */}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6 max-w-md">
+      <h2 class="text-sm font-semibold text-gray-700 mb-4">Quote Totals</h2>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Shipping Method</label>
+          <input type="text" name="ShipType" value={postedTotals.ShipType}
+                 class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Shipping Cost ($)</label>
+          <input type="number" name="Shipping" value={postedTotals.Shipping || "0"} step="0.01" min="0"
+                 class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Tax ($)</label>
+          <input type="number" name="Tax" value={postedTotals.Tax || "0"} step="0.01" min="0"
+                 class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Discount Description</label>
+          <input type="text" name="AdminCreditText" value={postedTotals.AdminCreditText}
+                 class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Admin Discount ($)</label>
+          <input type="number" name="AdminCredit" value={postedTotals.AdminCredit || "0"} step="0.01" min="0"
+                 class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+      </div>
+    </div>
+
+    {/* ── Save / Cancel ── */}
+    <div class="flex items-center gap-3">
+      <button type="submit"
+              class="px-6 py-2 bg-green-600 text-white text-sm font-semibold rounded hover:bg-green-700">
+        Save Quote
+      </button>
+      <a href="/admin/quotes"
+         class="px-5 py-2 bg-gray-100 text-gray-700 text-sm font-semibold rounded hover:bg-gray-200">
+        Cancel
+      </a>
+    </div>
   </form>
 
+  {/* Cart seed for re-render after failed POST */}
+  <script id="cart-seed" type="application/json" set:text={JSON.stringify(postedCartItems)}></script>
+
   <script>
-    const searchInput  = document.getElementById("customer-search");
-    const spinner      = document.getElementById("search-spinner");
-    const resultsList  = document.getElementById("customer-results");
-    const selectedCard = document.getElementById("selected-card");
-    const selectedName = document.getElementById("selected-name");
-    const selectedEmail= document.getElementById("selected-email");
-    const clearBtn     = document.getElementById("clear-customer");
-    const hiddenId     = document.getElementById("f-customer_id");
-    const createBtn    = document.getElementById("create-btn");
+    // ── Cart state ────────────────────────────────────────────────────────────
+    let cart = [];
+    const seedEl = document.getElementById("cart-seed");
+    if (seedEl) { try { cart = JSON.parse(seedEl.textContent ?? "[]"); } catch(e) {} }
 
-    let debounceTimer = null;
+    const cartBody     = document.getElementById("cart-body");
+    const cartWrap     = document.getElementById("cart-wrap");
+    const cartEmpty    = document.getElementById("cart-empty");
+    const cartSubtotal = document.getElementById("cart-subtotal");
 
-    searchInput.addEventListener("input", () => {
-      clearTimeout(debounceTimer);
-      const q = searchInput.value.trim();
-      if (q.length < 2) { resultsList.classList.add("hidden"); return; }
-      debounceTimer = setTimeout(() => fetchCustomers(q), 250);
+    function fmt(n) {
+      return Number(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
+    }
+
+    function renderCart() {
+      cartBody.innerHTML = "";
+      if (cart.length === 0) {
+        cartWrap.classList.add("hidden");
+        cartEmpty.classList.remove("hidden");
+        document.getElementById("f-items-count").value = "0";
+        return;
+      }
+      cartWrap.classList.remove("hidden");
+      cartEmpty.classList.add("hidden");
+
+      let subtotal = 0;
+      cart.forEach((item, i) => {
+        const lineTotal = item.quantity * item.price;
+        subtotal += lineTotal;
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-gray-50";
+        tr.innerHTML = `
+          <td class="px-4 py-2 text-xs font-medium text-gray-800">${esc(item.name)}</td>
+          <td class="px-4 py-2 text-xs text-gray-500">${esc(item.sku ?? "—")}</td>
+          <td class="px-4 py-2 text-center">
+            <input type="number" class="w-16 border border-gray-200 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400"
+                   value="${item.quantity}" min="1" step="1" data-idx="${i}" data-field="quantity" />
+          </td>
+          <td class="px-4 py-2">
+            <input type="number" class="w-24 border border-gray-200 rounded px-2 py-1 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400"
+                   value="${item.price}" step="0.01" min="0" data-idx="${i}" data-field="price" />
+          </td>
+          <td class="px-4 py-2 text-right text-xs text-gray-600 line-total">${fmt(lineTotal)}</td>
+          <td class="px-4 py-2 text-center">
+            <button type="button" class="text-red-400 hover:text-red-600 text-base leading-none remove-btn" data-idx="${i}">&times;</button>
+          </td>
+        `;
+        tr.querySelectorAll("input[data-field]").forEach(inp => {
+          inp.addEventListener("input", e => {
+            const el = e.target;
+            const idx = parseInt(el.dataset.idx);
+            const field = el.dataset.field;
+            cart[idx][field] = field === "quantity" ? (parseInt(el.value) || 1) : (parseFloat(el.value) || 0);
+            // Update line total in this row only
+            const lt = cart[idx].quantity * cart[idx].price;
+            tr.querySelector(".line-total").textContent = fmt(lt);
+            updateSubtotal();
+          });
+        });
+        tr.querySelector(".remove-btn").addEventListener("click", e => {
+          cart.splice(parseInt(e.target.dataset.idx), 1);
+          renderCart();
+        });
+        cartBody.appendChild(tr);
+      });
+      cartSubtotal.textContent = fmt(subtotal);
+      document.getElementById("f-items-count").value = String(cart.length);
+    }
+
+    function updateSubtotal() {
+      const s = cart.reduce((sum, item) => sum + item.quantity * item.price, 0);
+      cartSubtotal.textContent = fmt(s);
+    }
+
+    renderCart();
+
+    // ── Product search ────────────────────────────────────────────────────────
+    const prodSearch  = document.getElementById("prod-search");
+    const prodSpinner = document.getElementById("prod-spinner");
+    const prodResults = document.getElementById("prod-results");
+    let prodTimer = null;
+
+    prodSearch.addEventListener("input", () => {
+      clearTimeout(prodTimer);
+      const q = prodSearch.value.trim();
+      if (q.length < 2) { prodResults.classList.add("hidden"); return; }
+      prodTimer = setTimeout(() => fetchProducts(q), 250);
     });
 
+    document.addEventListener("click", e => {
+      if (!prodResults.contains(e.target) && e.target !== prodSearch) {
+        prodResults.classList.add("hidden");
+      }
+    });
+
+    async function fetchProducts(q) {
+      prodSpinner.classList.remove("hidden");
+      try {
+        const res = await fetch(`/api/admin/products/search?q=${encodeURIComponent(q)}`);
+        const products = await res.json();
+        renderProdResults(products);
+      } catch(e) { console.error(e); }
+      finally { prodSpinner.classList.add("hidden"); }
+    }
+
+    function renderProdResults(products) {
+      prodResults.innerHTML = "";
+      if (products.length === 0) {
+        prodResults.innerHTML = `<li class="px-4 py-3 text-sm text-gray-400">No products found.</li>`;
+      } else {
+        products.forEach(p => {
+          const li = document.createElement("li");
+          li.className = "flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 gap-3";
+          li.innerHTML = `
+            <div class="min-w-0">
+              <div class="text-sm font-medium text-gray-800 truncate">${esc(p.Name)}</div>
+              <div class="text-xs text-gray-400">${p.SKU ? esc(p.SKU) : ""} &nbsp; ${fmt(p.Base_Price)}</div>
+            </div>
+            <button type="button" class="shrink-0 px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700">+ Add</button>
+          `;
+          li.querySelector("button").addEventListener("click", () => {
+            addToCart(p);
+            prodSearch.value = "";
+            prodResults.classList.add("hidden");
+          });
+          prodResults.appendChild(li);
+        });
+      }
+      prodResults.classList.remove("hidden");
+    }
+
+    function addToCart(p) {
+      const existing = cart.find(i => i.product_id === p.Product_ID);
+      if (existing) {
+        existing.quantity += 1;
+      } else {
+        cart.push({ product_id: p.Product_ID, name: p.Name, sku: p.SKU ?? null, quantity: 1, price: p.Base_Price });
+      }
+      renderCart();
+    }
+
+    // ── Customer search ───────────────────────────────────────────────────────
+    const custSearch   = document.getElementById("cust-search");
+    const custSpinner  = document.getElementById("cust-spinner");
+    const custResults  = document.getElementById("cust-results");
+    const custSelected = document.getElementById("cust-selected");
+    const custName     = document.getElementById("cust-name");
+    const custEmail    = document.getElementById("cust-email");
+    const custClear    = document.getElementById("cust-clear");
+    const fCustId      = document.getElementById("f-customer_id");
+    let custTimer = null;
+
+    if (custSearch) {
+      custSearch.addEventListener("input", () => {
+        clearTimeout(custTimer);
+        const q = custSearch.value.trim();
+        if (q.length < 2) { custResults.classList.add("hidden"); return; }
+        custTimer = setTimeout(() => fetchCustomers(q), 250);
+      });
+      document.addEventListener("click", e => {
+        if (!custResults.contains(e.target) && e.target !== custSearch) {
+          custResults.classList.add("hidden");
+        }
+      });
+    }
+
     async function fetchCustomers(q) {
-      spinner.classList.remove("hidden");
+      custSpinner.classList.remove("hidden");
       try {
         const res = await fetch(`/api/admin/customers/search?q=${encodeURIComponent(q)}`);
         const customers = await res.json();
-        renderResults(customers);
-      } catch(e) {
-        console.error(e);
-      } finally {
-        spinner.classList.add("hidden");
-      }
+        renderCustResults(customers);
+      } catch(e) { console.error(e); }
+      finally { custSpinner.classList.add("hidden"); }
     }
 
-    function renderResults(customers) {
-      resultsList.innerHTML = "";
+    function renderCustResults(customers) {
+      custResults.innerHTML = "";
       if (customers.length === 0) {
-        resultsList.innerHTML = `<li class="px-4 py-3 text-sm text-gray-400">No customers found.</li>`;
+        custResults.innerHTML = `<li class="px-4 py-3 text-sm text-gray-400">No customers found.</li>`;
       } else {
         customers.forEach(c => {
           const li = document.createElement("li");
           li.className = "px-4 py-2.5 hover:bg-gray-50 cursor-pointer";
           const name = `${esc(c.Firstname)} ${esc(c.LastName)}`;
-          const company = c.Company ? ` <span class="text-gray-400 text-xs">${esc(c.Company)}</span>` : "";
-          const email = c.Email ? ` <span class="text-gray-400 text-xs">${esc(c.Email)}</span>` : "";
-          li.innerHTML = `<span class="text-sm font-medium text-gray-800">${name}</span>${company}${email}`;
+          li.innerHTML = `<span class="text-sm font-medium text-gray-800">${name}</span>${c.Company ? ` <span class="text-xs text-gray-400">${esc(c.Company)}</span>` : ""}${c.Email ? ` <span class="text-xs text-gray-400">${esc(c.Email)}</span>` : ""}`;
           li.addEventListener("click", () => selectCustomer(c));
-          resultsList.appendChild(li);
+          custResults.appendChild(li);
         });
       }
-      resultsList.classList.remove("hidden");
+      custResults.classList.remove("hidden");
     }
 
     function selectCustomer(c) {
-      hiddenId.value = c.Customer_ID;
-      selectedName.textContent = `${c.Firstname} ${c.LastName}`;
-      selectedEmail.textContent = c.Email ?? "";
-      selectedCard.classList.remove("hidden");
-      resultsList.classList.add("hidden");
-      searchInput.value = "";
-      createBtn.disabled = false;
+      fCustId.value = c.Customer_ID;
+      custName.textContent = `${c.Firstname} ${c.LastName}`;
+      custEmail.textContent = c.Email ?? "";
+      custSelected.classList.remove("hidden");
+      custResults.classList.add("hidden");
+      custSearch.value = "";
     }
 
-    clearBtn.addEventListener("click", () => {
-      hiddenId.value = "";
-      selectedCard.classList.add("hidden");
-      createBtn.disabled = true;
-      searchInput.focus();
+    if (custClear) {
+      custClear.addEventListener("click", () => {
+        fCustId.value = "";
+        custSelected.classList.add("hidden");
+        custSearch.focus();
+      });
+    }
+
+    // ── Mode switching ────────────────────────────────────────────────────────
+    function switchMode(mode) {
+      document.getElementById("f-customer_mode").value = mode;
+      const isNew = mode === "new";
+      document.getElementById("panel-existing").classList.toggle("hidden", isNew);
+      document.getElementById("panel-new").classList.toggle("hidden", !isNew);
+      document.getElementById("tab-existing").className = `px-4 py-1.5 text-xs font-medium rounded ${!isNew ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`;
+      document.getElementById("tab-new").className      = `px-4 py-1.5 text-xs font-medium rounded ${isNew  ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`;
+    }
+
+    // ── Form submit: inject cart hidden inputs ────────────────────────────────
+    document.getElementById("quote-form").addEventListener("submit", () => {
+      document.querySelectorAll("[data-cart-field]").forEach(el => el.remove());
+      document.getElementById("f-items-count").value = String(cart.length);
+      const form = document.getElementById("quote-form");
+      cart.forEach((item, i) => {
+        ["product_id", "name", "sku", "quantity", "price"].forEach(field => {
+          const inp = document.createElement("input");
+          inp.type = "hidden";
+          inp.name = `item_${i}_${field}`;
+          inp.value = item[field] ?? "";
+          inp.dataset.cartField = "true";
+          form.appendChild(inp);
+        });
+      });
     });
 
     function esc(str) {
