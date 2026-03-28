@@ -24,7 +24,6 @@ export interface StdOptChoice {
   Md_Image1:        string | null;
   Lg_Image1:        string | null;
   optionTextColor:  string | null;
-  Color:            string | null;
   SortOrder:        number;
   Display:          boolean;
 }
@@ -83,7 +82,7 @@ export async function getStdOption(id: number): Promise<StdOption | null> {
 export async function getStdOptChoices(stdId: number): Promise<StdOptChoice[]> {
   return query<StdOptChoice>(
     `SELECT Choice_ID, Std_ID, ChoiceName, Price, Price_Wholesale, Weight,
-            Sm_Image1, Md_Image1, Lg_Image1, optionTextColor, Color, SortOrder, Display
+            Sm_Image1, Md_Image1, Lg_Image1, optionTextColor, SortOrder, Display
      FROM   StdOpt_Choices
      WHERE  Std_ID = @stdId
      ORDER  BY SortOrder, Choice_ID`,
@@ -112,7 +111,6 @@ export interface ChoiceData {
   Md_Image1:        string;
   Lg_Image1:        string;
   optionTextColor:  string;
-  Color:            string;
   SortOrder:        number;
   Display:          number;
 }
@@ -151,9 +149,9 @@ async function insertChoice(stdId: number, c: ChoiceData): Promise<void> {
   await query(
     `INSERT INTO StdOpt_Choices
        (Std_ID, ChoiceName, Price, Price_Wholesale, Weight, Sm_Image1, Md_Image1, Lg_Image1,
-        optionTextColor, Color, SortOrder, Display)
+        optionTextColor, SortOrder, Display)
      VALUES (@stdId, @ChoiceName, @Price, @Price_Wholesale, @Weight, @Sm_Image1, @Md_Image1,
-             @Lg_Image1, @optionTextColor, @Color, @SortOrder, @Display)`,
+             @Lg_Image1, @optionTextColor, @SortOrder, @Display)`,
     {
       stdId,
       ChoiceName:      c.ChoiceName,
@@ -164,7 +162,6 @@ async function insertChoice(stdId: number, c: ChoiceData): Promise<void> {
       Md_Image1:       c.Md_Image1  || null,
       Lg_Image1:       c.Lg_Image1  || null,
       optionTextColor: c.optionTextColor || null,
-      Color:           c.Color      || null,
       SortOrder:       c.SortOrder,
       Display:         c.Display,
     } as Record<string, string | number | null>
@@ -176,7 +173,7 @@ export async function updateChoice(choiceId: number, stdId: number, c: ChoiceDat
     `UPDATE StdOpt_Choices
      SET ChoiceName=@ChoiceName, Price=@Price, Price_Wholesale=@Price_Wholesale,
          Weight=@Weight, Sm_Image1=@Sm_Image1, Md_Image1=@Md_Image1, Lg_Image1=@Lg_Image1,
-         optionTextColor=@optionTextColor, Color=@Color, SortOrder=@SortOrder, Display=@Display
+         optionTextColor=@optionTextColor, SortOrder=@SortOrder, Display=@Display
      WHERE Choice_ID=@choiceId AND Std_ID=@stdId`,
     {
       choiceId, stdId,
@@ -188,7 +185,6 @@ export async function updateChoice(choiceId: number, stdId: number, c: ChoiceDat
       Md_Image1:       c.Md_Image1  || null,
       Lg_Image1:       c.Lg_Image1  || null,
       optionTextColor: c.optionTextColor || null,
-      Color:           c.Color      || null,
       SortOrder:       c.SortOrder,
       Display:         c.Display,
     } as Record<string, string | number | null>
@@ -229,7 +225,6 @@ export function parseChoicesFromForm(form: FormData, count: number): Array<{ id:
         Md_Image1:       (form.get(`choice_md_${i}`)    as string ?? "").trim(),
         Lg_Image1:       (form.get(`choice_lg_${i}`)    as string ?? "").trim(),
         optionTextColor: (form.get(`choice_color_text_${i}`) as string ?? "").trim(),
-        Color:           (form.get(`choice_color_hex_${i}`)  as string ?? "").trim(),
         SortOrder:       parseInt(form.get(`choice_sort_${i}`) as string) || 9999,
         Display:         form.get(`choice_display_${i}`) === "1" ? 1 : 0,
       } as ChoiceData,
