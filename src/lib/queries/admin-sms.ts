@@ -3,46 +3,33 @@ import { query } from "../db";
 // ── Twilio Settings ─────────────────────────────────────────────────────────
 
 export interface TwilioSettings {
-  PhoneNumber:       string;
-  Account_SID:       string;
-  Auth_token:        string;
-  nucomServicesURL:  string;
-  nucomClientkey:    string;
-  nucomClientSecret: string;
-  nucomApiKey:       string;
-  cfWebstoreUrl:     string;
-  nucomAccessToken:  string;
+  PhoneNumber: string;
+  Account_SID: string;
+  Auth_token:  string;
 }
 
 export async function getTwilioSettings(): Promise<TwilioSettings | null> {
-  const rows = await query<TwilioSettings>(`SELECT TOP 1 * FROM Twilio_Settings`, {});
+  const rows = await query<TwilioSettings>(
+    `SELECT TOP 1 PhoneNumber, Account_SID, Auth_token FROM Twilio_Settings`,
+    {}
+  );
   return rows[0] ?? null;
 }
 
-export async function saveTwilioSettings(data: Omit<TwilioSettings, "nucomAccessToken">): Promise<void> {
-  // Upsert: update if row exists, otherwise insert
+export async function saveTwilioSettings(data: TwilioSettings): Promise<void> {
   const existing = await query<{ n: number }>(`SELECT COUNT(*) AS n FROM Twilio_Settings`, {});
   if ((existing[0]?.n ?? 0) > 0) {
     await query(
       `UPDATE Twilio_Settings SET
-         PhoneNumber       = @PhoneNumber,
-         Account_SID       = @Account_SID,
-         Auth_token        = @Auth_token,
-         nucomServicesURL  = @nucomServicesURL,
-         nucomClientkey    = @nucomClientkey,
-         nucomClientSecret = @nucomClientSecret,
-         nucomApiKey       = @nucomApiKey,
-         cfWebstoreUrl     = @cfWebstoreUrl`,
+         PhoneNumber = @PhoneNumber,
+         Account_SID = @Account_SID,
+         Auth_token  = @Auth_token`,
       data
     );
   } else {
     await query(
-      `INSERT INTO Twilio_Settings
-         (PhoneNumber, Account_SID, Auth_token, nucomServicesURL,
-          nucomClientkey, nucomClientSecret, nucomApiKey, cfWebstoreUrl)
-       VALUES
-         (@PhoneNumber, @Account_SID, @Auth_token, @nucomServicesURL,
-          @nucomClientkey, @nucomClientSecret, @nucomApiKey, @cfWebstoreUrl)`,
+      `INSERT INTO Twilio_Settings (PhoneNumber, Account_SID, Auth_token)
+       VALUES (@PhoneNumber, @Account_SID, @Auth_token)`,
       data
     );
   }
@@ -55,18 +42,10 @@ export async function sendSms(
   text: string,
   settings: TwilioSettings
 ): Promise<string> {
-  const url = `${settings.nucomServicesURL.replace(/\/$/, "")}/rest/apis/nucom/twilio/SendSMS`;
-
-  const body = new URLSearchParams({
-    AccountSid:    settings.Account_SID,
-    AuthToken:     settings.Auth_token,
-    PhoneNumber:   settings.PhoneNumber,
-    ToPhoneNumber: toPhone,
-    Text:          text,
-  });
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${settings.Account_SID}/Messages.json`;
 
   const credentials = Buffer.from(
-    `${settings.nucomClientkey}:${settings.nucomClientSecret}`
+    `${settings.Account_SID}:${settings.Auth_token}`
   ).toString("base64");
 
   const res = await fetch(url, {
@@ -74,13 +53,16 @@ export async function sendSms(
     headers: {
       "Content-Type":  "application/x-www-form-urlencoded",
       "Authorization": `Basic ${credentials}`,
-      "access_token":  settings.nucomAccessToken ?? "",
     },
-    body: body.toString(),
+    body: new URLSearchParams({
+      From: `+${settings.PhoneNumber.replace(/\D/g, "")}`,
+      To:   `+${toPhone.replace(/\D/g, "")}`,
+      Body: text,
+    }).toString(),
   });
 
-  const json = await res.json() as { status?: number; message?: string };
-  if (json.status === 400 && json.message) return json.message;
+  const json = await res.json() as { error_message?: string; status?: string };
+  if (!res.ok) return json.error_message ?? `Twilio error ${res.status}`;
   return "";
 }
 
