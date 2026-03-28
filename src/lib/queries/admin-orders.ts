@@ -496,10 +496,12 @@ export async function addProductToOrder(
   data: { Product_ID: number; Name: string; SKU: string | null; Quantity: number; Price: number; }
 ): Promise<void> {
   await query(
-    `INSERT INTO Order_Items (Item_ID, Order_No, Product_ID, Name, SKU, Quantity, Price, OptPrice, AddonMultP, DiscAmount)
+    `INSERT INTO Order_Items
+       (Item_ID, Order_No, Product_ID, Name, SKU, Quantity, Price, OptPrice, AddonMultP, DiscAmount, Per_Item_Weight)
      VALUES (
        ISNULL((SELECT MAX(Item_ID) FROM Order_Items), 0) + 1,
-       @orderNo, @Product_ID, @Name, @SKU, @Quantity, @Price, 0, 0, 0
+       @orderNo, @Product_ID, @Name, @SKU, @Quantity, @Price, 0, 0, 0,
+       ISNULL((SELECT Weight FROM Products WHERE Product_ID = @Product_ID), 0)
      )`,
     { orderNo, ...data } as Record<string, string | number | null>
   );
