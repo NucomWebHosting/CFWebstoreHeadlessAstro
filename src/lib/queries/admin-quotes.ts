@@ -264,6 +264,37 @@ export async function convertQuoteToPending(orderNo: number): Promise<number> {
   return newOrderNo;
 }
 
+export async function searchCustomersForQuote(q: string): Promise<{
+  Customer_ID: number; Firstname: string; LastName: string; Email: string | null; Company: string | null;
+}[]> {
+  if (!q.trim()) return [];
+  return query(
+    `SELECT TOP 20 Customer_ID, Firstname, LastName,
+            COALESCE(Email,'') AS Email, COALESCE(Company,'') AS Company
+     FROM Customers
+     WHERE Firstname + ' ' + LastName LIKE @q
+        OR Email LIKE @q
+        OR Company LIKE @q
+     ORDER BY LastName, Firstname`,
+    { q: `%${q}%` }
+  );
+}
+
+export async function createBlankQuote(customerId: number): Promise<number> {
+  await query(`
+    INSERT INTO Order_No_Quote
+      (Customer_ID, User_ID, ShipTo, OrderTotal, OriginalTotal, Shipping, Tax,
+       AdminCredit, AdminCreditText, Notes, Process, Filled, Paid, Void,
+       ShipType, InvoiceNum, Comments, Printed_quote, DateOrdered)
+    VALUES
+      (@customerId, 0, 0, 0, 0, 0, 0,
+       0, '', '', 0, 0, 0, 0,
+       '', '', '', 0, GETDATE())
+  `, { customerId });
+  const rows = await query<{ newOrderNo: number }>(`SELECT CAST(SCOPE_IDENTITY() AS INT) AS newOrderNo`, {});
+  return rows[0]?.newOrderNo ?? 0;
+}
+
 export async function markQuotePrinted(orderNo: number): Promise<void> {
   await query(`UPDATE Order_No_Quote SET Printed_quote = 1 WHERE Order_No = @orderNo`, { orderNo });
 }
