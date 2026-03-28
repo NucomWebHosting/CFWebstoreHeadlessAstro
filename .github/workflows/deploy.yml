@@ -25,7 +25,6 @@ jobs:
             git reset --hard HEAD
             git pull origin main
             npm ci
-            rm -rf dist
             npm run build
             # Persist uploaded images outside dist/ — survives rebuilds
             mkdir -p /var/www/frontend.nucomwebhosting.com/images
