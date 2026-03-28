@@ -209,8 +209,8 @@ const showNewCustomer = postedCustomerMode === "new";
               <option value="US^United States" selected={postedNc.Country === "US^United States"}>United States</option>
               <option value="US^United States">───────────────</option>
               {countries.map(c => {
-                const val = `${c.Abbrev}^${c.Country}`;
-                return <option value={val} selected={postedNc.Country === val}>{c.Country}</option>;
+                const val = `${c.Abbrev}^${c.Name}`;
+                return <option value={val} selected={postedNc.Country === val}>{c.Name}</option>;
               })}
             </select>
           </div>

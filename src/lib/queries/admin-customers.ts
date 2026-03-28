@@ -5,7 +5,7 @@ export const PAGE_SIZE = 40;
 // ── Reference data ─────────────────────────────────────────────────────────
 
 export interface StateRow { Abb: string; Name: string; }
-export interface CountryRow { Abbrev: string; Country: string; }
+export interface CountryRow { Abbrev: string; Name: string; }
 
 export async function getStates(): Promise<StateRow[]> {
   return query<StateRow>(`SELECT Abb, Name FROM States ORDER BY Name`, {});
@@ -13,7 +13,7 @@ export async function getStates(): Promise<StateRow[]> {
 
 export async function getCountries(): Promise<CountryRow[]> {
   return query<CountryRow>(
-    `SELECT Abbrev, Country FROM Countries ORDER BY Country`,
+    `SELECT Abbrev, Name FROM Countries ORDER BY Name`,
     {}
   );
 }

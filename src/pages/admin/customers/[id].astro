@@ -175,8 +175,8 @@ if (!c) return new Response(`Customer ${id} not found.`, { status: 404, headers:
         <option value="US^United States" selected={c.Country === "US^United States" || !c.Country}>United States</option>
         <option value="US^United States">───────────────</option>
         {countries.map(ctry => {
-          const val = `${ctry.Abbrev}^${ctry.Country}`;
-          return <option value={val} selected={c.Country === val}>{ctry.Country}</option>;
+          const val = `${ctry.Abbrev}^${ctry.Name}`;
+          return <option value={val} selected={c.Country === val}>{ctry.Name}</option>;
         })}
       </select>
     </div>
