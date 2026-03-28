@@ -1,0 +1,151 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { query } from "../../../lib/db";
+
+interface Holiday { ID: number; Name: string; Date_of_holiday: Date; }
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const data = await Astro.request.formData();
+  const action = (data.get("_action") as string ?? "").trim();
+
+  if (action === "delete") {
+    const id = Number(data.get("id"));
+    if (id) await query(`DELETE FROM Federal_Holidays WHERE ID = @id`, { id });
+  } else {
+    const name = (data.get("name") as string ?? "").trim();
+    const date = (data.get("date_of_holiday") as string ?? "").trim();
+    if (!name || !date) {
+      error = "Holiday Name and Date are required.";
+    } else {
+      await query(
+        `INSERT INTO Federal_Holidays (Name, Date_of_holiday) VALUES (@name, @date)`,
+        { name, date }
+      );
+    }
+  }
+}
+
+const holidays = await query<Holiday>(
+  `SELECT ID, Name, Date_of_holiday FROM Federal_Holidays ORDER BY Date_of_holiday`,
+  {}
+);
+
+function formatDate(d: Date) {
+  return new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+}
+---
+
+<AdminLayout title="Federal Holidays">
+  <h1 class="text-xl font-semibold text-gray-800 mb-6">Federal Holidays</h1>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl">
+
+    <!-- Add form -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-3 bg-gray-50 border-b border-gray-200">
+        <span class="text-sm font-semibold text-gray-700">Add a New Date</span>
+      </div>
+      <div class="px-5 py-5">
+        {error && (
+          <div class="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">
+            {error}
+          </div>
+        )}
+        <form method="post" class="space-y-4">
+          <input type="hidden" name="_action" value="add" />
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1" for="name">
+              Holiday Name
+            </label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              maxlength="50"
+              required
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1" for="date_of_holiday">
+              Date
+            </label>
+            <input
+              id="date_of_holiday"
+              name="date_of_holiday"
+              type="date"
+              required
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <button
+            type="submit"
+            class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            Add Date
+          </button>
+        </form>
+
+        <p class="mt-5 text-xs text-gray-400">
+          Federal holidays listed at{" "}
+          <a
+            href="https://www.federalreserve.gov/aboutthefed/k8.htm"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-blue-500 hover:underline"
+          >
+            federalreserve.gov
+          </a>.
+        </p>
+      </div>
+    </div>
+
+    <!-- List -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-3 bg-gray-50 border-b border-gray-200">
+        <span class="text-sm font-semibold text-gray-700">Federal Holidays</span>
+      </div>
+      {holidays.length === 0 ? (
+        <p class="px-5 py-8 text-center text-sm text-gray-400">No holidays added yet.</p>
+      ) : (
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-gray-200">
+              <th class="text-left px-4 py-2.5 font-medium text-gray-600">Holiday</th>
+              <th class="text-left px-4 py-2.5 font-medium text-gray-600">Date</th>
+              <th class="px-4 py-2.5 w-16"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {holidays.map(h => (
+              <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-4 py-2.5 text-gray-800">{h.Name}</td>
+                <td class="px-4 py-2.5 text-gray-600">{formatDate(h.Date_of_holiday)}</td>
+                <td class="px-4 py-2.5">
+                  <form method="post">
+                    <input type="hidden" name="_action" value="delete" />
+                    <input type="hidden" name="id" value={String(h.ID)} />
+                    <button
+                      type="submit"
+                      onclick="return confirm('Delete this holiday?')"
+                      class="text-xs text-red-600 hover:text-red-800 font-medium transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+
+  </div>
+</AdminLayout>
