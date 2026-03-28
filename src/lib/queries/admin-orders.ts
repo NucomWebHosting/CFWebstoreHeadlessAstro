@@ -235,6 +235,7 @@ export interface OrderItem {
   AddonMultP: number;
   Options: string | null;
   Addons: string | null;
+  DiscAmount: number;
 }
 
 export interface OrderCustomer {
@@ -276,6 +277,8 @@ export interface OrderShipment {
   Weight: number | null;
   DateEntered: Date | null;
   Printed_Pack: boolean;
+  ShippingLabel: string | null;
+  easypostshipmentid: string | null;
 }
 
 export interface ShipmentItemRow {
@@ -316,6 +319,7 @@ export async function getOrderDetail(orderNo: number): Promise<{
          ISNULL(Quantity_shipped, 0) AS Quantity_shipped,
          Price,
          ISNULL(OptPrice, 0) AS OptPrice, ISNULL(AddonMultP, 0) AS AddonMultP,
+         ISNULL(DiscAmount, 0) AS DiscAmount,
          Options, Addons
        FROM Order_Items
        WHERE Order_No = @orderNo
@@ -336,7 +340,8 @@ export async function getOrderDetail(orderNo: number): Promise<{
     ),
     query<OrderShipment>(
       `SELECT Shipment_ID, Shipper, ShipType, Tracking, Actual_Shipping, Weight, DateEntered,
-         ISNULL(Printed_Pack, 0) AS Printed_Pack
+         ISNULL(Printed_Pack, 0) AS Printed_Pack,
+         ShippingLabel, easypostshipmentid
        FROM Shipment
        WHERE Order_No = @orderNo
        ORDER BY Shipment_ID ASC`,
@@ -401,6 +406,68 @@ export async function findUserBySearch(search: string): Promise<OrderUser | null
     { val: isId ? parseInt(search) : search.trim() } as Record<string, string | number>
   );
   return rows[0] ?? null;
+}
+
+// ── Order Editing ──────────────────────────────────────────────────────────────
+
+export async function updateOrderItem(itemId: number, data: {
+  Quantity: number;
+  Price: number;
+  OptPrice: number;
+  AddonMultP: number;
+  DiscAmount: number;
+  Options: string;
+  Addons: string;
+}): Promise<void> {
+  await query(
+    `UPDATE Order_Items SET
+       Quantity    = @Quantity,
+       Price       = @Price,
+       OptPrice    = @OptPrice,
+       AddonMultP  = @AddonMultP,
+       DiscAmount  = @DiscAmount,
+       Options     = @Options,
+       Addons      = @Addons
+     WHERE Item_ID = @itemId`,
+    { itemId, ...data } as Record<string, string | number>
+  );
+}
+
+export async function deleteOrderItem(itemId: number): Promise<void> {
+  await query(`DELETE FROM Order_Items WHERE Item_ID = @itemId`, { itemId });
+}
+
+export async function updateOrderTotals(orderNo: number, data: {
+  ShipType: string;
+  Shipping: number;
+  Freight: number;
+  AdminCredit: number;
+  AdminCreditText: string;
+}): Promise<void> {
+  // Recalculate OrderTotal from live data after updating
+  await query(
+    `UPDATE Order_No SET
+       ShipType        = @ShipType,
+       Shipping        = @Shipping,
+       Freight         = @Freight,
+       AdminCredit     = @AdminCredit,
+       AdminCreditText = @AdminCreditText
+     WHERE Order_No = @orderNo`,
+    { orderNo, ...data } as Record<string, string | number>
+  );
+  // Recalculate OrderTotal = item totals + Shipping + Freight + Tax - Credits - AdminCredit - OrderDisc
+  await query(
+    `UPDATE Order_No SET OrderTotal =
+       ISNULL((SELECT SUM((OI.Price + ISNULL(OI.OptPrice,0) + ISNULL(OI.AddonMultP,0) - ISNULL(OI.DiscAmount,0)) * OI.Quantity)
+               FROM Order_Items OI WHERE OI.Order_No = Order_No.Order_No), 0)
+       + Order_No.Shipping + Order_No.Freight
+       + ISNULL(Order_No.Tax, 0)
+       - ISNULL(Order_No.Credits, 0)
+       - ISNULL(Order_No.AdminCredit, 0)
+       - ISNULL(Order_No.OrderDisc, 0)
+     WHERE Order_No = @orderNo`,
+    { orderNo }
+  );
 }
 
 export { addShipment, deleteShipment } from "./admin-order-shipments";

@@ -309,10 +309,43 @@ export async function saveCustomShipSettings(s: CustomShipSettings): Promise<voi
   );
 }
 
-// ── States (for free shipping state selector) ─────────────────────────────
+// ── States ────────────────────────────────────────────────────────────────
 
 export interface StateRow { Abb: string; Name: string; }
+export interface StateDisplayRow { Abb: string; Name: string; display: boolean; }
 
 export async function getStates(): Promise<StateRow[]> {
   return query<StateRow>(`SELECT Abb, Name FROM States ORDER BY Name`);
+}
+
+export async function getStatesWithDisplay(): Promise<StateDisplayRow[]> {
+  return query<StateDisplayRow>(`SELECT Abb, Name, display FROM States ORDER BY Name`);
+}
+
+export async function saveStateDisplayList(enabledAbbs: string[]): Promise<void> {
+  // Disable all, then enable the checked ones
+  await query(`UPDATE States SET display = 0`);
+  if (enabledAbbs.length > 0) {
+    const ph = enabledAbbs.map((_, i) => `@a${i}`).join(",");
+    const params = Object.fromEntries(enabledAbbs.map((a, i) => [`a${i}`, a]));
+    await query(`UPDATE States SET display = 1 WHERE Abb IN (${ph})`, params);
+  }
+}
+
+// ── Countries (shipping toggle list) ─────────────────────────────────────
+
+export interface CountryShippingRow { ID: number; Abbrev: string; Name: string; Shipping: boolean; }
+
+export async function getCountriesWithShipping(): Promise<CountryShippingRow[]> {
+  return query<CountryShippingRow>(`SELECT ID, Abbrev, Name, Shipping FROM Countries ORDER BY Name`);
+}
+
+export async function saveCountryShippingList(enabledIds: number[]): Promise<void> {
+  // Disable all, then enable the checked ones
+  await query(`UPDATE Countries SET Shipping = 0`);
+  if (enabledIds.length > 0) {
+    const ph = enabledIds.map((_, i) => `@i${i}`).join(",");
+    const params = Object.fromEntries(enabledIds.map((id, i) => [`i${i}`, id]));
+    await query(`UPDATE Countries SET Shipping = 1 WHERE ID IN (${ph})`, params);
+  }
 }

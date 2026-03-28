@@ -2,6 +2,10 @@
 export const prerender = false;
 import AdminLayout from "../../../components/layout/AdminLayout.astro";
 import { getOrderDetail, updateOrderStatus, saveOrderNotes, addShipment, deleteShipment, updateOrderUser, findUserBySearch, voidPayment, addManualPayment } from "../../../lib/queries/admin-orders";
+import { getShipSettings } from "../../../lib/queries/admin-shipping";
+import { getEasypostSettings } from "../../../lib/queries/admin-shipping-easypost";
+import { clearShipmentLabel } from "../../../lib/queries/admin-easypost-label";
+import { nucomRefund } from "../../../lib/easypost";
 import OrderShipmentsPanel from "../../../components/admin/OrderShipmentsPanel.astro";
 import OrderPaymentsPanel from "../../../components/admin/OrderPaymentsPanel.astro";
 
@@ -25,6 +29,16 @@ if (Astro.request.method === "POST") {
   } else if (action === "delete_shipment") {
     const shipmentId = parseInt((data.get("shipment_id") as string) ?? "0");
     if (shipmentId) await deleteShipment(shipmentId);
+  } else if (action === "delete_label") {
+    const shipmentId = parseInt((data.get("shipment_id") as string) ?? "0");
+    const easypostId = (data.get("easypost_id") as string) ?? "";
+    if (easypostId) {
+      const epSettings = await getEasypostSettings();
+      if (epSettings) {
+        try { await nucomRefund(epSettings, easypostId); } catch (_) { /* log but don't block */ }
+      }
+    }
+    if (shipmentId) await clearShipmentLabel(shipmentId);
   } else if (action === "void_payment") {
     const paymentId = parseInt((data.get("payment_id") as string) ?? "0");
     if (paymentId) await voidPayment(paymentId);
@@ -46,8 +60,14 @@ if (Astro.request.method === "POST") {
 
 // ── Fetch data ────────────────────────────────────────────────────────────────
 let detailResult: Awaited<ReturnType<typeof getOrderDetail>>;
+let easypostEnabled = false;
 try {
-  detailResult = await getOrderDetail(id);
+  const [detail, shipSettings] = await Promise.all([
+    getOrderDetail(id),
+    getShipSettings(1),
+  ]);
+  detailResult = detail;
+  easypostEnabled = shipSettings?.ShipType === "Easypost";
 } catch (e) {
   return new Response(`Query error on order ${id}: ${e instanceof Error ? e.message : String(e)}`, { status: 500, headers: { "content-type": "text/plain" } });
 }
@@ -124,6 +144,10 @@ const unshippedItems = items.filter(i => i.Quantity > i.Quantity_shipped);
   <div class="flex flex-wrap items-center gap-3 mb-4">
     <a href={`/admin/orders?tab=${returnTab}`} class="text-sm text-blue-600 hover:underline">
       ← Back to Orders
+    </a>
+    <a href={`/admin/orders/${id}/edit`}
+       class="px-3 py-1 text-xs font-medium bg-amber-500 text-white rounded hover:bg-amber-600">
+      Edit Order
     </a>
     <div class="flex items-center gap-2 flex-wrap">
       <h2 class="text-lg font-semibold text-gray-800">Order #{order.Order_No}</h2>
@@ -303,6 +327,7 @@ const unshippedItems = items.filter(i => i.Quantity > i.Quantity_shipped);
         unshippedItems={unshippedItems}
         orderShipping={order.Shipping}
         orderFilled={order.Filled}
+        easypostEnabled={easypostEnabled}
       />
 
       <!-- Notes -->

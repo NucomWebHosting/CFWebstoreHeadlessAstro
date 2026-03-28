@@ -1,0 +1,365 @@
+---
+export const prerender = false;
+import { getEasypostSettings } from "../../../lib/queries/admin-shipping-easypost";
+import { getOrderForLabel, saveShipmentLabel } from "../../../lib/queries/admin-easypost-label";
+import {
+  nucomVerifyAddress, nucomGetRates, nucomBuyLabel,
+  type NucomAddress, type Rate,
+} from "../../../lib/easypost";
+
+const sp = Astro.url.searchParams;
+const orderId    = parseInt(sp.get("order")    ?? "", 10) || 0;
+const shipmentId = parseInt(sp.get("shipment") ?? "", 10) || 0;
+
+if (!orderId || !shipmentId) return new Response(null, { status: 404 });
+
+const epSettings = await getEasypostSettings();
+if (!epSettings) return new Response("EasyPost not configured.", { status: 500, headers: { "content-type": "text/plain" } });
+
+// Determine current step from query param (GET = verify; POST sets _step)
+const method = Astro.request.method;
+let step = sp.get("step") ?? "verify";
+
+// ── Shared state ──────────────────────────────────────────────────────────────
+let error  = "";
+let rates: Rate[] = [];
+// Parsed address forwarded across steps via hidden fields
+let toAddr: NucomAddress = { street1: "", city: "", state: "", zip: "", country: "US" };
+
+const fromAddr: NucomAddress = {
+  name:    epSettings.MerchantFullName,
+  street1: epSettings.MerchantAddress1,
+  street2: epSettings.MerchantAddress2 || undefined,
+  city:    epSettings.MerchantCity,
+  state:   epSettings.MerchantState,
+  zip:     epSettings.MerchantZipcode,
+  country: "US",
+  phone:   epSettings.MerchantPhone,
+  email:   epSettings.MerchantEmail,
+};
+
+// ── Load order data (only on verify step) ─────────────────────────────────────
+let orderData = await getOrderForLabel(orderId, shipmentId);
+if (!orderData && step === "verify") {
+  return new Response("Order not found.", { status: 404, headers: { "content-type": "text/plain" } });
+}
+
+// ── POST handlers ─────────────────────────────────────────────────────────────
+let labelUrl = "";
+let trackingCode = "";
+let labelCarrier = "";
+let labelService = "";
+let labelCost = 0;
+let labelWeight = 0;
+
+if (method === "POST") {
+  const fd = await Astro.request.formData();
+  const g = (k: string) => (fd.get(k) as string) ?? "";
+  step = g("_step");
+
+  toAddr = {
+    street1: g("street1"),
+    street2: g("street2") || undefined,
+    city:    g("city"),
+    state:   g("state"),
+    zip:     g("zip"),
+    country: g("country") || "US",
+    name:    g("name") || undefined,
+    company: g("company") || undefined,
+    phone:   g("phone") || undefined,
+    email:   g("email") || undefined,
+  };
+
+  if (step === "verify") {
+    // ── Verify address → get rates ─────────────────────────────────────────
+    try {
+      const result = await nucomVerifyAddress(epSettings, toAddr);
+      if (result.verified) {
+        toAddr = result.address;
+      }
+      // Proceed to rates regardless (user sees verified address, can override)
+      try {
+        rates = await nucomGetRates(epSettings, {
+          from_address: fromAddr,
+          to_address: toAddr,
+          weight_oz: orderData?.weightOz ?? 16,
+        });
+        step = "rates";
+      } catch (e) {
+        error = `Rate lookup failed: ${e instanceof Error ? e.message : String(e)}`;
+        step = "verify";
+      }
+    } catch (e) {
+      error = `Address verification failed: ${e instanceof Error ? e.message : String(e)}`;
+      step = "verify";
+    }
+  } else if (step === "rates") {
+    // ── Buy label ──────────────────────────────────────────────────────────
+    const epShipmentId = g("ep_shipment_id");
+    const rateId       = g("rate_id");
+    if (!epShipmentId || !rateId) {
+      error = "Please select a shipping rate.";
+      // Re-fetch rates
+      try {
+        rates = await nucomGetRates(epSettings, {
+          from_address: fromAddr,
+          to_address: toAddr,
+          weight_oz: orderData?.weightOz ?? 16,
+        });
+      } catch (_) { /* ignore */ }
+    } else {
+      try {
+        const result = await nucomBuyLabel(epSettings, { ep_shipment_id: epShipmentId, rate_id: rateId });
+        labelUrl      = result.label_url;
+        trackingCode  = result.tracking_code;
+        labelCarrier  = result.carrier;
+        labelService  = result.service;
+        labelCost     = result.rate;
+        labelWeight   = result.weight;
+        await saveShipmentLabel(shipmentId, {
+          ShippingLabel:      labelUrl,
+          easypostshipmentid: epShipmentId,
+          Shipper:            labelCarrier,
+          ShipType:           labelService,
+          Tracking:           trackingCode,
+          Actual_Shipping:    labelCost,
+          Weight:             labelWeight,
+        });
+        step = "done";
+      } catch (e) {
+        error = `Label creation failed: ${e instanceof Error ? e.message : String(e)}`;
+        // Re-fetch rates for re-display
+        try {
+          rates = await nucomGetRates(epSettings, {
+            from_address: fromAddr,
+            to_address: toAddr,
+            weight_oz: orderData?.weightOz ?? 16,
+          });
+        } catch (_) { /* ignore */ }
+      }
+    }
+  }
+} else {
+  // GET — load ship-to from order
+  if (orderData) {
+    toAddr = {
+      name:    [orderData.firstName, orderData.lastName].filter(Boolean).join(" ") || undefined,
+      company: orderData.company || undefined,
+      street1: orderData.address1 ?? "",
+      street2: orderData.address2 || undefined,
+      city:    orderData.city ?? "",
+      state:   orderData.state ?? "",
+      zip:     orderData.zip ?? "",
+      country: orderData.country ?? "US",
+      phone:   orderData.phone || undefined,
+      email:   orderData.email || undefined,
+    };
+  }
+}
+
+// ── HTML helpers ──────────────────────────────────────────────────────────────
+function addrHiddens(a: NucomAddress) {
+  return [
+    `<input type="hidden" name="name"    value="${a.name    ?? ""}">`,
+    `<input type="hidden" name="company" value="${a.company ?? ""}">`,
+    `<input type="hidden" name="street1" value="${a.street1}">`,
+    `<input type="hidden" name="street2" value="${a.street2 ?? ""}">`,
+    `<input type="hidden" name="city"    value="${a.city}">`,
+    `<input type="hidden" name="state"   value="${a.state}">`,
+    `<input type="hidden" name="zip"     value="${a.zip}">`,
+    `<input type="hidden" name="country" value="${a.country}">`,
+    `<input type="hidden" name="phone"   value="${a.phone   ?? ""}">`,
+    `<input type="hidden" name="email"   value="${a.email   ?? ""}">`,
+  ].join("\n");
+}
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Create Shipping Label — Order #{orderId}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #111; background: #f8fafc; padding: 24px; }
+    h2 { font-size: 1.1em; font-weight: 700; margin-bottom: 16px; color: #1e293b; }
+    h3 { font-size: .9em; font-weight: 600; color: #475569; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .04em; }
+    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    label { display: block; font-size: .85em; font-weight: 600; color: #374151; margin-bottom: 4px; }
+    input[type=text], input[type=email], input[type=tel] {
+      width: 100%; border: 1px solid #d1d5db; border-radius: 4px;
+      padding: 6px 10px; font-size: .9em; color: #111;
+    }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid3 { display: grid; grid-template-columns: 2fr 1fr 1.5fr; gap: 12px; }
+    .field { margin-bottom: 12px; }
+    .btn { display: inline-block; padding: 8px 18px; border-radius: 5px; font-size: .9em; font-weight: 600; cursor: pointer; border: none; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-secondary { background: #e2e8f0; color: #374151; }
+    .btn-secondary:hover { background: #cbd5e1; }
+    .btn-green { background: #16a34a; color: #fff; }
+    .btn-green:hover { background: #15803d; }
+    .error { background: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px; padding: 10px 14px; color: #b91c1c; font-size: .85em; margin-bottom: 14px; }
+    .rates-table { width: 100%; border-collapse: collapse; font-size: .88em; }
+    .rates-table th { text-align: left; padding: 7px 10px; background: #f1f5f9; font-size: .8em; text-transform: uppercase; letter-spacing: .04em; border-bottom: 2px solid #e2e8f0; }
+    .rates-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .rates-table tr:hover td { background: #f8fafc; }
+    .price { font-weight: 700; color: #0f172a; }
+    .breadcrumb { font-size: .8em; color: #94a3b8; margin-bottom: 16px; }
+    .breadcrumb span.active { color: #2563eb; font-weight: 600; }
+    .success-icon { font-size: 3em; text-align: center; margin-bottom: 12px; }
+    .tracking { font-family: monospace; font-size: 1em; font-weight: 700; color: #2563eb; }
+    .actions { display: flex; gap: 10px; margin-top: 16px; }
+  </style>
+</head>
+<body>
+
+  <!-- Step breadcrumb -->
+  <div class="breadcrumb">
+    <span class={step === "verify" ? "active" : ""}>1. Verify Address</span>
+    &nbsp;›&nbsp;
+    <span class={step === "rates" ? "active" : ""}>2. Select Rate</span>
+    &nbsp;›&nbsp;
+    <span class={step === "done" ? "active" : ""}>3. Label Created</span>
+  </div>
+
+  {error && <div class="error">{error}</div>}
+
+  {/* ── STEP: VERIFY ───────────────────────────────────────────── */}
+  {step === "verify" && (
+    <div>
+      <h2>Verify Ship-To Address</h2>
+      <div class="card">
+        <form method="post">
+          <input type="hidden" name="_step" value="verify" />
+          <input type="hidden" name="order" value={orderId} />
+          <input type="hidden" name="shipment" value={shipmentId} />
+
+          <div class="field">
+            <label>Name</label>
+            <input type="text" name="name" value={toAddr.name ?? ""} />
+          </div>
+          <div class="field">
+            <label>Company</label>
+            <input type="text" name="company" value={toAddr.company ?? ""} />
+          </div>
+          <div class="field">
+            <label>Address 1</label>
+            <input type="text" name="street1" value={toAddr.street1} required />
+          </div>
+          <div class="field">
+            <label>Address 2</label>
+            <input type="text" name="street2" value={toAddr.street2 ?? ""} />
+          </div>
+          <div class="grid3">
+            <div class="field">
+              <label>City</label>
+              <input type="text" name="city" value={toAddr.city} required />
+            </div>
+            <div class="field">
+              <label>State</label>
+              <input type="text" name="state" value={toAddr.state} maxlength="2" required />
+            </div>
+            <div class="field">
+              <label>ZIP</label>
+              <input type="text" name="zip" value={toAddr.zip} required />
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="field">
+              <label>Country</label>
+              <input type="text" name="country" value={toAddr.country || "US"} maxlength="2" />
+            </div>
+            <div class="field">
+              <label>Phone</label>
+              <input type="tel" name="phone" value={toAddr.phone ?? ""} />
+            </div>
+          </div>
+          <div class="field">
+            <label>Email</label>
+            <input type="email" name="email" value={toAddr.email ?? ""} />
+          </div>
+
+          <div class="actions">
+            <button type="submit" class="btn btn-primary">Verify &amp; Get Rates →</button>
+            <button type="button" class="btn btn-secondary" onclick="window.close()">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )}
+
+  {/* ── STEP: RATES ────────────────────────────────────────────── */}
+  {step === "rates" && (
+    <div>
+      <h2>Select Shipping Rate</h2>
+      <div class="card">
+        {rates.length === 0 ? (
+          <p style="color:#64748b;">No rates available for this shipment. <a href="?" style="color:#2563eb;">Start over</a></p>
+        ) : (
+          <form method="post">
+            <input type="hidden" name="_step" value="rates" />
+            <input type="hidden" name="order" value={orderId} />
+            <input type="hidden" name="shipment" value={shipmentId} />
+            <Fragment set:html={addrHiddens(toAddr)} />
+
+            <table class="rates-table">
+              <thead>
+                <tr>
+                  <th style="width:36px;"></th>
+                  <th>Carrier</th>
+                  <th>Service</th>
+                  <th>Est. Delivery</th>
+                  <th>Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rates.map((r, i) => (
+                  <tr>
+                    <td><input type="radio" name="rate_id" value={r.rate_id} checked={i === 0} required /></td>
+                    <td>{r.carrier}</td>
+                    <td>{r.service}</td>
+                    <td>{r.delivery_days != null ? `${r.delivery_days} day${r.delivery_days !== 1 ? "s" : ""}` : r.delivery_date ?? "—"}</td>
+                    <td class="price">${r.rate.toFixed(2)}</td>
+                  </tr>
+                ))}
+                {/* Hidden field for ep_shipment_id — same for all rates */}
+                <input type="hidden" name="ep_shipment_id" value={rates[0]?.ep_shipment_id ?? ""} />
+              </tbody>
+            </table>
+
+            <div class="actions" style="margin-top:16px;">
+              <button type="submit" class="btn btn-primary">Buy Label →</button>
+              <a href={`?order=${orderId}&shipment=${shipmentId}`} class="btn btn-secondary">Back</a>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  )}
+
+  {/* ── STEP: DONE ─────────────────────────────────────────────── */}
+  {step === "done" && (
+    <div>
+      <div class="success-icon">✅</div>
+      <h2 style="text-align:center;">Label Created</h2>
+      <div class="card" style="text-align:center;">
+        <p style="margin-bottom:8px;"><strong>{labelCarrier} {labelService}</strong></p>
+        <p style="margin-bottom:4px;">Tracking: <span class="tracking">{trackingCode}</span></p>
+        <p style="margin-bottom:16px;color:#64748b;">Cost: ${labelCost.toFixed(2)} · Weight: {labelWeight} oz</p>
+        <div class="actions" style="justify-content:center;">
+          <a href={labelUrl}
+             onclick={`window.open(this.href,'ep_label_print','width=900,height=700,scrollbars=yes,resizable=yes');return false;`}
+             class="btn btn-green">
+            Print Label
+          </a>
+          <button type="button" class="btn btn-secondary" onclick="window.close()">Close</button>
+        </div>
+      </div>
+    </div>
+  )}
+
+</body>
+</html>

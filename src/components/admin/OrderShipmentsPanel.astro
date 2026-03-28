@@ -8,9 +8,10 @@ interface Props {
   unshippedItems: OrderItem[];
   orderShipping: number;
   orderFilled: boolean;
+  easypostEnabled?: boolean;
 }
 
-const { orderId, shipments, shipmentItems, unshippedItems, orderShipping, orderFilled } = Astro.props;
+const { orderId, shipments, shipmentItems, unshippedItems, orderShipping, orderFilled, easypostEnabled = false } = Astro.props;
 
 // Group shipment items by Shipment_ID
 const shipmentItemMap = new Map<number, ShipmentItemRow[]>();
@@ -84,6 +85,30 @@ function fmtDate(d: Date | null | undefined) {
                          class={`px-2 py-1 rounded text-xs ${s.Printed_Pack ? "bg-gray-100 text-gray-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
                         {s.Printed_Pack ? "Reprint Slip" : "Packing Slip"}
                       </a>
+                      {easypostEnabled && !s.ShippingLabel && (
+                        <a href={`/admin/easypost/label?order=${orderId}&shipment=${s.Shipment_ID}`}
+                           onclick={`window.open(this.href,'ep_label_${s.Shipment_ID}','width=860,height=720,scrollbars=yes,resizable=yes');return false;`}
+                           class="px-2 py-1 rounded text-xs bg-indigo-600 text-white hover:bg-indigo-700">
+                          Create Label
+                        </a>
+                      )}
+                      {s.ShippingLabel && (
+                        <a href={s.ShippingLabel}
+                           onclick={`window.open(this.href,'ep_print_${s.Shipment_ID}','width=900,height=700,scrollbars=yes,resizable=yes');return false;`}
+                           class="px-2 py-1 rounded text-xs bg-green-600 text-white hover:bg-green-700">
+                          Print Label
+                        </a>
+                      )}
+                      {s.easypostshipmentid && (
+                        <form method="post" onsubmit="return confirm('Refund and delete this label?')">
+                          <input type="hidden" name="_action" value="delete_label" />
+                          <input type="hidden" name="shipment_id" value={s.Shipment_ID} />
+                          <input type="hidden" name="easypost_id" value={s.easypostshipmentid} />
+                          <button class="px-2 py-1 rounded text-xs bg-red-100 text-red-600 hover:bg-red-200">
+                            Delete Label
+                          </button>
+                        </form>
+                      )}
                       {!s.Tracking && (
                         <a href={`/admin/orders/${orderId}/add-tracking/${s.Shipment_ID}`}
                            class="px-2 py-1 rounded text-xs bg-blue-600 text-white hover:bg-blue-700">

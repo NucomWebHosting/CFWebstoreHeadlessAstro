@@ -1,0 +1,167 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../components/layout/AdminLayout.astro";
+import { getOrderDetail, updateOrderItem, deleteOrderItem, updateOrderTotals } from "../../../../lib/queries/admin-orders";
+
+const id = Number(Astro.params.id);
+if (!id) return new Response(null, { status: 404 });
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const itemList = ((d.get("item_list") as string) ?? "").split(",").filter(Boolean).map(Number);
+
+  // Delete checked items first
+  for (const itemId of itemList) {
+    if (d.get(`delete_${itemId}`) === "1") {
+      await deleteOrderItem(itemId);
+    } else {
+      await updateOrderItem(itemId, {
+        Quantity:   parseFloat((d.get(`qty_${itemId}`)     as string) ?? "0") || 0,
+        Price:      parseFloat((d.get(`price_${itemId}`)   as string) ?? "0") || 0,
+        OptPrice:   parseFloat((d.get(`optprice_${itemId}`)as string) ?? "0") || 0,
+        AddonMultP: parseFloat((d.get(`addon_${itemId}`)   as string) ?? "0") || 0,
+        DiscAmount: parseFloat((d.get(`disc_${itemId}`)    as string) ?? "0") || 0,
+        Options:    (d.get(`options_${itemId}`)  as string) ?? "",
+        Addons:     (d.get(`addons_${itemId}`)   as string) ?? "",
+      });
+    }
+  }
+
+  await updateOrderTotals(id, {
+    ShipType:        (d.get("ShipType")        as string) ?? "",
+    Shipping:        parseFloat((d.get("Shipping")        as string) ?? "0") || 0,
+    Freight:         parseFloat((d.get("Freight")         as string) ?? "0") || 0,
+    AdminCredit:     parseFloat((d.get("AdminCredit")     as string) ?? "0") || 0,
+    AdminCreditText: (d.get("AdminCreditText") as string) ?? "",
+  });
+
+  return Astro.redirect(`/admin/orders/${id}?saved=1`);
+}
+
+const { order, items } = await getOrderDetail(id);
+if (!order) return new Response(`Order ${id} not found.`, { status: 404, headers: { "content-type": "text/plain" } });
+
+function fmt(n: number) {
+  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+---
+
+<AdminLayout title={`Edit Order #${id}`}>
+  <div class="mb-4">
+    <a href={`/admin/orders/${id}`} class="text-sm text-blue-600 hover:underline">← Back to Order</a>
+  </div>
+
+  <form method="post">
+    <input type="hidden" name="item_list" value={items.map(i => i.Item_ID).join(",")} />
+
+    <!-- Line Items -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
+      <div class="px-5 py-3 border-b border-gray-100">
+        <h3 class="text-sm font-semibold text-gray-700">Line Items</h3>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="px-4 py-2 text-left">Item</th>
+              <th class="px-4 py-2 text-center w-20">Qty</th>
+              <th class="px-4 py-2 text-right w-28">Price</th>
+              <th class="px-4 py-2 text-right w-28">Opt Price</th>
+              <th class="px-4 py-2 text-right w-28">Addon</th>
+              <th class="px-4 py-2 text-right w-28">Discount</th>
+              <th class="px-4 py-2 text-right w-24">Ext.</th>
+              <th class="px-4 py-2 text-center w-16">Del</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {items.map(item => {
+              const ext = (item.Price + item.OptPrice + item.AddonMultP - item.DiscAmount) * item.Quantity;
+              return (
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-2">
+                    <div class="font-medium text-gray-800 text-xs">{item.Name}</div>
+                    {item.SKU && <div class="text-gray-400 text-xs">{item.SKU}</div>}
+                    <div class="mt-1 space-y-1">
+                      <input type="text" name={`options_${item.Item_ID}`} value={item.Options ?? ""}
+                             placeholder="Options" class="w-full border border-gray-200 rounded px-2 py-0.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                      <input type="text" name={`addons_${item.Item_ID}`} value={item.Addons ?? ""}
+                             placeholder="Addons" class="w-full border border-gray-200 rounded px-2 py-0.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                    </div>
+                  </td>
+                  <td class="px-4 py-2 text-center">
+                    <input type="number" name={`qty_${item.Item_ID}`} value={item.Quantity} min="0" step="1"
+                           class="w-16 border border-gray-200 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  </td>
+                  <td class="px-4 py-2">
+                    <input type="number" name={`price_${item.Item_ID}`} value={item.Price} step="0.01" min="0"
+                           class="w-full border border-gray-200 rounded px-2 py-1 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  </td>
+                  <td class="px-4 py-2">
+                    <input type="number" name={`optprice_${item.Item_ID}`} value={item.OptPrice} step="0.01"
+                           class="w-full border border-gray-200 rounded px-2 py-1 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  </td>
+                  <td class="px-4 py-2">
+                    <input type="number" name={`addon_${item.Item_ID}`} value={item.AddonMultP} step="0.01"
+                           class="w-full border border-gray-200 rounded px-2 py-1 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  </td>
+                  <td class="px-4 py-2">
+                    <input type="number" name={`disc_${item.Item_ID}`} value={item.DiscAmount} step="0.01" min="0"
+                           class="w-full border border-gray-200 rounded px-2 py-1 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  </td>
+                  <td class="px-4 py-2 text-right text-xs text-gray-600">{fmt(ext)}</td>
+                  <td class="px-4 py-2 text-center">
+                    <input type="checkbox" name={`delete_${item.Item_ID}`} value="1"
+                           class="h-4 w-4 rounded border-gray-300 text-red-500" />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Order Totals -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6 max-w-md">
+      <h3 class="text-sm font-semibold text-gray-700 mb-4">Order Totals</h3>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Shipping Method</label>
+          <input type="text" name="ShipType" value={order.ShipType ?? ""}
+                 class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Shipping Cost</label>
+          <input type="number" name="Shipping" value={order.Shipping} step="0.01" min="0"
+                 class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Freight</label>
+          <input type="number" name="Freight" value={order.Freight} step="0.01" min="0"
+                 class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Store Credit Description</label>
+          <input type="text" name="AdminCreditText" value={order.AdminCreditText ?? ""}
+                 class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Store Credit ($)</label>
+          <input type="number" name="AdminCredit" value={order.AdminCredit} step="0.01" min="0"
+                 class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+      </div>
+    </div>
+
+    <div class="flex gap-3">
+      <button type="submit"
+              class="px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded hover:bg-blue-700">
+        Save Changes
+      </button>
+      <a href={`/admin/orders/${id}`}
+         class="px-5 py-2 bg-gray-100 text-gray-700 text-sm font-semibold rounded hover:bg-gray-200">
+        Cancel
+      </a>
+    </div>
+  </form>
+</AdminLayout>

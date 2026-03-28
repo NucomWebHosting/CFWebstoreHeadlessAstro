@@ -1,0 +1,68 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getCountriesWithShipping, saveCountryShippingList } from "../../../lib/queries/admin-shipping";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const enabled = (d.getAll("country_id") as string[]).map(Number);
+  await saveCountryShippingList(enabled);
+  return Astro.redirect("/admin/shipping/countries?saved=1");
+}
+
+const countries = await getCountriesWithShipping();
+const saved = Astro.url.searchParams.get("saved") === "1";
+---
+
+<AdminLayout title="Countries">
+  <div class="max-w-2xl">
+    {saved && (
+      <div class="mb-4 rounded bg-green-50 border border-green-200 px-4 py-2 text-green-800 text-sm">
+        Country list saved.
+      </div>
+    )}
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-base font-semibold text-gray-800">Countries Available for Shipping</h2>
+        <div class="flex gap-3 text-sm">
+          <button type="button" id="check-all" class="text-blue-600 hover:underline">Check All</button>
+          <button type="button" id="uncheck-all" class="text-blue-600 hover:underline">Uncheck All</button>
+        </div>
+      </div>
+
+      <form method="post">
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-1 mb-6">
+          {countries.map(c => (
+            <label class="flex items-center gap-2 py-1 cursor-pointer">
+              <input
+                type="checkbox"
+                name="country_id"
+                value={String(c.ID)}
+                checked={c.Shipping}
+                class="country-cb h-4 w-4 rounded border-gray-300 text-blue-600"
+              />
+              <span class="text-sm text-gray-700">{c.Name}</span>
+            </label>
+          ))}
+        </div>
+
+        <button
+          type="submit"
+          class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700"
+        >
+          Save
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById("check-all")?.addEventListener("click", () => {
+      document.querySelectorAll<HTMLInputElement>(".country-cb").forEach(cb => cb.checked = true);
+    });
+    document.getElementById("uncheck-all")?.addEventListener("click", () => {
+      document.querySelectorAll<HTMLInputElement>(".country-cb").forEach(cb => cb.checked = false);
+    });
+  </script>
+</AdminLayout>
