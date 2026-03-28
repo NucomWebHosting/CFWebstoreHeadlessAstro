@@ -53,6 +53,10 @@ const groups: NavGroup[] = [
       { href: "/admin/users",     label: "Users"     },
       { href: "/admin/customers", label: "Customers" },
       { href: "/admin/groups",    label: "Groups"    },
+      { href: "/admin/email", label: "Email", children: [
+        { href: "/admin/email/send",      label: "Send Email"           },
+        { href: "/admin/email/templates", label: "Standard Email Text"  },
+      ]},
     ],
   },
   {
