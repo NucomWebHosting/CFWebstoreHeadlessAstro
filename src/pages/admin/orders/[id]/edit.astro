@@ -56,8 +56,12 @@ function fmt(n: number) {
 
     <!-- Line Items -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
-      <div class="px-5 py-3 border-b border-gray-100">
+      <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
         <h3 class="text-sm font-semibold text-gray-700">Line Items</h3>
+        <a href={`/admin/orders/${id}/add-product`}
+           class="px-3 py-1 text-xs font-medium bg-green-600 text-white rounded hover:bg-green-700">
+          + Add Product
+        </a>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">

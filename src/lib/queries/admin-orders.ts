@@ -470,6 +470,46 @@ export async function updateOrderTotals(orderNo: number, data: {
   );
 }
 
+export async function searchProductsForOrder(q: string): Promise<{
+  Product_ID: number; Name: string; SKU: string | null; UPC: string | null;
+  Base_Price: number; Sm_image: string | null;
+}[]> {
+  if (!q.trim()) return [];
+  return query(
+    `SELECT TOP 30 Product_ID, Name, SKU, UPC, Base_Price,
+       (SELECT TOP 1 Sm_image FROM Product_Images PI WHERE PI.Product_ID = P.Product_ID ORDER BY Product_Image_ID) AS Sm_image
+     FROM Products P
+     WHERE Display = 1
+       AND (Name LIKE @q OR SKU LIKE @q OR UPC LIKE @q)
+     ORDER BY Name`,
+    { q: `%${q}%` }
+  );
+}
+
+export async function addProductToOrder(
+  orderNo: number,
+  data: { Product_ID: number; Name: string; SKU: string | null; Quantity: number; Price: number; }
+): Promise<void> {
+  await query(
+    `INSERT INTO Order_Items (Order_No, Product_ID, Name, SKU, Quantity, Price, OptPrice, AddonMultP, DiscAmount)
+     VALUES (@orderNo, @Product_ID, @Name, @SKU, @Quantity, @Price, 0, 0, 0)`,
+    { orderNo, ...data } as Record<string, string | number | null>
+  );
+  // Recalculate OrderTotal
+  await query(
+    `UPDATE Order_No SET OrderTotal =
+       ISNULL((SELECT SUM((OI.Price + ISNULL(OI.OptPrice,0) + ISNULL(OI.AddonMultP,0) - ISNULL(OI.DiscAmount,0)) * OI.Quantity)
+               FROM Order_Items OI WHERE OI.Order_No = Order_No.Order_No), 0)
+       + Order_No.Shipping + Order_No.Freight
+       + ISNULL(Order_No.Tax, 0)
+       - ISNULL(Order_No.Credits, 0)
+       - ISNULL(Order_No.AdminCredit, 0)
+       - ISNULL(Order_No.OrderDisc, 0)
+     WHERE Order_No = @orderNo`,
+    { orderNo }
+  );
+}
+
 export { addShipment, deleteShipment } from "./admin-order-shipments";
 export type { ShipmentRow, ShipmentTrackingData } from "./admin-order-shipments";
 export { getShipmentForTracking, updateShipmentTracking } from "./admin-order-shipments";

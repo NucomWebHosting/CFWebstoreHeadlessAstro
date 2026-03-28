@@ -1,0 +1,121 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../components/layout/AdminLayout.astro";
+import { searchProductsForOrder, addProductToOrder } from "../../../../lib/queries/admin-orders";
+
+const id = Number(Astro.params.id);
+if (!id) return new Response(null, { status: 404 });
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  await addProductToOrder(id, {
+    Product_ID: parseInt(d.get("product_id") as string),
+    Name:       (d.get("name")     as string) ?? "",
+    SKU:        (d.get("sku")      as string) || null,
+    Quantity:   parseInt((d.get("quantity") as string) ?? "1") || 1,
+    Price:      parseFloat((d.get("price")  as string) ?? "0") || 0,
+  });
+  return Astro.redirect(`/admin/orders/${id}/add-product?added=1&q=${encodeURIComponent((d.get("q") as string) ?? "")}`);
+}
+
+const q       = Astro.url.searchParams.get("q") ?? "";
+const added   = Astro.url.searchParams.get("added") === "1";
+const results = q.length >= 2 ? await searchProductsForOrder(q) : [];
+
+function fmt(n: number) {
+  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+---
+
+<AdminLayout title={`Add Product — Order #${id}`}>
+  <div class="mb-4 flex items-center gap-3">
+    <a href={`/admin/orders/${id}/edit`} class="text-sm text-blue-600 hover:underline">← Back to Edit Order</a>
+    <a href={`/admin/orders/${id}`}      class="text-sm text-blue-600 hover:underline">View Order</a>
+  </div>
+
+  {added && (
+    <div class="mb-4 rounded bg-green-50 border border-green-200 px-4 py-2 text-sm text-green-800">
+      Product added to order.
+    </div>
+  )}
+
+  <!-- Search -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6 max-w-xl">
+    <h3 class="text-sm font-semibold text-gray-700 mb-3">Product Search</h3>
+    <form method="get" class="flex gap-2">
+      <input
+        type="text"
+        name="q"
+        value={q}
+        placeholder="Search by name, SKU, or UPC…"
+        autofocus
+        class="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+      />
+      <button type="submit"
+              class="px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700">
+        Search
+      </button>
+    </form>
+    {q.length > 0 && q.length < 2 && (
+      <p class="mt-2 text-xs text-gray-400">Enter at least 2 characters.</p>
+    )}
+  </div>
+
+  <!-- Results -->
+  {q.length >= 2 && (
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-gray-700">
+          {results.length > 0 ? `${results.length} result${results.length !== 1 ? "s" : ""}` : "No results"}
+        </h3>
+      </div>
+
+      {results.length > 0 && (
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="px-4 py-2 text-left">Product</th>
+              <th class="px-4 py-2 text-left w-28">SKU</th>
+              <th class="px-4 py-2 text-right w-24">Price</th>
+              <th class="px-4 py-2 text-center w-20">Qty</th>
+              <th class="px-4 py-2 text-right w-24">Unit Price</th>
+              <th class="px-4 py-2 w-20"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {results.map(p => (
+              <tr class="hover:bg-gray-50">
+                <td class="px-4 py-2">
+                  <div class="font-medium text-gray-800">{p.Name}</div>
+                  {p.UPC && <div class="text-xs text-gray-400">UPC: {p.UPC}</div>}
+                </td>
+                <td class="px-4 py-2 text-xs text-gray-500">{p.SKU ?? "—"}</td>
+                <td class="px-4 py-2 text-right text-xs text-gray-600">{fmt(p.Base_Price)}</td>
+                <td class="px-4 py-2">
+                  <form method="post" class="flex items-center gap-1">
+                    <input type="hidden" name="product_id" value={p.Product_ID} />
+                    <input type="hidden" name="name" value={p.Name} />
+                    <input type="hidden" name="sku" value={p.SKU ?? ""} />
+                    <input type="hidden" name="q" value={q} />
+                    <input type="number" name="quantity" value="1" min="1" step="1"
+                           class="w-16 border border-gray-300 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </td>
+                <td class="px-4 py-2">
+                    <input type="number" name="price" value={p.Base_Price} step="0.01" min="0"
+                           class="w-20 border border-gray-300 rounded px-2 py-1 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </td>
+                <td class="px-4 py-2 text-right">
+                    <button type="submit"
+                            class="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700">
+                      Add
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )}
+</AdminLayout>
