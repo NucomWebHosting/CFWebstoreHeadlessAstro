@@ -1,0 +1,176 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../components/layout/AdminLayout.astro";
+import { addProductToQuote } from "../../../../lib/queries/admin-quotes";
+
+const id = Number(Astro.params.id);
+if (!id) return new Response(null, { status: 404 });
+
+let added = false;
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  await addProductToQuote(id, {
+    Product_ID: parseInt(d.get("product_id") as string),
+    Name:       (d.get("name")     as string) ?? "",
+    SKU:        (d.get("sku")      as string) || null,
+    Quantity:   parseInt((d.get("quantity") as string) ?? "1") || 1,
+    Price:      parseFloat((d.get("price")  as string) ?? "0") || 0,
+  });
+  added = true;
+}
+---
+
+<AdminLayout title={`Add Product — Quote #${id}`}>
+  <div class="mb-4 flex items-center gap-3">
+    <a href={`/admin/quotes/${id}/edit`} class="text-sm text-blue-600 hover:underline">← Back to Edit Quote</a>
+    <a href={`/admin/quotes/${id}`}      class="text-sm text-blue-600 hover:underline">View Quote</a>
+  </div>
+
+  <div id="added-banner" class={`mb-4 rounded bg-green-50 border border-green-200 px-4 py-2 text-sm text-green-800 ${added ? "" : "hidden"}`}>
+    Product added to quote.
+  </div>
+
+  <!-- Search -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6 max-w-2xl">
+    <h3 class="text-sm font-semibold text-gray-700 mb-3">Product Search</h3>
+    <div class="relative">
+      <input
+        id="search-input"
+        type="text"
+        placeholder="Search by name, SKU, or UPC…"
+        autocomplete="off"
+        autofocus
+        class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+      />
+      <div id="search-spinner" class="absolute right-3 top-2.5 hidden">
+        <svg class="animate-spin h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+        </svg>
+      </div>
+    </div>
+    <p class="mt-1.5 text-xs text-gray-400">Type at least 2 characters to search.</p>
+  </div>
+
+  <!-- Results -->
+  <div id="results-container" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hidden max-w-4xl">
+    <div class="px-5 py-3 border-b border-gray-100">
+      <span id="results-count" class="text-sm font-semibold text-gray-700"></span>
+    </div>
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+        <tr>
+          <th class="px-4 py-2 text-left">Product</th>
+          <th class="px-4 py-2 text-left w-28">SKU</th>
+          <th class="px-4 py-2 text-right w-24">Base Price</th>
+          <th class="px-4 py-2 text-center w-20">Qty</th>
+          <th class="px-4 py-2 text-right w-28">Unit Price</th>
+          <th class="px-4 py-2 w-20"></th>
+        </tr>
+      </thead>
+      <tbody id="results-body" class="divide-y divide-gray-100"></tbody>
+    </table>
+    <div id="no-results" class="px-5 py-4 text-sm text-gray-400 hidden">No products found.</div>
+  </div>
+
+  <!-- Hidden add form — submitted by JS -->
+  <form id="add-form" method="post" class="hidden">
+    <input type="hidden" name="product_id" id="f-product_id" />
+    <input type="hidden" name="name"       id="f-name" />
+    <input type="hidden" name="sku"        id="f-sku" />
+    <input type="hidden" name="quantity"   id="f-quantity" />
+    <input type="hidden" name="price"      id="f-price" />
+  </form>
+
+  <script>
+    const input     = document.getElementById("search-input");
+    const spinner   = document.getElementById("search-spinner");
+    const container = document.getElementById("results-container");
+    const body      = document.getElementById("results-body");
+    const count     = document.getElementById("results-count");
+    const noResults = document.getElementById("no-results");
+    const addForm   = document.getElementById("add-form");
+
+    let debounceTimer = null;
+
+    input.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      const q = input.value.trim();
+      if (q.length < 2) {
+        container.classList.add("hidden");
+        return;
+      }
+      debounceTimer = setTimeout(() => fetchResults(q), 250);
+    });
+
+    async function fetchResults(q) {
+      spinner.classList.remove("hidden");
+      try {
+        const res = await fetch(`/api/admin/products/search?q=${encodeURIComponent(q)}`);
+        const products = await res.json();
+        renderResults(products);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        spinner.classList.add("hidden");
+      }
+    }
+
+    function fmt(n) {
+      return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+    }
+
+    function renderResults(products) {
+      body.innerHTML = "";
+      container.classList.remove("hidden");
+
+      if (products.length === 0) {
+        count.textContent = "No results";
+        noResults.classList.remove("hidden");
+        return;
+      }
+
+      noResults.classList.add("hidden");
+      count.textContent = `${products.length} result${products.length !== 1 ? "s" : ""}`;
+
+      products.forEach(p => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-gray-50";
+        tr.innerHTML = `
+          <td class="px-4 py-2">
+            <div class="font-medium text-gray-800 text-xs">${escHtml(p.Name)}</div>
+            ${p.UPC ? `<div class="text-gray-400 text-xs">UPC: ${escHtml(p.UPC)}</div>` : ""}
+          </td>
+          <td class="px-4 py-2 text-xs text-gray-500">${escHtml(p.SKU ?? "—")}</td>
+          <td class="px-4 py-2 text-right text-xs text-gray-600">${fmt(p.Base_Price)}</td>
+          <td class="px-4 py-2">
+            <input type="number" class="qty-input w-16 border border-gray-300 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400"
+                   value="1" min="1" step="1" />
+          </td>
+          <td class="px-4 py-2">
+            <input type="number" class="price-input w-20 border border-gray-300 rounded px-2 py-1 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400"
+                   value="${p.Base_Price}" step="0.01" min="0" />
+          </td>
+          <td class="px-4 py-2 text-right">
+            <button class="add-btn px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700">Add</button>
+          </td>
+        `;
+        tr.querySelector(".add-btn").addEventListener("click", () => {
+          const qty   = tr.querySelector(".qty-input").value;
+          const price = tr.querySelector(".price-input").value;
+          document.getElementById("f-product_id").value = p.Product_ID;
+          document.getElementById("f-name").value       = p.Name;
+          document.getElementById("f-sku").value        = p.SKU ?? "";
+          document.getElementById("f-quantity").value   = qty;
+          document.getElementById("f-price").value      = price;
+          addForm.submit();
+        });
+        body.appendChild(tr);
+      });
+    }
+
+    function escHtml(str) {
+      return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+  </script>
+</AdminLayout>

@@ -24,7 +24,11 @@ export interface QuoteItem {
   Name:       string;
   SKU:        string;
   Options:    string;
+  Addons:     string;
   Price:      number;
+  OptPrice:   number;
+  AddonMultP: number;
+  DiscAmount: number;
   Quantity:   number;
 }
 
@@ -162,14 +166,22 @@ export async function getQuote(orderNo: number): Promise<Quote | null> {
   return rows[0] ?? null;
 }
 
+function stripHtml(s: string): string {
+  return s.replace(/<[^>]*>/g, "").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&amp;/g,"&").replace(/&quot;/g,'"').trim();
+}
+
 export async function getQuoteItems(orderNo: number): Promise<QuoteItem[]> {
-  return query<QuoteItem>(`
+  const rows = await query<QuoteItem>(`
     SELECT Item_ID, Product_ID, Name, COALESCE(SKU,'') AS SKU,
-           COALESCE(Options,'') AS Options, Price, Quantity
+           COALESCE(Options,'') AS Options, COALESCE(Addons,'') AS Addons,
+           Price, COALESCE(OptPrice,0) AS OptPrice,
+           COALESCE(AddonMultP,0) AS AddonMultP, COALESCE(DiscAmount,0) AS DiscAmount,
+           Quantity
     FROM Order_Items_Quote
     WHERE Order_No = @orderNo
     ORDER BY Item_ID
   `, { orderNo });
+  return rows.map(r => ({ ...r, Name: stripHtml(r.Name) }));
 }
 
 // ── Mutations ─────────────────────────────────────────────────────────────────
@@ -249,4 +261,66 @@ export async function convertQuoteToPending(orderNo: number): Promise<number> {
   await query(`UPDATE Order_No_Quote SET Process = 1 WHERE Order_No = @orderNo`, { orderNo });
 
   return newOrderNo;
+}
+
+// ── Line item edits ───────────────────────────────────────────────────────────
+
+async function recalcQuoteTotal(orderNo: number): Promise<void> {
+  await query(`
+    UPDATE Order_No_Quote SET OrderTotal =
+      ISNULL((SELECT SUM((OI.Price + ISNULL(OI.OptPrice,0) + ISNULL(OI.AddonMultP,0) - ISNULL(OI.DiscAmount,0)) * OI.Quantity)
+              FROM Order_Items_Quote OI WHERE OI.Order_No = Order_No_Quote.Order_No), 0)
+      + Order_No_Quote.Shipping
+      + ISNULL(Order_No_Quote.Tax, 0)
+      - ISNULL(Order_No_Quote.AdminCredit, 0)
+    WHERE Order_No = @orderNo
+  `, { orderNo });
+}
+
+export async function updateQuoteItem(
+  itemId: number,
+  data: { Quantity: number; Price: number; OptPrice: number; AddonMultP: number; DiscAmount: number; Options: string; Addons: string }
+): Promise<void> {
+  await query(`
+    UPDATE Order_Items_Quote
+    SET Quantity = @Quantity, Price = @Price, OptPrice = @OptPrice,
+        AddonMultP = @AddonMultP, DiscAmount = @DiscAmount,
+        Options = @Options, Addons = @Addons
+    WHERE Item_ID = @itemId
+  `, { itemId, ...data } as Record<string, string | number>);
+}
+
+export async function deleteQuoteItem(itemId: number): Promise<void> {
+  // Need orderNo for recalc — fetch it first
+  const rows = await query<{ Order_No: number }>(`SELECT Order_No FROM Order_Items_Quote WHERE Item_ID = @itemId`, { itemId });
+  await query(`DELETE FROM Order_Items_Quote WHERE Item_ID = @itemId`, { itemId });
+  if (rows[0]) await recalcQuoteTotal(rows[0].Order_No);
+}
+
+export async function updateQuoteOrderTotals(
+  orderNo: number,
+  data: { ShipType: string; Shipping: number; Tax: number; AdminCredit: number; AdminCreditText: string }
+): Promise<void> {
+  await query(`
+    UPDATE Order_No_Quote
+    SET ShipType = @ShipType, Shipping = @Shipping, Tax = @Tax,
+        AdminCredit = @AdminCredit, AdminCreditText = @AdminCreditText,
+        Admin_Updated = GETDATE()
+    WHERE Order_No = @orderNo
+  `, { orderNo, ...data } as Record<string, string | number>);
+  await recalcQuoteTotal(orderNo);
+}
+
+export async function addProductToQuote(
+  orderNo: number,
+  data: { Product_ID: number; Name: string; SKU: string | null; Quantity: number; Price: number }
+): Promise<void> {
+  await query(`
+    INSERT INTO Order_Items_Quote (Item_ID, Order_No, Product_ID, Name, SKU, Quantity, Price, OptPrice, AddonMultP, DiscAmount)
+    VALUES (
+      ISNULL((SELECT MAX(Item_ID) FROM Order_Items_Quote), 0) + 1,
+      @orderNo, @Product_ID, @Name, @SKU, @Quantity, @Price, 0, 0, 0
+    )
+  `, { orderNo, ...data } as Record<string, string | number | null>);
+  await recalcQuoteTotal(orderNo);
 }
