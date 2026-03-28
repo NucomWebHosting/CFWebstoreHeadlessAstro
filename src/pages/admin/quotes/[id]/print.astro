@@ -1,0 +1,166 @@
+---
+export const prerender = false;
+import { getQuote, getQuoteItems, markQuotePrinted } from "../../../../lib/queries/admin-quotes";
+import { getSettings } from "../../../../lib/queries/settings";
+
+const id = Number(Astro.params.id);
+if (!id) return new Response(null, { status: 404 });
+
+const [quote, items, settings] = await Promise.all([
+  getQuote(id),
+  getQuoteItems(id),
+  getSettings(),
+]);
+if (!quote) return new Response("Quote not found.", { status: 404, headers: { "content-type": "text/plain" } });
+
+await markQuotePrinted(id);
+
+function money(n: number | string) {
+  return `$${Number(n).toFixed(2)}`;
+}
+function fmtDate(d: Date) {
+  return new Date(d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+const subtotals = items.map(i => (i.Price + i.OptPrice + i.AddonMultP - i.DiscAmount) * i.Quantity);
+const itemsTotal = subtotals.reduce((a, b) => a + b, 0);
+const logoUrl = settings?.Logo_print || settings?.Logo_desktop || null;
+const siteName = settings?.SiteName ?? "";
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Quote #{id}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #222; padding: 24px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
+    .logo img { max-height: 60px; }
+    .logo h2 { font-size: 18px; }
+    .quote-info { text-align: right; }
+    .quote-info h2 { font-size: 18px; font-weight: bold; }
+    .addresses { display: flex; gap: 32px; margin-bottom: 24px; }
+    .address-block { flex: 1; }
+    .address-block h4 { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    thead th { background: #f5f5f5; border-bottom: 2px solid #ddd; padding: 8px 10px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #555; }
+    thead th.right { text-align: right; }
+    tbody td { padding: 7px 10px; border-bottom: 1px solid #eee; vertical-align: top; }
+    tbody td.right { text-align: right; }
+    tfoot td { padding: 6px 10px; }
+    tfoot tr.subtotal td { border-top: 1px solid #ddd; }
+    tfoot tr.total td { border-top: 2px solid #222; font-weight: bold; font-size: 13px; }
+    tfoot td.right { text-align: right; }
+    .notes { margin-top: 16px; font-size: 11px; color: #555; }
+    @media print {
+      body { padding: 0; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="margin-bottom:16px;">
+    <button onclick="window.print()" style="padding:6px 16px;background:#1d4ed8;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px;">Print</button>
+    <button onclick="window.close()" style="padding:6px 16px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:4px;cursor:pointer;font-size:13px;margin-left:8px;">Close</button>
+  </div>
+
+  <div class="header">
+    <div class="logo">
+      {logoUrl
+        ? <img src={logoUrl} alt={siteName} />
+        : <h2>{siteName}</h2>
+      }
+    </div>
+    <div class="quote-info">
+      <h2>QUOTE #{id}</h2>
+      <div style="margin-top:4px;color:#555;">{fmtDate(quote.DateOrdered)}</div>
+    </div>
+  </div>
+
+  <div class="addresses">
+    <div class="address-block">
+      <h4>{quote.ShipTo ? "Bill To" : "Bill / Ship To"}</h4>
+      <strong>{quote.FirstName} {quote.LastName}</strong><br/>
+      {quote.Address1 && <>{quote.Address1}{quote.Address2 ? `, ${quote.Address2}` : ""}<br/></>}
+      {quote.City && <>{quote.City}, {quote.State} {quote.Zip}<br/></>}
+      {quote.Country && <>{quote.Country}<br/></>}
+      {quote.Email && <>{quote.Email}<br/></>}
+      {quote.Phone && <>{quote.Phone}</>}
+    </div>
+
+    {settings && (
+      <div class="address-block">
+        <h4>From</h4>
+        <strong>{siteName}</strong><br/>
+        {settings.Address1 && <>{settings.Address1}{settings.Address2 ? `, ${settings.Address2}` : ""}<br/></>}
+        {settings.City && <>{settings.City}, {settings.State} {settings.Postalcode}<br/></>}
+        {settings.Phone && <>{settings.Phone}<br/></>}
+        {settings.Email && <>{settings.Email}</>}
+      </div>
+    )}
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Product</th>
+        <th>SKU</th>
+        <th class="right">Price</th>
+        <th class="right">Qty</th>
+        <th class="right">Subtotal</th>
+      </tr>
+    </thead>
+    <tbody>
+      {items.map((item, i) => (
+        <tr>
+          <td>
+            <strong>{item.Name}</strong>
+            {item.Options && <div style="color:#666;font-size:11px;">{item.Options}</div>}
+          </td>
+          <td>{item.SKU || "—"}</td>
+          <td class="right">{money(item.Price)}</td>
+          <td class="right">{item.Quantity}</td>
+          <td class="right">{money(subtotals[i])}</td>
+        </tr>
+      ))}
+    </tbody>
+    <tfoot>
+      <tr class="subtotal">
+        <td colspan="4" class="right" style="color:#555;">Items Total</td>
+        <td class="right">{money(itemsTotal)}</td>
+      </tr>
+      {Number(quote.Shipping) > 0 && (
+        <tr>
+          <td colspan="4" class="right" style="color:#555;">Shipping {quote.ShipType ? `(${quote.ShipType})` : ""}</td>
+          <td class="right">{money(quote.Shipping)}</td>
+        </tr>
+      )}
+      {Number(quote.Tax) > 0 && (
+        <tr>
+          <td colspan="4" class="right" style="color:#555;">Tax</td>
+          <td class="right">{money(quote.Tax)}</td>
+        </tr>
+      )}
+      {Number(quote.AdminCredit) > 0 && (
+        <tr>
+          <td colspan="4" class="right" style="color:#555;">Discount {quote.AdminCreditText ? `(${quote.AdminCreditText})` : ""}</td>
+          <td class="right" style="color:#c00;">-{money(quote.AdminCredit)}</td>
+        </tr>
+      )}
+      <tr class="total">
+        <td colspan="4" class="right">Total</td>
+        <td class="right">{money(quote.OrderTotal)}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  {quote.Notes && (
+    <div class="notes">
+      <strong>Notes:</strong> {quote.Notes}
+    </div>
+  )}
+
+  <script>window.onload = () => window.print();</script>
+</body>
+</html>

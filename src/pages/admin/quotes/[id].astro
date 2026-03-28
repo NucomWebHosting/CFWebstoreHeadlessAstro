@@ -9,6 +9,8 @@ import {
   deleteQuote,
   convertQuoteToPending,
 } from "../../../lib/queries/admin-quotes";
+import { getSettings } from "../../../lib/queries/settings";
+import { createTransporter } from "../../../lib/email";
 
 const { id } = Astro.params;
 const orderNo = parseInt(id ?? "0") || 0;
@@ -41,6 +43,39 @@ if (Astro.request.method === "POST") {
     } else if (action === "convert") {
       const newOrderNo = await convertQuoteToPending(orderNo);
       notice = `Quote #${orderNo} converted to Order #${newOrderNo}.`;
+    } else if (action === "email_quote") {
+      const toAddr   = ((d.get("email_to")    as string) ?? "").trim();
+      const notes    = ((d.get("email_notes") as string) ?? "").trim();
+      if (!toAddr) throw new Error("Email address is required.");
+      const [q, qItems, siteSettings] = await Promise.all([getQuote(orderNo), getQuoteItems(orderNo), getSettings()]);
+      const transporter = createTransporter(siteSettings);
+      if (!transporter) throw new Error("SMTP is not configured in site settings.");
+      const money = (n: number) => `$${Number(n).toFixed(2)}`;
+      const rows = qItems.map(i => `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;">${i.Name}${i.SKU ? ` <span style="color:#999">(${i.SKU})</span>` : ""}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;">${i.Quantity}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;">${money(i.Price)}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;">${money((i.Price + i.OptPrice + i.AddonMultP - i.DiscAmount) * i.Quantity)}</td></tr>`).join("");
+      const html = `<div style="font-family:Arial,sans-serif;font-size:13px;max-width:640px;">
+        <h2 style="margin:0 0 4px">Quote #${orderNo}</h2>
+        ${notes ? `<p style="color:#555;margin:0 0 16px">${notes.replace(/\n/g,"<br/>")}</p>` : ""}
+        <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+          <thead><tr style="background:#f5f5f5;">
+            <th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#555;">Product</th>
+            <th style="padding:8px 10px;text-align:right;font-size:11px;text-transform:uppercase;color:#555;">Qty</th>
+            <th style="padding:8px 10px;text-align:right;font-size:11px;text-transform:uppercase;color:#555;">Price</th>
+            <th style="padding:8px 10px;text-align:right;font-size:11px;text-transform:uppercase;color:#555;">Subtotal</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${Number(q?.Shipping) > 0 ? `<p style="text-align:right;margin:4px 0">Shipping: ${money(Number(q?.Shipping))}</p>` : ""}
+        ${Number(q?.Tax) > 0 ? `<p style="text-align:right;margin:4px 0">Tax: ${money(Number(q?.Tax))}</p>` : ""}
+        ${Number(q?.AdminCredit) > 0 ? `<p style="text-align:right;margin:4px 0;color:#c00;">Discount: -${money(Number(q?.AdminCredit))}</p>` : ""}
+        <p style="text-align:right;font-weight:bold;font-size:15px;border-top:2px solid #222;padding-top:8px;margin-top:8px;">Total: ${money(Number(q?.OrderTotal))}</p>
+      </div>`;
+      await transporter.sendMail({
+        from: siteSettings?.MerchantEmail ?? siteSettings?.Email ?? "",
+        to:   toAddr,
+        subject: `Quote #${orderNo} — ${siteSettings?.SiteName ?? ""}`,
+        html,
+      });
+      notice = `Quote emailed to ${toAddr}.`;
     }
   } catch (e: unknown) {
     error = e instanceof Error ? e.message : String(e);
@@ -68,7 +103,7 @@ function fmt(d: Date) {
 
 <AdminLayout title={`Quote #${orderNo}`}>
 
-  <div class="mb-5 flex items-center gap-3">
+  <div class="mb-5 flex items-center gap-3 flex-wrap">
     <a href="/admin/quotes" class="text-sm text-blue-600 hover:underline">← Quotes</a>
     <span class="text-gray-300">|</span>
     <h1 class="text-xl font-semibold text-gray-800">Quote #{orderNo}</h1>
@@ -76,6 +111,51 @@ function fmt(d: Date) {
     {quote.Process && (
       <span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500 font-medium">Converted</span>
     )}
+    <div class="ml-auto flex items-center gap-2">
+      <a href={`/admin/quotes/${orderNo}/print`}
+         onclick={`window.open(this.href,'quote_print_${orderNo}','width=900,height=800,toolbar=1,scrollbars=1,resizable=1');return false;`}
+         class={`px-3 py-1.5 text-xs font-medium rounded ${quote.Printed_quote ? "bg-gray-200 text-gray-700 hover:bg-gray-300" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
+        Print Quote
+      </a>
+      <button type="button" onclick="document.getElementById('email-modal').classList.remove('hidden')"
+              class="px-3 py-1.5 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700">
+        Email Quote
+      </button>
+    </div>
+  </div>
+
+  <!-- Email Quote Modal -->
+  <div id="email-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <h3 class="font-semibold text-gray-800 text-sm">Email Quote #{orderNo}</h3>
+        <button type="button" onclick="document.getElementById('email-modal').classList.add('hidden')"
+                class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+      </div>
+      <form method="post" class="px-5 py-4 space-y-4">
+        <input type="hidden" name="_action" value="email_quote" />
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">To (comma-separated)</label>
+          <input type="text" name="email_to" required placeholder="customer@example.com"
+                 class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Notes (optional)</label>
+          <textarea name="email_notes" rows="4" placeholder="Add a personal note to the email…"
+                    class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"></textarea>
+        </div>
+        <div class="flex gap-2">
+          <button type="submit"
+                  class="px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700">
+            Send Email
+          </button>
+          <button type="button" onclick="document.getElementById('email-modal').classList.add('hidden')"
+                  class="px-4 py-1.5 bg-gray-100 text-gray-700 text-sm font-medium rounded hover:bg-gray-200">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 
   {saved && (

@@ -61,6 +61,7 @@ export interface Quote {
   State:      string;
   Zip:        string;
   Country:    string;
+  Printed_quote: boolean;
   // Billing customer (same record in Customers table, linked via Customer_ID)
 }
 
@@ -141,7 +142,7 @@ export async function getQuote(orderNo: number): Promise<Quote | null> {
   const rows = await query<Quote>(`
     SELECT TOP 1
       N.Order_No, N.DateOrdered, N.Customer_ID, N.ShipTo, N.User_ID,
-      N.OrderTotal, N.Shipping, N.Tax,
+      N.OrderTotal, N.Shipping, N.Tax, COALESCE(N.Printed_quote, 0) AS Printed_quote,
       COALESCE(N.AdminCredit, 0)     AS AdminCredit,
       COALESCE(N.AdminCreditText,'') AS AdminCreditText,
       COALESCE(N.Notes,'')           AS Notes,
@@ -261,6 +262,10 @@ export async function convertQuoteToPending(orderNo: number): Promise<number> {
   await query(`UPDATE Order_No_Quote SET Process = 1 WHERE Order_No = @orderNo`, { orderNo });
 
   return newOrderNo;
+}
+
+export async function markQuotePrinted(orderNo: number): Promise<void> {
+  await query(`UPDATE Order_No_Quote SET Printed_quote = 1 WHERE Order_No = @orderNo`, { orderNo });
 }
 
 // ── Line item edits ───────────────────────────────────────────────────────────
