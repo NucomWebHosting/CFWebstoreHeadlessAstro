@@ -470,12 +470,16 @@ export async function updateOrderTotals(orderNo: number, data: {
   );
 }
 
+function stripHtml(s: string): string {
+  return s.replace(/<[^>]*>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"').trim();
+}
+
 export async function searchProductsForOrder(q: string): Promise<{
   Product_ID: number; Name: string; SKU: string | null; UPC: string | null;
   Base_Price: number; Sm_image: string | null;
 }[]> {
   if (!q.trim()) return [];
-  return query(
+  const rows = await query<{ Product_ID: number; Name: string; SKU: string | null; UPC: string | null; Base_Price: number; Sm_image: string | null }>(
     `SELECT TOP 30 Product_ID, Name, SKU, UPC, Base_Price,
        (SELECT TOP 1 Sm_image FROM Product_Images PI WHERE PI.Product_ID = P.Product_ID ORDER BY Product_Image_ID) AS Sm_image
      FROM Products P
@@ -484,6 +488,7 @@ export async function searchProductsForOrder(q: string): Promise<{
      ORDER BY Name`,
     { q: `%${q}%` }
   );
+  return rows.map(r => ({ ...r, Name: stripHtml(r.Name) }));
 }
 
 export async function addProductToOrder(
@@ -491,8 +496,11 @@ export async function addProductToOrder(
   data: { Product_ID: number; Name: string; SKU: string | null; Quantity: number; Price: number; }
 ): Promise<void> {
   await query(
-    `INSERT INTO Order_Items (Order_No, Product_ID, Name, SKU, Quantity, Price, OptPrice, AddonMultP, DiscAmount)
-     VALUES (@orderNo, @Product_ID, @Name, @SKU, @Quantity, @Price, 0, 0, 0)`,
+    `INSERT INTO Order_Items (Item_ID, Order_No, Product_ID, Name, SKU, Quantity, Price, OptPrice, AddonMultP, DiscAmount)
+     VALUES (
+       ISNULL((SELECT MAX(Item_ID) FROM Order_Items), 0) + 1,
+       @orderNo, @Product_ID, @Name, @SKU, @Quantity, @Price, 0, 0, 0
+     )`,
     { orderNo, ...data } as Record<string, string | number | null>
   );
   // Recalculate OrderTotal
