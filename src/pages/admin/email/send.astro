@@ -1,11 +1,239 @@
 ---
 export const prerender = false;
 import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getAllGroupsSimple } from "../../../lib/queries/admin-email-send";
+
+const groups = await getAllGroupsSimple();
+
+// Repopulate on failed submit (redirect passes params back as query string)
+const q = Astro.url.searchParams;
+const v = (k: string) => q.get(k) ?? "";
+
+if (Astro.request.method === "POST") {
+  const data = await Astro.request.formData();
+  const g = (k: string) => (data.get(k) as string ?? "").trim();
+
+  const params = new URLSearchParams({
+    verified:       g("verified"),
+    subscribe:      g("subscribe"),
+    un:             g("un"),
+    gid:            g("gid"),
+    affiliate:      g("affiliate"),
+    acct:           g("acct"),
+    lastLogin:      g("lastLogin"),
+    lastLogin_is:   g("lastLogin_is"),
+    created:        g("created"),
+    created_is:     g("created_is"),
+    member:         data.get("member") ? "1" : "0",
+    product_id:     g("product_id"),
+    sku:            g("sku"),
+    dateOrdered:    g("dateOrdered"),
+    dateOrdered_is: g("dateOrdered_is"),
+    dateFilled:     g("dateFilled"),
+    dateFilled_is:  g("dateFilled_is"),
+  });
+
+  return Astro.redirect(`/admin/email/send/compose?${params.toString()}`);
+}
 ---
 
 <AdminLayout title="Send Email">
   <h1 class="text-xl font-semibold text-gray-800 mb-6">Send Email</h1>
-  <div class="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-10 text-center text-sm text-gray-400 max-w-lg">
-    Coming soon.
-  </div>
+
+  <form method="post" class="max-w-2xl space-y-6">
+
+    <!-- Select Emails -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-3">
+        <span class="text-sm font-semibold text-gray-700">Select Emails</span>
+        <div class="flex-1 border-t border-gray-200"></div>
+      </div>
+      <div class="px-5 py-4 space-y-4">
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right" for="verified">Email Verified:</label>
+          <div class="col-span-2">
+            <select name="verified" id="verified" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="" selected={v("verified") === ""}>all</option>
+              <option value="0" selected={v("verified") === "0"}>no</option>
+              <option value="1" selected={v("verified") === "1"}>yes</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right" for="subscribe">Subscribed:</label>
+          <div class="col-span-2">
+            <select name="subscribe" id="subscribe" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="" selected={v("subscribe") === ""}>all</option>
+              <option value="0" selected={v("subscribe") === "0"}>no</option>
+              <option value="1" selected={v("subscribe") === "1"}>yes</option>
+            </select>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Select Users -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-3">
+        <span class="text-sm font-semibold text-gray-700">Select Users</span>
+        <div class="flex-1 border-t border-gray-200"></div>
+      </div>
+      <div class="px-5 py-4 space-y-4">
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right" for="un">Username:</label>
+          <div class="col-span-2">
+            <input type="text" name="un" id="un" value={v("un")} maxlength="50"
+              class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right" for="gid">In Group:</label>
+          <div class="col-span-2">
+            <select name="gid" id="gid" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="" selected={v("gid") === ""}>all</option>
+              <option value="0" selected={v("gid") === "0"}>unassigned</option>
+              {groups.map(g => (
+                <option value={String(g.Group_ID)} selected={v("gid") === String(g.Group_ID)}>{g.Name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right" for="affiliate">Is an Affiliate:</label>
+          <div class="col-span-2">
+            <select name="affiliate" id="affiliate" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="" selected={v("affiliate") === ""}>all</option>
+              <option value="0" selected={v("affiliate") === "0"}>no</option>
+              <option value="1" selected={v("affiliate") === "1"}>yes</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right" for="acct">Has Account:</label>
+          <div class="col-span-2">
+            <select name="acct" id="acct" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="" selected={v("acct") === ""}>all</option>
+              <option value="0" selected={v("acct") === "0"}>no</option>
+              <option value="1" selected={v("acct") === "1"}>yes</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right">Last Login:</label>
+          <div class="col-span-2 flex gap-2">
+            <select name="lastLogin_is" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="after" selected={v("lastLogin_is") === "after" || v("lastLogin_is") === ""}>after</option>
+              <option value="before" selected={v("lastLogin_is") === "before"}>before</option>
+              <option value="on" selected={v("lastLogin_is") === "on"}>on</option>
+            </select>
+            <input type="date" name="lastLogin" value={v("lastLogin")}
+              class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right">User Created:</label>
+          <div class="col-span-2 flex gap-2">
+            <select name="created_is" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="after" selected={v("created_is") === "after" || v("created_is") === ""}>after</option>
+              <option value="before" selected={v("created_is") === "before"}>before</option>
+              <option value="on" selected={v("created_is") === "on"}>on</option>
+            </select>
+            <input type="date" name="created" value={v("created")}
+              class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <div class="text-right"></div>
+          <div class="col-span-2">
+            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" name="member" value="1" checked={v("member") === "1"}
+                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+              Users with a current membership
+            </label>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Select by Order -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-3">
+        <span class="text-sm font-semibold text-gray-700">Select by Order</span>
+        <div class="flex-1 border-t border-gray-200"></div>
+      </div>
+      <div class="px-5 py-4 space-y-4">
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right" for="product_id">Product ID:</label>
+          <div class="col-span-2">
+            <input type="number" name="product_id" id="product_id" value={v("product_id")} min="0"
+              class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right" for="sku">Product SKU:</label>
+          <div class="col-span-2">
+            <input type="text" name="sku" id="sku" value={v("sku")} maxlength="25"
+              class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right">Date Ordered:</label>
+          <div class="col-span-2 flex gap-2">
+            <select name="dateOrdered_is" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="after" selected={v("dateOrdered_is") === "after" || v("dateOrdered_is") === ""}>after</option>
+              <option value="before" selected={v("dateOrdered_is") === "before"}>before</option>
+              <option value="on" selected={v("dateOrdered_is") === "on"}>on</option>
+            </select>
+            <input type="date" name="dateOrdered" value={v("dateOrdered")}
+              class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 items-center gap-3">
+          <label class="text-sm font-medium text-gray-700 text-right">Date Filled:</label>
+          <div class="col-span-2 flex gap-2">
+            <select name="dateFilled_is" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="after" selected={v("dateFilled_is") === "after" || v("dateFilled_is") === ""}>after</option>
+              <option value="before" selected={v("dateFilled_is") === "before"}>before</option>
+              <option value="on" selected={v("dateFilled_is") === "on"}>on</option>
+            </select>
+            <input type="date" name="dateFilled" value={v("dateFilled")}
+              class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex items-center gap-3">
+      <button type="submit"
+        class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors">
+        Continue
+      </button>
+      <button type="reset"
+        class="bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-medium px-5 py-2 rounded-lg transition-colors">
+        Reset
+      </button>
+      <a href="/admin"
+        class="text-sm text-gray-500 hover:text-gray-800 transition-colors px-2 py-2">
+        Cancel
+      </a>
+    </div>
+
+  </form>
 </AdminLayout>
