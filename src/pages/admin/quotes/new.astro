@@ -115,13 +115,11 @@ const showNewCustomer = postedCustomerMode === "new";
       {/* Tab buttons */}
       <div class="flex gap-2 mb-4">
         <button type="button" id="tab-existing"
-                class={`px-4 py-1.5 text-xs font-medium rounded ${!showNewCustomer ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
-                onclick="switchMode('existing')">
+                class={`px-4 py-1.5 text-xs font-medium rounded ${!showNewCustomer ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
           Find Existing Customer
         </button>
         <button type="button" id="tab-new"
-                class={`px-4 py-1.5 text-xs font-medium rounded ${showNewCustomer ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
-                onclick="switchMode('new')">
+                class={`px-4 py-1.5 text-xs font-medium rounded ${showNewCustomer ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
           New Customer
         </button>
       </div>
@@ -531,6 +529,9 @@ const showNewCustomer = postedCustomerMode === "new";
     }
 
     // ── Mode switching ────────────────────────────────────────────────────────
+    document.getElementById("tab-existing").addEventListener("click", () => switchMode("existing"));
+    document.getElementById("tab-new").addEventListener("click", () => switchMode("new"));
+
     function switchMode(mode) {
       document.getElementById("f-customer_mode").value = mode;
       const isNew = mode === "new";
