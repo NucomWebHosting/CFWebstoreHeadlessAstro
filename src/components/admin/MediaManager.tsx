@@ -47,7 +47,11 @@ function docColors(ext: string): string {
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
-export default function MediaManager() {
+interface MediaManagerProps {
+  pickerMode?: boolean;
+  fieldname?: string;
+}
+export default function MediaManager({ pickerMode = false, fieldname = "" }: MediaManagerProps) {
   const [currentFolder, setCurrentFolder] = useState("");
   const [files, setFiles]                 = useState<MediaFile[]>([]);
   const [subfolders, setSubfolders]       = useState<MediaFolder[]>([]);
@@ -452,22 +456,36 @@ export default function MediaManager() {
               </div>
 
               {/* Actions */}
-              <div className="flex gap-2 pt-1 border-t border-gray-100">
-                <a
-                  href={selected.url}
-                  target="_blank"
-                  rel="noopener"
-                  className="flex-1 text-center px-3 py-1.5 rounded text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50"
-                >
-                  {selected.mediaType === "doc" ? "Download" : "Open"}
-                </a>
+              {pickerMode ? (
                 <button
-                  onClick={() => handleDelete(selected)}
-                  className="flex-1 px-3 py-1.5 rounded text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50"
+                  onClick={() => {
+                    if (typeof window !== "undefined" && window.opener?.setImageField) {
+                      window.opener.setImageField(fieldname, window.location.origin + selected.url);
+                    }
+                    window.close();
+                  }}
+                  className="w-full bg-blue-600 text-white px-3 py-2 rounded text-sm font-semibold hover:bg-blue-700"
                 >
-                  Delete
+                  Use This Image
                 </button>
-              </div>
+              ) : (
+                <div className="flex gap-2 pt-1 border-t border-gray-100">
+                  <a
+                    href={selected.url}
+                    target="_blank"
+                    rel="noopener"
+                    className="flex-1 text-center px-3 py-1.5 rounded text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50"
+                  >
+                    {selected.mediaType === "doc" ? "Download" : "Open"}
+                  </a>
+                  <button
+                    onClick={() => handleDelete(selected)}
+                    className="flex-1 px-3 py-1.5 rounded text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50"
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
 
               <button
                 onClick={() => setSelected(null)}

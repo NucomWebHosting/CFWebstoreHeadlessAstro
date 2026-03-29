@@ -81,6 +81,9 @@ function fmt(d: Date | null | string | undefined): string {
 ---
 
 <AdminLayout title={`Blog #${id}`}>
+  <Fragment slot="head">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jodit@4/jodit.min.css" />
+  </Fragment>
   <div class="flex items-center gap-3 mb-5">
     <a href="/admin/blog" class="text-sm text-blue-600 hover:underline">← Back to Blogs</a>
     <span class={`inline-block px-2 py-0.5 rounded text-xs font-medium ${colorMap[status.color] ?? ""}`}>
@@ -212,8 +215,14 @@ function fmt(d: Date | null | string | undefined): string {
 
     <div class="grid grid-cols-3 gap-3 items-center">
       <label class="text-sm text-gray-600 font-medium text-right">Image</label>
-      <input type="text" name="Sm_Image" value={rec.Sm_Image ?? ""} maxlength="100"
-             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      <div class="col-span-2 flex gap-2">
+        <input type="text" name="Sm_Image" id="Sm_Image" value={rec.Sm_Image ?? ""} maxlength="100"
+               class="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <button type="button" data-picker="Sm_Image"
+                class="shrink-0 px-3 py-1.5 text-xs font-medium border border-gray-300 rounded text-gray-600 hover:bg-gray-50">
+          Browse
+        </button>
+      </div>
     </div>
 
     <div class="grid grid-cols-3 gap-3 items-start">
@@ -230,13 +239,19 @@ function fmt(d: Date | null | string | undefined): string {
 
     <div class="grid grid-cols-3 gap-3 items-center">
       <label class="text-sm text-gray-600 font-medium text-right">Image</label>
-      <input type="text" name="Lg_Image" value={rec.Lg_Image ?? ""} maxlength="100"
-             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      <div class="col-span-2 flex gap-2">
+        <input type="text" name="Lg_Image" id="Lg_Image" value={rec.Lg_Image ?? ""} maxlength="100"
+               class="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <button type="button" data-picker="Lg_Image"
+                class="shrink-0 px-3 py-1.5 text-xs font-medium border border-gray-300 rounded text-gray-600 hover:bg-gray-50">
+          Browse
+        </button>
+      </div>
     </div>
 
     <div class="grid grid-cols-3 gap-3 items-start">
       <label class="text-sm text-gray-600 font-medium text-right pt-1">Content</label>
-      <textarea name="Long_Desc" rows={10}
+      <textarea name="Long_Desc" id="Long_Desc" rows={10}
                 class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400">{rec.Long_Desc ?? ""}</textarea>
     </div>
 
@@ -276,6 +291,46 @@ function fmt(d: Date | null | string | undefined): string {
       </button>
     </div>
   </form>
+
+  <!-- Jodit + image picker -->
+  <script is:inline src="https://cdn.jsdelivr.net/npm/jodit@4/jodit.min.js"></script>
+  <script is:inline>
+    document.addEventListener('DOMContentLoaded', function () {
+      // ── Jodit on Long_Desc ────────────────────────────────────────────
+      if (window.Jodit) {
+        window.Jodit.make('#Long_Desc', {
+          height: 500,
+          buttons: [
+            'bold','italic','underline','strikethrough','|',
+            'ul','ol','|',
+            'link','image','|',
+            'table','hr','|',
+            'undo','redo','|',
+            'source'
+          ],
+          uploader: { insertImageAsBase64URI: false },
+          allowResizeX: false,
+        });
+      }
+
+      // ── Image picker popups ───────────────────────────────────────────
+      window.setImageField = function (fieldname, url) {
+        var el = document.getElementById(fieldname);
+        if (el) el.value = url;
+      };
+
+      document.querySelectorAll('[data-picker]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var field = btn.getAttribute('data-picker');
+          window.open(
+            '/admin/media-picker?field=' + encodeURIComponent(field),
+            'imgpicker',
+            'width=900,height=650,toolbar=0,location=0,status=0,menubar=0,scrollbars=1,resizable=1'
+          );
+        });
+      });
+    });
+  </script>
 
   <!-- Delete -->
   <div class="mt-5 max-w-3xl">

@@ -1,0 +1,27 @@
+---
+export const prerender = false;
+import MediaManager from "../../components/admin/MediaManager";
+const fieldname = Astro.url.searchParams.get("field") ?? "";
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Select Image</title>
+</head>
+<body class="bg-gray-100 font-sans text-gray-900" style="margin:0">
+  <div class="flex items-center justify-between px-5 py-3 bg-white border-b border-gray-200">
+    <h1 class="text-sm font-semibold text-gray-700">
+      Select Image{fieldname ? ` — ${fieldname}` : ""}
+    </h1>
+    <button onclick="window.close()"
+            class="text-sm text-gray-400 hover:text-gray-700 px-3 py-1 rounded border border-gray-200 hover:bg-gray-50">
+      ✕ Close
+    </button>
+  </div>
+  <div class="p-5">
+    <MediaManager client:only="react" pickerMode={true} fieldname={fieldname} />
+  </div>
+</body>
+</html>
