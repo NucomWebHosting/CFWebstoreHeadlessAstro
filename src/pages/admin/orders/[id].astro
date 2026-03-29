@@ -2,7 +2,7 @@
 export const prerender = false;
 import AdminLayout from "../../../components/layout/AdminLayout.astro";
 import { getOrderDetail, updateOrderStatus, saveOrderNotes, addShipment, deleteShipment, updateOrderUser, findUserBySearch, voidPayment, addManualPayment } from "../../../lib/queries/admin-orders";
-import { getShipSettings } from "../../../lib/queries/admin-shipping";
+import { getAllShipSettings } from "../../../lib/queries/admin-shipping";
 import { getEasypostSettings } from "../../../lib/queries/admin-shipping-easypost";
 import { clearShipmentLabel } from "../../../lib/queries/admin-easypost-label";
 import { nucomRefund } from "../../../lib/easypost";
@@ -62,12 +62,12 @@ if (Astro.request.method === "POST") {
 let detailResult: Awaited<ReturnType<typeof getOrderDetail>>;
 let easypostEnabled = false;
 try {
-  const [detail, shipSettings] = await Promise.all([
+  const [detail, allShipSettings] = await Promise.all([
     getOrderDetail(id),
-    getShipSettings(1),
+    getAllShipSettings(),
   ]);
   detailResult = detail;
-  easypostEnabled = shipSettings?.ShipType === "Easypost";
+  easypostEnabled = allShipSettings.some(s => s.ShipType === "Easypost");
 } catch (e) {
   return new Response(`Query error on order ${id}: ${e instanceof Error ? e.message : String(e)}`, { status: 500, headers: { "content-type": "text/plain" } });
 }
