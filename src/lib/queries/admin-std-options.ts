@@ -146,14 +146,22 @@ export async function updateStdOption(id: number, data: StdOptionData): Promise<
 }
 
 async function insertChoice(stdId: number, c: ChoiceData): Promise<void> {
+  // Choice_ID is not an IDENTITY column — generate MAX+1 per Std_ID (mirrors CF logic)
+  const maxRow = await query<{ newid: number | null }>(
+    `SELECT MAX(Choice_ID) + 1 AS newid FROM StdOpt_Choices WHERE Std_ID = @stdId`,
+    { stdId }
+  );
+  const choiceId = maxRow[0]?.newid ?? 1;
+
   await query(
     `INSERT INTO StdOpt_Choices
-       (Std_ID, ChoiceName, Price, Price_Wholesale, Weight, Sm_Image1, Md_Image1, Lg_Image1,
+       (Std_ID, Choice_ID, ChoiceName, Price, Price_Wholesale, Weight, Sm_Image1, Md_Image1, Lg_Image1,
         optionTextColor, SortOrder, Display)
-     VALUES (@stdId, @ChoiceName, @Price, @Price_Wholesale, @Weight, @Sm_Image1, @Md_Image1,
+     VALUES (@stdId, @choiceId, @ChoiceName, @Price, @Price_Wholesale, @Weight, @Sm_Image1, @Md_Image1,
              @Lg_Image1, @optionTextColor, @SortOrder, @Display)`,
     {
       stdId,
+      choiceId,
       ChoiceName:      c.ChoiceName,
       Price:           c.Price,
       Price_Wholesale: c.Price_Wholesale,
