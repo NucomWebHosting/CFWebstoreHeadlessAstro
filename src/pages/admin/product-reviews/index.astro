@@ -1,0 +1,168 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getReviews, PAGE_SIZE } from "../../../lib/queries/admin-reviews";
+
+const p = Astro.url.searchParams;
+const opts = {
+  product_id:     p.get("product_id")     ?? "",
+  search:         p.get("search")         ?? "",
+  sortby:         p.get("sortby")         ?? "",
+  display_status: p.get("display_status") ?? "",
+  page:           parseInt(p.get("page")  ?? "1") || 1,
+};
+
+const deleted = p.get("deleted") === "1";
+const { rows, total } = await getReviews(opts);
+const totalPages = Math.ceil(total / PAGE_SIZE);
+
+function filterQS(overrides: Record<string, string | number>) {
+  const base = { ...opts, ...overrides };
+  return Object.entries(base)
+    .filter(([, v]) => String(v).length > 0)
+    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+    .join("&");
+}
+function pageUrl(pg: number) { return `/admin/product-reviews?${filterQS({ page: pg })}`; }
+
+const windowSize = 5;
+const halfW = Math.floor(windowSize / 2);
+let winStart = Math.max(1, opts.page - halfW);
+let winEnd   = Math.min(totalPages, winStart + windowSize - 1);
+if (winEnd - winStart < windowSize - 1) winStart = Math.max(1, winEnd - windowSize + 1);
+
+function stars(rating: number | null) {
+  if (!rating) return "—";
+  return "★".repeat(rating) + "☆".repeat(5 - rating);
+}
+---
+
+<AdminLayout title="Product Reviews">
+
+  {deleted && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Review deleted.</div>
+  )}
+
+  <!-- Filters -->
+  <form method="get" action="/admin/product-reviews" class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-5">
+    <div class="flex flex-wrap gap-3 items-end">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Product ID</label>
+        <input type="text" name="product_id" value={opts.product_id} maxlength="10"
+               class="w-24 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Search (title/comment/product)</label>
+        <input type="text" name="search" value={opts.search} maxlength="50"
+               class="w-52 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Sort by</label>
+        <select name="sortby" class="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          <option value="" selected={opts.sortby === ""}>newest first</option>
+          <option value="oldest"   selected={opts.sortby === "oldest"}>oldest first</option>
+          <option value="highest"  selected={opts.sortby === "highest"}>best rating</option>
+          <option value="lowest"   selected={opts.sortby === "lowest"}>worst rating</option>
+          <option value="mosthelp" selected={opts.sortby === "mosthelp"}>most helpful</option>
+          <option value="leasthelp" selected={opts.sortby === "leasthelp"}>least helpful</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Display</label>
+        <select name="display_status" class="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+          <option value=""       selected={opts.display_status === ""}>all</option>
+          <option value="check"  selected={opts.display_status === "check"}>needs check</option>
+          <option value="pending" selected={opts.display_status === "pending"}>pending approval</option>
+          <option value="editor" selected={opts.display_status === "editor"}>pending or check</option>
+          <option value="day"    selected={opts.display_status === "day"}>last 24 hours</option>
+          <option value="week"   selected={opts.display_status === "week"}>last 7 days</option>
+          <option value="month"  selected={opts.display_status === "month"}>last 30 days</option>
+        </select>
+      </div>
+      <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Search</button>
+      <a href="/admin/product-reviews" class="text-xs text-blue-600 hover:underline self-end pb-2">All</a>
+    </div>
+  </form>
+
+  <!-- Count + Pagination -->
+  <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+    <span class="text-sm text-gray-500">{total.toLocaleString()} review{total !== 1 ? "s" : ""}</span>
+    {totalPages > 1 && (
+      <div class="flex gap-1 text-sm">
+        {opts.page > 1 && <a href={pageUrl(opts.page - 1)} class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">‹</a>}
+        {winStart > 1 && <span class="px-2 py-1 text-gray-400">…</span>}
+        {Array.from({length: winEnd - winStart + 1}, (_, i) => winStart + i).map(pg => (
+          <a href={pageUrl(pg)}
+             class={`px-2 py-1 rounded border ${pg === opts.page ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 hover:bg-gray-50"}`}>
+            {pg}
+          </a>
+        ))}
+        {winEnd < totalPages && <span class="px-2 py-1 text-gray-400">…</span>}
+        {opts.page < totalPages && <a href={pageUrl(opts.page + 1)} class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">›</a>}
+      </div>
+    )}
+  </div>
+
+  <!-- Table -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 border-b border-gray-200">
+        <tr>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">ID</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Title / Product</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Rating</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Posted</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Status</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {rows.length === 0 && (
+          <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">No reviews found.</td></tr>
+        )}
+        {rows.map(r => (
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-2.5">
+              <a href={`/admin/product-reviews/${r.Review_ID}`}
+                 class="text-blue-600 hover:underline text-xs font-mono">
+                Edit {r.Review_ID}
+              </a>
+            </td>
+            <td class="px-4 py-2.5">
+              <div class="font-medium text-gray-800">{r.Title}</div>
+              <div class="text-xs text-gray-400">{r.Product_Name} (#{r.Product_ID})</div>
+            </td>
+            <td class="px-4 py-2.5 text-amber-500 text-xs tracking-tight whitespace-nowrap">
+              {stars(r.Rating)}
+            </td>
+            <td class="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">
+              {r.Posted ? new Date(r.Posted).toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit" }) : "—"}
+            </td>
+            <td class="px-4 py-2.5">
+              {!r.Approved
+                ? <span class="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">pending</span>
+                : r.NeedsCheck
+                  ? <span class="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">check</span>
+                  : <span class="text-xs text-gray-400">active</span>}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  {totalPages > 1 && (
+    <div class="flex justify-end mt-3 gap-1 text-sm">
+      {opts.page > 1 && <a href={pageUrl(opts.page - 1)} class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">‹</a>}
+      {winStart > 1 && <span class="px-2 py-1 text-gray-400">…</span>}
+      {Array.from({length: winEnd - winStart + 1}, (_, i) => winStart + i).map(pg => (
+        <a href={pageUrl(pg)}
+           class={`px-2 py-1 rounded border ${pg === opts.page ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 hover:bg-gray-50"}`}>
+          {pg}
+        </a>
+      ))}
+      {winEnd < totalPages && <span class="px-2 py-1 text-gray-400">…</span>}
+      {opts.page < totalPages && <a href={pageUrl(opts.page + 1)} class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">›</a>}
+    </div>
+  )}
+
+</AdminLayout>
