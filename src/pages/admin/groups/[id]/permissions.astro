@@ -1,0 +1,164 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../../components/layout/AdminLayout.astro";
+import { getGroup } from "../../../../lib/queries/admin-groups";
+import {
+  getPermissionGroups,
+  getAccessKeys,
+  getGroupPermissionString,
+  updateGroupPermissions,
+  parsePermissions,
+} from "../../../../lib/queries/admin-permissions";
+
+const id = parseInt(Astro.params.id ?? "0") || 0;
+if (!id) return new Response(null, { status: 404 });
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const permGroups = await getPermissionGroups();
+  const parts: string[] = [];
+
+  for (const pg of permGroups) {
+    const checkedBits = (d.getAll(`circuit_${pg.Name}`) as string[]).map(Number);
+    const total = checkedBits.reduce((sum, v) => sum + v, 0);
+    if (total > 0) {
+      parts.push(`${pg.Name.toLowerCase()}^${total}`);
+    }
+  }
+
+  const contentKeyIds = (d.getAll("contentkey_list") as string[])
+    .map(Number)
+    .filter((n) => n > 0);
+  if (contentKeyIds.length > 0) {
+    parts.push(`contentkey_list^${contentKeyIds.join(",")}`);
+  }
+
+  try {
+    await updateGroupPermissions(id, parts.join(";"));
+    return Astro.redirect(`/admin/groups/${id}/permissions?saved=1`);
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+const saved = Astro.url.searchParams.get("saved") === "1";
+
+const [grp, permGroups, accessKeys, permStr] = await Promise.all([
+  getGroup(id),
+  getPermissionGroups(),
+  getAccessKeys(),
+  getGroupPermissionString(id),
+]);
+
+if (!grp) {
+  return new Response(`Group ${id} not found.`, {
+    status: 404,
+    headers: { "content-type": "text/plain" },
+  });
+}
+
+const permMap = parsePermissions(permStr);
+
+function getCurrentBits(circuitName: string): number {
+  const val = permMap.get(circuitName.toLowerCase());
+  return val ? parseInt(val) || 0 : 0;
+}
+
+const contentKeySelected = new Set(
+  (permMap.get("contentkey_list") ?? "")
+    .split(",")
+    .map((s) => parseInt(s.trim()))
+    .filter((n) => !isNaN(n) && n > 0)
+);
+---
+
+<AdminLayout title={`Group ${id} Permissions`}>
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/groups" class="text-sm text-blue-600 hover:underline">← Groups</a>
+    <span class="text-gray-300">/</span>
+    <a href={`/admin/groups/${id}`} class="text-sm text-blue-600 hover:underline">{grp.Name}</a>
+    <span class="text-gray-300">/</span>
+    <span class="text-sm text-gray-500">Permissions</span>
+  </div>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Permissions saved.</div>
+  )}
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-5">
+      <div class="bg-gray-50 border-b border-gray-200 px-4 py-2.5">
+        <h2 class="text-sm font-semibold text-gray-700">Permissions — {grp.Name}</h2>
+      </div>
+
+      <div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+        {accessKeys.length > 0 && (
+          <div class="border border-gray-200 rounded-lg p-3">
+            <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Access Keys</div>
+            <div class="space-y-1">
+              {accessKeys.map((k) => (
+                <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded">
+                  <input
+                    type="checkbox"
+                    name="contentkey_list"
+                    value={k.accesskey_ID}
+                    checked={contentKeySelected.has(k.accesskey_ID)}
+                    class="rounded border-gray-300 text-blue-600 focus:ring-blue-400"
+                  />
+                  <span class="text-gray-700">{k.Name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {permGroups.map((pg) => {
+          const currentBits = getCurrentBits(pg.Name);
+          return (
+            <div class="border border-gray-200 rounded-lg p-3">
+              <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{pg.Name}</div>
+              {pg.bits.length === 0
+                ? <p class="text-xs text-gray-400 italic">No permissions defined.</p>
+                : (
+                  <div class="space-y-1">
+                    {pg.bits.map((bit) => (
+                      <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded">
+                        <input
+                          type="checkbox"
+                          name={`circuit_${pg.Name}`}
+                          value={bit.BitValue}
+                          checked={(currentBits & bit.BitValue) !== 0}
+                          class="rounded border-gray-300 text-blue-600 focus:ring-blue-400"
+                        />
+                        <span class="text-gray-700">{bit.Name}</span>
+                        <span class="text-gray-400 text-xs font-mono ml-auto">{bit.BitValue}</span>
+                      </label>
+                    ))}
+                  </div>
+                )
+              }
+            </div>
+          );
+        })}
+
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit"
+              class="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">
+        Set Permissions
+      </button>
+      <a href={`/admin/groups/${id}`}
+         class="px-4 py-2 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+        Cancel
+      </a>
+    </div>
+  </form>
+</AdminLayout>

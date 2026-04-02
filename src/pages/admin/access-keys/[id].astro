@@ -1,0 +1,113 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import {
+  getAccessKey,
+  updateAccessKey,
+  checkAccessKeyDeps,
+  deleteAccessKey,
+} from "../../../lib/queries/admin-permissions";
+
+const id = parseInt(Astro.params.id ?? "0") || 0;
+if (!id) return new Response(null, { status: 404 });
+
+let error = "";
+let depErrors: string[] = [];
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const action = (d.get("_action") as string ?? "").trim();
+
+  if (action === "delete") {
+    depErrors = await checkAccessKeyDeps(id);
+    if (depErrors.length === 0) {
+      await deleteAccessKey(id);
+      return Astro.redirect("/admin/access-keys?deleted=1");
+    }
+  } else {
+    const name = (d.get("Name") as string ?? "").trim();
+    if (!name) {
+      error = "Name is required.";
+    } else {
+      try {
+        await updateAccessKey(id, name);
+        return Astro.redirect(`/admin/access-keys/${id}?saved=1`);
+      } catch (e: unknown) {
+        error = e instanceof Error ? e.message : String(e);
+      }
+    }
+  }
+}
+
+const saved = Astro.url.searchParams.get("saved") === "1";
+const key = await getAccessKey(id);
+if (!key) return new Response(`Access key ${id} not found.`, { status: 404, headers: { "content-type": "text/plain" } });
+---
+
+<AdminLayout title={`Access Key ${id}`}>
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/access-keys" class="text-sm text-blue-600 hover:underline">← Access Keys</a>
+  </div>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved.</div>
+  )}
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+  {depErrors.length > 0 && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+      <p class="font-medium mb-1">This access key cannot be deleted:</p>
+      <ul class="list-disc list-inside space-y-0.5">
+        {depErrors.map((e) => <li>{e}</li>)}
+      </ul>
+    </div>
+  )}
+
+  {key.System ? (
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-lg">
+      <div class="flex items-center gap-3 mb-3">
+        <span class="text-sm font-medium text-gray-700">#{key.accesskey_ID}</span>
+        <span class="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">System</span>
+      </div>
+      <p class="text-sm text-gray-600">{key.Name}</p>
+      <p class="text-xs text-gray-400 mt-3">System access keys cannot be modified.</p>
+    </div>
+  ) : (
+    <>
+      <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4 max-w-lg">
+        <input type="hidden" name="_action" value="update" />
+
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <label class="text-sm text-gray-600 font-medium text-right">ID</label>
+          <span class="col-span-2 text-sm font-mono text-gray-500">{key.accesskey_ID}</span>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <label class="text-sm text-gray-600 font-medium text-right">Name <span class="text-red-500">*</span></label>
+          <input type="text" name="Name" value={key.Name} maxlength="100" required
+                 class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">
+            Update
+          </button>
+          <a href="/admin/access-keys" class="px-4 py-2 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+            Cancel
+          </a>
+        </div>
+      </form>
+
+      <div class="mt-5 max-w-lg">
+        <form method="post"
+              onsubmit={`return confirm('Delete access key "${key.Name}"? It will be removed from all user and group permissions.')`}>
+          <input type="hidden" name="_action" value="delete" />
+          <button type="submit" class="px-4 py-2 rounded text-sm border border-red-300 text-red-600 hover:bg-red-50">
+            Delete Access Key
+          </button>
+        </form>
+      </div>
+    </>
+  )}
+</AdminLayout>

@@ -149,9 +149,12 @@ if (winEnd - winStart < windowSize - 1) winStart = Math.max(1, winEnd - windowSi
             <td class="px-4 py-2.5 text-xs text-gray-500 font-mono">
               {r.PromotionIds || <span class="text-gray-300">—</span>}
             </td>
-            <td class="px-4 py-2.5">
+            <td class="px-4 py-2.5 whitespace-nowrap">
               <a href={`/admin/users?gid=${r.Group_ID}&show=all`}
                  class="text-xs text-blue-500 hover:underline">view users</a>
+              <span class="text-gray-300 mx-1">·</span>
+              <a href={`/admin/groups/${r.Group_ID}/permissions`}
+                 class="text-xs text-blue-500 hover:underline">permissions</a>
             </td>
           </tr>
         ))}

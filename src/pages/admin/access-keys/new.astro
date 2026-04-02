@@ -1,0 +1,49 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { createAccessKey } from "../../../lib/queries/admin-permissions";
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const name = (d.get("Name") as string ?? "").trim();
+  if (!name) {
+    error = "Name is required.";
+  } else {
+    try {
+      const id = await createAccessKey(name);
+      return Astro.redirect(`/admin/access-keys/${id}?saved=1`);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+}
+---
+
+<AdminLayout title="New Access Key">
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/access-keys" class="text-sm text-blue-600 hover:underline">← Access Keys</a>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4 max-w-lg">
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Name <span class="text-red-500">*</span></label>
+      <input type="text" name="Name" maxlength="100" required autofocus
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="flex items-center gap-3 pt-2">
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">
+        Add Access Key
+      </button>
+      <a href="/admin/access-keys" class="px-4 py-2 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+        Cancel
+      </a>
+    </div>
+  </form>
+</AdminLayout>
