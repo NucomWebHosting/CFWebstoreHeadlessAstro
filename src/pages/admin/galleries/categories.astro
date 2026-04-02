@@ -1,0 +1,124 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import {
+  getGalleryCategories,
+  createGalleryCategory,
+  updateGalleryCategory,
+  deleteGalleryCategory,
+} from "../../../lib/queries/admin-galleries";
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g = (k: string) => (d.get(k) as string ?? "").trim();
+  const action = g("_action");
+  const catId = parseInt(g("Category_ID")) || 0;
+
+  try {
+    if (action === "delete") {
+      await deleteGalleryCategory(catId);
+    } else if (action === "update") {
+      await updateGalleryCategory(catId, g("Name"), g("Description"), parseInt(g("Priority")) || 9999);
+    } else if (action === "add") {
+      await createGalleryCategory(g("Name"), g("Description"), parseInt(g("Priority")) || 9999);
+    }
+    return Astro.redirect("/admin/galleries/categories?saved=1");
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+
+const saved = Astro.url.searchParams.get("saved") === "1";
+const categories = await getGalleryCategories();
+
+const inputCls = "w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400";
+---
+
+<AdminLayout title="Gallery Categories">
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/galleries" class="text-sm text-blue-600 hover:underline">← Galleries</a>
+  </div>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved.</div>
+  )}
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <!-- Existing categories -->
+  {categories.length > 0 && (
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-6">
+      <div class="bg-gray-50 border-b border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700">
+        {categories.length} Categor{categories.length !== 1 ? "ies" : "y"}
+      </div>
+      <div class="divide-y divide-gray-100">
+        {categories.map(cat => (
+          <details class="group">
+            <summary class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 list-none">
+              <div class="flex-1">
+                <span class="font-medium text-sm text-gray-800">{cat.Name}</span>
+                {cat.Description && <span class="text-xs text-gray-400 ml-2">{cat.Description}</span>}
+              </div>
+              <span class="text-xs text-gray-400 font-mono">priority {cat.Priority === 9999 ? "—" : cat.Priority}</span>
+              <svg class="w-4 h-4 text-gray-400 shrink-0 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </summary>
+            <div class="px-4 pb-4 pt-2 bg-gray-50 border-t border-gray-100">
+              <form method="post" class="grid grid-cols-4 gap-3 items-end">
+                <input type="hidden" name="_action" value="update" />
+                <input type="hidden" name="Category_ID" value={cat.Category_ID} />
+                <div>
+                  <label class="text-xs text-gray-500 mb-1 block">Name</label>
+                  <input type="text" name="Name" value={cat.Name} maxlength="100" required class={inputCls} />
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500 mb-1 block">Description</label>
+                  <input type="text" name="Description" value={cat.Description ?? ""} maxlength="255" class={inputCls} />
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500 mb-1 block">Priority</label>
+                  <input type="number" name="Priority" min="0" max="9999"
+                         value={cat.Priority === 9999 ? 0 : cat.Priority} class={inputCls} />
+                </div>
+                <div class="flex gap-2">
+                  <button type="submit" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700">Save</button>
+                  <button type="submit" name="_action" value="delete"
+                          onclick={`return confirm('Delete category "${cat.Name}"?')`}
+                          class="px-3 py-1.5 rounded text-sm border border-red-300 text-red-600 hover:bg-red-50">Delete</button>
+                </div>
+              </form>
+            </div>
+          </details>
+        ))}
+      </div>
+    </div>
+  )}
+
+  <!-- Add category -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="bg-gray-50 border-b border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700">Add Category</div>
+    <form method="post" class="p-4">
+      <input type="hidden" name="_action" value="add" />
+      <div class="grid grid-cols-4 gap-3 items-end">
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Name <span class="text-red-500">*</span></label>
+          <input type="text" name="Name" maxlength="100" required class={inputCls} />
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Description</label>
+          <input type="text" name="Description" maxlength="255" class={inputCls} />
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Priority</label>
+          <input type="number" name="Priority" min="0" max="9999" value="0" class={inputCls} />
+        </div>
+        <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Add</button>
+      </div>
+    </form>
+  </div>
+
+</AdminLayout>

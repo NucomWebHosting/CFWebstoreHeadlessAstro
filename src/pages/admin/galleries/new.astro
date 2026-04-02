@@ -1,0 +1,139 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { createGallery, GALLERY_STYLES } from "../../../lib/queries/admin-galleries";
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g = (k: string) => (d.get(k) as string ?? "").trim();
+  const n = (k: string, def = 0) => parseInt(g(k)) || def;
+
+  try {
+    const id = await createGallery({
+      Name:            g("Name"),
+      Text:            g("Text"),
+      Speed:           n("Speed", 5000),
+      Gallery_Style:   n("Gallery_Style", 2),
+      Masonry_Columns: n("Masonry_Columns", 4),
+      Transition:      n("Transition", 0),
+      Lg_Image_Width:  n("Lg_Image_Width", 800),
+      Lg_Image_Height: n("Lg_Image_Height", 800),
+      Sm_Image_Width:  n("Sm_Image_Width", 300),
+      Sm_Image_Height: n("Sm_Image_Height", 300),
+    });
+    return Astro.redirect(`/admin/galleries/${id}?saved=1`);
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+}
+---
+
+<AdminLayout title="New Gallery">
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/galleries" class="text-sm text-blue-600 hover:underline">← Galleries</a>
+  </div>
+
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4 max-w-2xl">
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Name <span class="text-red-500">*</span></label>
+      <input type="text" name="Name" maxlength="100" required autofocus
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Description</label>
+      <div class="col-span-2">
+        <input type="text" name="Text" maxlength="100"
+               class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <p class="text-xs text-gray-400 mt-0.5">For your reference only, not shown to users.</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Gallery Style <span class="text-red-500">*</span></label>
+      <div class="col-span-2 flex flex-wrap gap-3 text-sm">
+        {Object.entries(GALLERY_STYLES).map(([val, label]) => (
+          <label class="flex items-center gap-1.5">
+            <input type="radio" name="Gallery_Style" value={val} checked={val === "2"} required />
+            {label}
+          </label>
+        ))}
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Columns</label>
+      <div class="col-span-2">
+        <input type="number" name="Masonry_Columns" min="2" max="12" value="4"
+               class="w-20 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span class="text-xs text-gray-400 ml-2">Used for Gallery and Masonry styles (2–12).</span>
+      </div>
+    </div>
+
+    <div class="border-t border-gray-100 pt-2">
+      <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Image Sizes</span>
+      <p class="text-xs text-gray-400 mt-1">Uploaded images are resized to these maximum dimensions.</p>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Small Image</label>
+      <div class="col-span-2 flex items-center gap-2 text-sm text-gray-600">
+        <input type="number" name="Sm_Image_Width" min="0" value="300" placeholder="Width"
+               class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span>w ×</span>
+        <input type="number" name="Sm_Image_Height" min="0" value="300" placeholder="Height"
+               class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span>h (px)</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Large Image (pop-up)</label>
+      <div class="col-span-2 flex items-center gap-2 text-sm text-gray-600">
+        <input type="number" name="Lg_Image_Width" min="0" value="800" placeholder="Width"
+               class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span>w ×</span>
+        <input type="number" name="Lg_Image_Height" min="0" value="800" placeholder="Height"
+               class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span>h (px)</span>
+      </div>
+    </div>
+
+    <div class="border-t border-gray-100 pt-2">
+      <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Slider Options</span>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Speed</label>
+      <div class="col-span-2">
+        <input type="number" name="Speed" value="5000"
+               class="w-28 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span class="text-xs text-gray-400 ml-2">milliseconds (1000 = 1 second)</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <span class="text-sm text-gray-600 font-medium text-right">Transition</span>
+      <div class="col-span-2 flex gap-4 text-sm">
+        <label class="flex items-center gap-2"><input type="radio" name="Transition" value="1" /> Fade</label>
+        <label class="flex items-center gap-2"><input type="radio" name="Transition" value="0" checked /> Slide</label>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3 pt-2">
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">
+        Insert Gallery
+      </button>
+      <a href="/admin/galleries" class="px-4 py-2 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+        Cancel
+      </a>
+    </div>
+  </form>
+</AdminLayout>

@@ -1,0 +1,62 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getGalleries, GALLERY_STYLES } from "../../../lib/queries/admin-galleries";
+
+const deleted = Astro.url.searchParams.get("deleted") === "1";
+const galleries = await getGalleries();
+---
+
+<AdminLayout title="Galleries">
+
+  {deleted && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Gallery deleted.</div>
+  )}
+
+  <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center gap-3">
+      <span class="text-sm text-gray-500">{galleries.length} galler{galleries.length !== 1 ? "ies" : "y"}</span>
+      <a href="/admin/galleries/new"
+         class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">+ New Gallery</a>
+    </div>
+    <a href="/admin/galleries/categories" class="text-sm text-blue-600 hover:underline">Manage Categories</a>
+  </div>
+
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 border-b border-gray-200">
+        <tr>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">ID</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Name</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Style</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Priority</th>
+          <th class="px-4 py-2.5 text-left font-medium text-gray-600">Size (sm / lg)</th>
+          <th class="px-4 py-2.5"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {galleries.length === 0 && (
+          <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">No galleries found.</td></tr>
+        )}
+        {galleries.map(g => (
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-2.5 text-xs font-mono text-gray-400">{g.Gallery_ID}</td>
+            <td class="px-4 py-2.5">
+              <a href={`/admin/galleries/${g.Gallery_ID}`} class="font-medium text-blue-600 hover:underline">{g.Name}</a>
+              {g.Text && <div class="text-xs text-gray-400">{g.Text}</div>}
+            </td>
+            <td class="px-4 py-2.5 text-xs text-gray-500">{GALLERY_STYLES[g.Gallery_Style] ?? g.Gallery_Style}</td>
+            <td class="px-4 py-2.5 text-xs text-gray-500">{g.Priority}</td>
+            <td class="px-4 py-2.5 text-xs text-gray-400 font-mono">
+              {g.Sm_Image_Width}×{g.Sm_Image_Height} / {g.Lg_Image_Width}×{g.Lg_Image_Height}
+            </td>
+            <td class="px-4 py-2.5">
+              <a href={`/admin/galleries/${g.Gallery_ID}/images`} class="text-xs text-blue-500 hover:underline">images</a>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+</AdminLayout>

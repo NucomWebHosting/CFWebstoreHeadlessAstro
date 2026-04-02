@@ -1,0 +1,172 @@
+---
+export const prerender = false;
+import AdminLayout from "../../../components/layout/AdminLayout.astro";
+import { getGallery, updateGallery, deleteGallery, GALLERY_STYLES } from "../../../lib/queries/admin-galleries";
+
+const id = parseInt(Astro.params.id ?? "0") || 0;
+if (!id) return new Response(null, { status: 404 });
+
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const d = await Astro.request.formData();
+  const g = (k: string) => (d.get(k) as string ?? "").trim();
+  const n = (k: string, def = 0) => parseInt(g(k)) || def;
+  const action = g("_action");
+
+  if (action === "delete") {
+    await deleteGallery(id);
+    return Astro.redirect("/admin/galleries?deleted=1");
+  } else {
+    try {
+      await updateGallery(id, {
+        Name:            g("Name"),
+        Text:            g("Text"),
+        Speed:           n("Speed", 5000),
+        Gallery_Style:   n("Gallery_Style"),
+        Masonry_Columns: n("Masonry_Columns", 4),
+        Transition:      n("Transition"),
+        Lg_Image_Width:  n("Lg_Image_Width", 800),
+        Lg_Image_Height: n("Lg_Image_Height", 800),
+        Sm_Image_Width:  n("Sm_Image_Width", 300),
+        Sm_Image_Height: n("Sm_Image_Height", 300),
+      });
+      return Astro.redirect(`/admin/galleries/${id}?saved=1`);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+}
+
+const saved = Astro.url.searchParams.get("saved") === "1";
+const gallery = await getGallery(id);
+if (!gallery) return new Response(`Gallery ${id} not found.`, { status: 404, headers: { "content-type": "text/plain" } });
+---
+
+<AdminLayout title={`Gallery — ${gallery.Name}`}>
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/admin/galleries" class="text-sm text-blue-600 hover:underline">← Galleries</a>
+  </div>
+
+  {saved && (
+    <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">Saved.</div>
+  )}
+  {error && (
+    <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+  )}
+
+  <form method="post" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4 max-w-2xl">
+    <input type="hidden" name="_action" value="update" />
+
+    <div class="flex items-center justify-between border-b border-gray-100 pb-2">
+      <h2 class="text-sm font-semibold text-gray-700">Gallery #{id}</h2>
+      <a href={`/admin/galleries/${id}/images`} class="text-xs text-blue-500 hover:underline">Manage Images →</a>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Name <span class="text-red-500">*</span></label>
+      <input type="text" name="Name" value={gallery.Name} maxlength="100" required
+             class="col-span-2 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Description</label>
+      <div class="col-span-2">
+        <input type="text" name="Text" value={gallery.Text ?? ""} maxlength="100"
+               class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <p class="text-xs text-gray-400 mt-0.5">For your reference only, not shown to users.</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-start">
+      <label class="text-sm text-gray-600 font-medium text-right pt-1">Gallery Style <span class="text-red-500">*</span></label>
+      <div class="col-span-2 flex flex-wrap gap-3 text-sm">
+        {Object.entries(GALLERY_STYLES).map(([val, label]) => (
+          <label class="flex items-center gap-1.5">
+            <input type="radio" name="Gallery_Style" value={val}
+                   checked={gallery.Gallery_Style === parseInt(val)} required />
+            {label}
+          </label>
+        ))}
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Columns</label>
+      <div class="col-span-2">
+        <input type="number" name="Masonry_Columns" min="2" max="12" value={gallery.Masonry_Columns}
+               class="w-20 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span class="text-xs text-gray-400 ml-2">Used for Gallery and Masonry styles (2–12).</span>
+      </div>
+    </div>
+
+    <div class="border-t border-gray-100 pt-2">
+      <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Image Sizes</span>
+      <p class="text-xs text-gray-400 mt-1">Uploaded images are resized to these maximum dimensions.</p>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Small Image</label>
+      <div class="col-span-2 flex items-center gap-2 text-sm text-gray-600">
+        <input type="number" name="Sm_Image_Width" min="0" value={gallery.Sm_Image_Width} placeholder="Width"
+               class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span>w ×</span>
+        <input type="number" name="Sm_Image_Height" min="0" value={gallery.Sm_Image_Height} placeholder="Height"
+               class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span>h (px)</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Large Image (pop-up)</label>
+      <div class="col-span-2 flex items-center gap-2 text-sm text-gray-600">
+        <input type="number" name="Lg_Image_Width" min="0" value={gallery.Lg_Image_Width} placeholder="Width"
+               class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span>w ×</span>
+        <input type="number" name="Lg_Image_Height" min="0" value={gallery.Lg_Image_Height} placeholder="Height"
+               class="w-24 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span>h (px)</span>
+      </div>
+    </div>
+
+    <div class="border-t border-gray-100 pt-2">
+      <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Slider Options</span>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <label class="text-sm text-gray-600 font-medium text-right">Speed</label>
+      <div class="col-span-2">
+        <input type="number" name="Speed" value={gallery.Speed}
+               class="w-28 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        <span class="text-xs text-gray-400 ml-2">milliseconds (1000 = 1 second)</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 items-center">
+      <span class="text-sm text-gray-600 font-medium text-right">Transition</span>
+      <div class="col-span-2 flex gap-4 text-sm">
+        <label class="flex items-center gap-2"><input type="radio" name="Transition" value="1" checked={gallery.Transition === 1} /> Fade</label>
+        <label class="flex items-center gap-2"><input type="radio" name="Transition" value="0" checked={gallery.Transition !== 1} /> Slide</label>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3 pt-2">
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">
+        Update Gallery
+      </button>
+      <a href="/admin/galleries" class="px-4 py-2 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">
+        Cancel
+      </a>
+    </div>
+  </form>
+
+  <div class="mt-5 max-w-2xl">
+    <form method="post"
+          onsubmit={`return confirm('Delete gallery "${gallery.Name}" and all its images?')`}>
+      <input type="hidden" name="_action" value="delete" />
+      <button type="submit" class="px-4 py-2 rounded text-sm border border-red-300 text-red-600 hover:bg-red-50">
+        Delete Gallery
+      </button>
+    </form>
+  </div>
+</AdminLayout>
