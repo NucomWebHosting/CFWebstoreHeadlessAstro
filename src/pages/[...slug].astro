@@ -1,25 +1,32 @@
 ---
 export const prerender = false;
+import { parseJsonColumn } from "../lib/db";
 import BaseLayout from "../components/layout/BaseLayout.astro";
 import RichText from "../components/ui/RichText";
-import ProductGrid from "../components/ui/ProductGrid";
+import GridView from "../components/ui/GridView.astro";
+import ProductFilterGrid from "../components/ui/ProductFilterGrid";
 import ProductCard from "../components/ui/ProductCard";
 import ProductGallery from "../components/ui/ProductGallery";
-import ProductTabs from "../components/ui/ProductTabs";
 import CategoryCard from "../components/ui/CategoryCard";
 import CategoryHeader from "../components/ui/CategoryHeader";
 import Breadcrumb from "../components/ui/Breadcrumb";
 import ContactUsPage from "../components/pages/ContactUsPage.astro";
-import { getCategoryByPermalink, getSubcategories } from "../lib/queries/categories";
+import { getCategoryBySlug, getSubcategories, getCategoryContent, getCategoryAncestors } from "../lib/queries/categories";
 import {
-  getProductByPermalink,
+  getProductBySlug,
   getProductImages,
+  getProductContent,
   getProductsByCategory,
   getRelatedProducts,
 } from "../lib/queries/products";
-import { getPageByPermalink, getPageByUrl } from "../lib/queries/pages";
+import { getPageBySlug } from "../lib/queries/pages";
+import { getEntityBlocksPublic } from "../lib/queries/content-blocks";
+import BlockRenderer from "../components/blocks/BlockRenderer";
+import ProductInfoPanel from "../components/product/ProductInfoPanel";
+import CartDrawer from "../components/cart/CartDrawer";
 import { getSettings } from "../lib/queries/settings";
-import { getImageBaseUrl } from "../lib/types";
+import { getStore } from "../lib/queries/settings";
+import { resolveImg } from "../lib/types";
 import type { ProductListOptions } from "../lib/queries/products";
 
 const { slug } = Astro.params;
@@ -30,100 +37,110 @@ const search   = Astro.url.searchParams.get("q") ?? undefined;
 const saleOnly = Astro.url.searchParams.get("sale") === "1";
 
 // Run all three primary lookups in parallel — we'll use whichever returns a result
-const [settings, category, product] = await Promise.all([
+const [settings, store, category, product] = await Promise.all([
   getSettings(),
-  getCategoryByPermalink(slug),
-  getProductByPermalink(slug),
+  getStore(),
+  getCategoryBySlug(slug),
+  getProductBySlug(slug),
 ]);
-
-const imageBaseUrl = getImageBaseUrl(settings);
-
-function resolveImg(filename: string | null | undefined): string | null {
-  if (!filename) return null;
-  if (filename.startsWith("http")) return filename;
-  return `${imageBaseUrl.replace(/\/$/, "")}/${filename}`;
-}
 
 // ── Category path ─────────────────────────────────────────────────────────────
 let subcategories: Awaited<ReturnType<typeof getSubcategories>> = [];
 let categoryProducts: Awaited<ReturnType<typeof getProductsByCategory>> = [];
+let catContent: Awaited<ReturnType<typeof getCategoryContent>> = null;
 let breadcrumbItems: { label: string; href?: string }[] = [];
 
 if (category) {
-  [subcategories, categoryProducts] = await Promise.all([
-    category.ShowSubCats ? getSubcategories(category.Category_ID) : Promise.resolve([]),
-    getProductsByCategory(category.Category_ID, { sort, search, saleOnly }),
+  [subcategories, categoryProducts, catContent] = await Promise.all([
+    getSubcategories(category.category_id),
+    getProductsByCategory(category.category_id, { sort, search, saleOnly }),
+    getCategoryContent(category.category_id),
   ]);
 
+  // Build breadcrumb by walking parent chain
   breadcrumbItems = [{ label: "Home", href: "/" }];
-  if (category.ParentNames && category.ParentIDs) {
-    const names = category.ParentNames.split(",");
-    const ids   = category.ParentIDs.split(",");
-    names.forEach((name, i) => {
-      if (name.trim()) {
-        breadcrumbItems.push({ label: name.trim(), href: `/category/${ids[i]?.trim()}` });
-      }
-    });
+  const ancestors = await getCategoryAncestors(category.category_id);
+  for (const a of ancestors) {
+    breadcrumbItems.push({ label: a.name, href: `/category/${a.category_id}` });
   }
-  breadcrumbItems.push({ label: category.Name });
+  breadcrumbItems.push({ label: category.name });
 }
+
+// Parse category display_config for grid/card/filter settings
+const catDcRaw = catContent?.display_config;
+const catDc = catDcRaw ? (typeof catDcRaw === "string" ? JSON.parse(catDcRaw) : catDcRaw) : {};
+const cardStyle     = catDc.card_style ?? "default";
+const displayFilter = Number(catDc.filter_display ?? 0);
+const pcolumns      = catDc.pcolumns ? Number(catDc.pcolumns) : undefined;
 
 // ── Product path ──────────────────────────────────────────────────────────────
 let productImages: Awaited<ReturnType<typeof getProductImages>> = [];
 let relatedProducts: Awaited<ReturnType<typeof getRelatedProducts>> = [];
+let prodContent: Awaited<ReturnType<typeof getProductContent>> = null;
 
 if (!category && product) {
-  [productImages, relatedProducts] = await Promise.all([
-    getProductImages(product.Product_ID),
-    getRelatedProducts(product.Product_ID),
+  [productImages, relatedProducts, prodContent] = await Promise.all([
+    getProductImages(product.product_id),
+    getRelatedProducts(product.product_id),
+    getProductContent(product.product_id),
   ]);
 }
 
 // ── CMS page path ─────────────────────────────────────────────────────────────
 const pageData = (!category && !product)
-  ? await getPageByPermalink(slug).then((p) => p ?? getPageByUrl(slug))
+  ? await getPageBySlug(slug)
   : null;
 
 if (!category && !product && !pageData) return new Response(null, { status: 404 });
 
+// ── Fetch blocks for the matched entity ──────────────────────────────────────
+const entityBlocks = category
+  ? await getEntityBlocksPublic("category", category.category_id)
+  : product
+  ? await getEntityBlocksPublic("product", product.product_id)
+  : pageData
+  ? await getEntityBlocksPublic("page", pageData.page_id)
+  : [];
+
 // ── Meta ──────────────────────────────────────────────────────────────────────
 const title = category
-  ? (category.TitleTag ?? category.Name)
+  ? (catContent?.titletag ?? category.name)
   : product
-  ? (product.TitleTag ?? product.Name)
-  : (pageData!.TitleTag ?? pageData!.Page_Title ?? pageData!.Page_Name);
+  ? (prodContent?.titletag ?? product.name)
+  : (pageData!.titletag ?? pageData!.title ?? pageData!.name);
 
 const description = category
-  ? (category.Metadescription ?? "")
+  ? (catContent?.metadescription ?? "")
   : product
-  ? (product.Metadescription ?? "")
-  : (pageData!.Metadescription ?? "");
+  ? (prodContent?.metadescription ?? "")
+  : (pageData!.metadescription ?? "");
 
-const canonical = category?.Permalink
-  ? `${settings?.DomainName?.replace(/\/$/, "") ?? ""}/${category.Permalink}`
-  : product?.Permalink
-  ? `${settings?.DomainName?.replace(/\/$/, "") ?? ""}/${product.Permalink}`
+const canonical = category?.slug
+  ? `/${category.slug}`
+  : product?.slug
+  ? `/${product.slug}`
   : undefined;
 
 // ── Product Schema.org ────────────────────────────────────────────────────────
 const firstImg = productImages[0];
-const schemaImg = resolveImg(firstImg?.Lg_image ?? firstImg?.Md_image ?? firstImg?.Sm_image);
+const schemaImg = resolveImg(firstImg?.lg_image ?? firstImg?.md_image ?? firstImg?.sm_image);
 
+const price = product ? Number(product.price) : 0;
 const productSchema = product
   ? JSON.stringify({
       "@context": "https://schema.org/",
       "@type": "Product",
-      name: product.Name,
+      name: product.name,
       ...(schemaImg ? { image: schemaImg } : {}),
-      ...(product.Long_Desc
-        ? { description: product.Long_Desc.replace(/<[^>]*>/g, " ").trim() }
+      ...(prodContent?.long_desc
+        ? { description: prodContent.long_desc.replace(/<[^>]*>/g, " ").trim() }
         : {}),
-      ...(product.Base_Price > 0
+      ...(price > 0
         ? {
             offers: {
               "@type": "AggregateOffer",
               url: canonical ?? "",
-              lowPrice: product.Base_Price,
+              lowPrice: price,
               priceCurrency: "USD",
             },
           }
@@ -131,24 +148,12 @@ const productSchema = product
     })
   : null;
 
-// Product content tabs
-const productTabs: { label: string; html: string }[] = [];
-if (product) {
-  if (product.Long_Desc2?.trim()) productTabs.push({ label: "Details", html: product.Long_Desc2 });
-  if (product.Long_Desc3?.trim()) productTabs.push({ label: "Specifications", html: product.Long_Desc3 });
-  if (product.Long_Desc4?.trim()) productTabs.push({ label: "Additional Info", html: product.Long_Desc4 });
-}
-
-const onSale = product?.Sale && product.Retail_Price && product.Retail_Price > product.Base_Price;
-const bullets = product
-  ? [
-      product.Bullet_point1,
-      product.Bullet_point2,
-      product.Bullet_point3,
-      product.Bullet_point4,
-      product.Bullet_point5,
-    ].filter(Boolean) as string[]
-  : [];
+// Parse product_data JSON from content for price_retail and sale/hot flags
+let productData: Record<string, unknown> = parseJsonColumn(prodContent?.product_data, {});
+const priceRetail = productData.price_retail ? Number(productData.price_retail) : null;
+const isSale = !!productData.sale;
+const isHot = !!productData.hot;
+const onSale = isSale && priceRetail && priceRetail > Number(product?.price);
 ---
 
 <BaseLayout title={title} description={description} settings={settings} canonical={canonical}>
@@ -164,66 +169,45 @@ const bullets = product
       <Breadcrumb items={breadcrumbItems} />
 
       <div class="mt-4">
-        <CategoryHeader category={category} imageBaseUrl={imageBaseUrl} />
+        <CategoryHeader category={category} />
       </div>
 
-      {subcategories.length > 0 && !category.ProdFirst && (
+      {subcategories.length > 0 && (
         <section class="mb-10">
           <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             {subcategories.map((sub) => (
-              <CategoryCard category={sub} imageBaseUrl={imageBaseUrl} />
+              <CategoryCard category={sub} />
             ))}
           </div>
         </section>
       )}
 
-      {categoryProducts.length > 0 && (
+      {categoryProducts.length > 0 && displayFilter > 0 ? (
         <section class="mb-10">
-          <div class="flex flex-wrap gap-3 mb-4 items-center justify-between">
-            <form method="get" class="flex gap-2">
-              <input
-                type="text" name="q" value={search ?? ""}
-                placeholder="Search products..."
-                class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700">
-                Search
-              </button>
-            </form>
-            <div class="flex items-center gap-3">
-              <span class="text-sm text-gray-500">
-                {categoryProducts.length} product{categoryProducts.length !== 1 ? "s" : ""}
-              </span>
-              <select
-                onchange="window.location.search = '?sort=' + this.value"
-                class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none"
-              >
-                <option value="" selected={!sort}>Sort: Default</option>
-                <option value="price_asc"  selected={sort === "price_asc"}>Price: Low → High</option>
-                <option value="price_desc" selected={sort === "price_desc"}>Price: High → Low</option>
-                <option value="name_asc"   selected={sort === "name_asc"}>Name A–Z</option>
-                <option value="newest"     selected={sort === "newest"}>Newest</option>
-                <option value="popular"    selected={sort === "popular"}>Most Popular</option>
-              </select>
-            </div>
-          </div>
-          <ProductGrid products={categoryProducts} imageBaseUrl={imageBaseUrl} />
+          <ProductFilterGrid
+            products={categoryProducts}
+            cardStyle={cardStyle}
+            displayFilter={displayFilter}
+            pcolumns={pcolumns}
+            client:load
+          />
         </section>
-      )}
+      ) : categoryProducts.length > 0 ? (
+        <section class="mb-10">
+          <GridView products={categoryProducts} cardStyle={cardStyle} />
+        </section>
+      ) : null}
 
       {categoryProducts.length === 0 && subcategories.length === 0 && (
         <p class="text-gray-400 py-12 text-center">No products found in this category.</p>
       )}
 
-      {subcategories.length > 0 && category.ProdFirst && (
-        <section class="mt-10">
-          <h2 class="text-lg font-semibold mb-4 text-gray-700">Browse subcategories</h2>
-          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {subcategories.map((sub) => (
-              <CategoryCard category={sub} imageBaseUrl={imageBaseUrl} />
-            ))}
-          </div>
-        </section>
+      {entityBlocks.length > 0 && (
+        <div class="mt-8 space-y-8">
+          {entityBlocks.map((block) => (
+            <BlockRenderer client:load block={block} />
+          ))}
+        </div>
       )}
     </div>
   )}
@@ -231,83 +215,48 @@ const bullets = product
   {/* ── Product page ── */}
   {!category && product && (
     <div class="container mx-auto px-4 py-8 max-w-7xl">
-      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: product.Name }]} />
+      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: product.name }]} />
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-10 mt-6">
         <div>
           <ProductGallery
             images={productImages}
-            productName={product.Name}
-            imageBaseUrl={imageBaseUrl}
+            productName={product.name}
             client:load
           />
         </div>
 
         <div>
-          <h1 class="text-3xl font-bold text-gray-900 mb-2 leading-tight">{product.Name}</h1>
+          <h1 class="text-3xl font-bold text-gray-900 mb-2 leading-tight">{product.name}</h1>
 
-          {product.SKU && (
-            <p class="text-sm text-gray-400 mb-4">SKU: {product.SKU}</p>
-          )}
-
-          {(product.Sale || product.Hot) && (
-            <div class="flex gap-2 mb-4">
-              {product.Sale && (
-                <span class="text-xs bg-red-100 text-red-700 px-2.5 py-1 rounded-full font-semibold uppercase tracking-wide">Sale</span>
-              )}
-              {product.Hot && (
-                <span class="text-xs bg-orange-100 text-orange-700 px-2.5 py-1 rounded-full font-semibold uppercase tracking-wide">Hot</span>
-              )}
-            </div>
-          )}
-
-          <div class="flex items-baseline gap-3 mb-5">
-            <span class="text-3xl font-bold text-gray-900">${product.Base_Price.toFixed(2)}</span>
-            {onSale && (
-              <span class="text-lg text-gray-400 line-through">${product.Retail_Price!.toFixed(2)}</span>
-            )}
-          </div>
-
-          {product.Availability ? (
-            <p class="text-sm text-blue-600 font-medium mb-4">{product.Availability}</p>
-          ) : product.NumInStock > 0 ? (
-            <p class="text-sm text-green-600 font-medium mb-4">&#10003; In Stock</p>
-          ) : (
-            <div class="bg-red-700 text-white text-center font-bold text-2xl rounded-lg px-6 py-5 mb-6">
-              Out of Stock
-            </div>
-          )}
-
-          {bullets.length > 0 && (
-            <ul class="space-y-2 mb-6">
-              {bullets.map((b) => (
-                <li class="flex items-start gap-2 text-sm text-gray-700">
-                  <span class="text-blue-500 mt-0.5 flex-shrink-0">&#10003;</span>
-                  {b}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {product.Short_Desc && (
-            <div class="text-sm text-gray-600 border-t border-gray-100 pt-4 mt-4">
-              <RichText html={product.Short_Desc} />
-            </div>
-          )}
+          <ProductInfoPanel
+            productId={product.product_id}
+            price={Number(product.price)}
+            priceRetail={priceRetail}
+            isSale={isSale}
+            isHot={isHot}
+            onSale={!!onSale}
+            shortDesc={prodContent?.short_desc ?? null}
+            client:load
+          />
         </div>
       </div>
 
-      {product.Long_Desc && (
+      {prodContent?.long_desc && (
         <div class="mt-12 border-t border-gray-200 pt-8">
           <h2 class="text-xl font-semibold mb-4 text-gray-900">Product Details</h2>
           <div class="prose max-w-none text-gray-700">
-            <RichText html={product.Long_Desc} />
+            <RichText html={prodContent.long_desc} />
           </div>
         </div>
       )}
 
-      {productTabs.length > 0 && (
-        <ProductTabs tabs={productTabs} client:load />
+      {entityBlocks.length > 0 && (
+        <div class="mt-12 space-y-8">
+          {entityBlocks.map((block) => (
+            <BlockRenderer client:load block={block} />
+          ))}
+        </div>
       )}
 
       {relatedProducts.length > 0 && (
@@ -315,7 +264,7 @@ const bullets = product
           <h2 class="text-xl font-semibold mb-6 text-gray-900">You May Also Like</h2>
           <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {relatedProducts.map((p) => (
-              <ProductCard product={p} imageBaseUrl={imageBaseUrl} />
+              <ProductCard product={p} />
             ))}
           </div>
         </div>
@@ -326,19 +275,30 @@ const bullets = product
   {/* ── CMS page ── */}
   {!category && !product && pageData && (
     <div class="container mx-auto px-4 py-10">
-      {pageData.Sm_Image && (
+      {pageData.sm_image && (
         <img
-          src={pageData.Sm_Image}
-          alt={pageData.Page_Name}
+          src={resolveImg(pageData.sm_image)}
+          alt={pageData.name}
           class="w-full max-h-96 object-cover rounded-xl mb-8"
         />
       )}
-      <h1 class="text-4xl font-bold mb-8">{pageData.Page_Title ?? pageData.Page_Name}</h1>
-      {pageData.Custom_include === "contact-us" ? (
-        <ContactUsPage settings={settings} />
+      <h1 class="text-4xl font-bold mb-8">{pageData.title ?? pageData.name}</h1>
+      {pageData.custom_include === "contact-us" ? (
+        <ContactUsPage store={store} />
+      ) : entityBlocks.length > 0 ? (
+        <div class="space-y-8">
+          {entityBlocks.map((block) => (
+            <BlockRenderer client:load block={block} />
+          ))}
+        </div>
       ) : (
-        pageData.PageText && <RichText html={pageData.PageText} />
+        pageData.long_desc && <RichText html={pageData.long_desc} />
       )}
     </div>
+  )}
+
+  {/* Slide-out cart drawer (product pages) */}
+  {!category && product && (
+    <CartDrawer client:load />
   )}
 </BaseLayout>

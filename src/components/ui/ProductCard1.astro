@@ -1,0 +1,69 @@
+---
+import type { ProductRow } from "../../lib/types";
+import { resolveImg } from "../../lib/image-utils";
+
+interface Props {
+  product: ProductRow;
+}
+
+const { product } = Astro.props;
+
+const href = product.slug ? `/${product.slug}` : `/product/${product.product_id}`;
+const image = resolveImg(product.sm_image ?? null);
+const hoverImage = resolveImg(product.sm_image_hover ?? null);
+const hasOldPrice = !!product.is_on_sale && !!product.price_retail && product.price_retail > product.price;
+const salePercent = hasOldPrice
+  ? Math.round((1 - product.price / product.price_retail!) * 100)
+  : 0;
+---
+
+<div class:list={["card-product", { "on-sale": product.is_on_sale }]}>
+  <div class="card-product-wrapper">
+    <a href={href} class="product-img">
+      {image ? (
+        <img
+          class="lazyload img-product"
+          src={image}
+          alt={product.name}
+          width={600}
+          height={800}
+          loading="lazy"
+        />
+      ) : (
+        <div class="w-full h-full flex items-center justify-center text-gray-200 bg-gray-50" style="aspect-ratio:3/4;">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </div>
+      )}
+      {hoverImage && (
+        <img
+          class="lazyload img-hover"
+          src={hoverImage}
+          alt={product.name}
+          width={600}
+          height={800}
+          loading="lazy"
+        />
+      )}
+    </a>
+
+    {hasOldPrice && (
+      <div class="on-sale-wrap">
+        <span class="on-sale-item">-{salePercent}%</span>
+      </div>
+    )}
+  </div>
+
+  <div class="card-product-info">
+    <a href={href} class="title link">
+      {product.name}
+    </a>
+    <span class="price">
+      {hasOldPrice && (
+        <span class="old-price">${product.price_retail!.toFixed(2)}</span>
+      )}{" "}
+      ${Number(product.price).toFixed(2)}
+    </span>
+  </div>
+</div>

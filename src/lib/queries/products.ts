@@ -1,5 +1,5 @@
 import { query } from "../db";
-import type { ProductRow, ProductImageRow } from "../types";
+import type { ProductRow, ProductImageRow, ProductContentRow } from "../types";
 
 type SortOption = "price_asc" | "price_desc" | "name_asc" | "name_desc" | "newest" | "popular";
 
@@ -16,13 +16,13 @@ export interface ProductListOptions {
 // Maps validated enum values to safe SQL — never interpolate raw user input
 function buildOrderBy(sort: SortOption | undefined): string {
   switch (sort) {
-    case "price_asc":  return "P.Base_Price ASC";
-    case "price_desc": return "P.Base_Price DESC";
-    case "name_asc":   return "P.Name ASC";
-    case "name_desc":  return "P.Name DESC";
-    case "newest":     return "P.DateAdded DESC";
-    case "popular":    return "P.Popularity DESC";
-    default:           return "P.Priority ASC, P.Name ASC";
+    case "price_asc":  return "P.price ASC";
+    case "price_desc": return "P.price DESC";
+    case "name_asc":   return "P.name ASC";
+    case "name_desc":  return "P.name DESC";
+    case "newest":     return "P.date_created DESC";
+    case "popular":    return "P.priority DESC";
+    default:           return "P.priority ASC, P.name ASC";
   }
 }
 
@@ -30,37 +30,54 @@ export async function getProductsByCategory(
   categoryId: number,
   opts: ProductListOptions = {}
 ): Promise<ProductRow[]> {
-  const conditions: string[] = ["PC.Category_ID = @category_id", "P.Display = 1"];
+  const conditions: string[] = ["PC.category_id = :category_id", "P.display = 1"];
   const params: Record<string, string | number | boolean | null> = { category_id: categoryId };
 
   if (opts.search) {
-    conditions.push("(P.Name LIKE @search OR P.SKU LIKE @search OR P.Short_Desc LIKE @search)");
+    conditions.push("P.name LIKE :search");
     params.search = `%${opts.search}%`;
   }
   if (opts.minPrice !== undefined) {
-    conditions.push("P.Base_Price >= @min_price");
+    conditions.push("P.price >= :min_price");
     params.min_price = opts.minPrice;
   }
   if (opts.maxPrice !== undefined) {
-    conditions.push("P.Base_Price <= @max_price");
+    conditions.push("P.price <= :max_price");
     params.max_price = opts.maxPrice;
   }
-  if (opts.saleOnly)  conditions.push("P.Sale = 1");
-  if (opts.hotOnly)   conditions.push("P.Hot = 1");
-  if (opts.newOnly)   conditions.push("P.DateAdded >= DATEADD(day, -30, GETDATE())");
+  if (opts.saleOnly)  conditions.push("JSON_EXTRACT(pcon.product_data, '$.sale') = 1");
+  if (opts.hotOnly)   conditions.push("JSON_EXTRACT(pcon.product_data, '$.hot') = 1");
+  if (opts.newOnly)   conditions.push("P.date_created >= DATE_SUB(NOW(), INTERVAL 30 DAY)");
 
   const where = conditions.join(" AND ");
   const orderBy = buildOrderBy(opts.sort);
 
   return query<ProductRow>(
-    `SELECT P.*, img.Sm_image
-     FROM Products P
-     INNER JOIN Product_Category PC ON P.Product_ID = PC.Product_ID
-     OUTER APPLY (
-       SELECT TOP 1 Sm_image FROM Product_Images
-       WHERE Product_ID = P.Product_ID
-       ORDER BY Product_Image_ID ASC
-     ) img
+    `SELECT P.product_id, P.name, P.price, P.price_wholesale, P.display, P.priority,
+            P.account_id AS vendor_id, P.mfg_account_id AS brand_id, P.prodtype_id, P.slug, P.date_created, P.last_updated,
+            img.md_image AS sm_image,
+            img2.md_image AS sm_image_hover,
+            IFNULL(JSON_EXTRACT(pcon.product_data, '$.sale') = 1, 0) AS is_on_sale,
+            IFNULL(JSON_EXTRACT(pcon.product_data, '$.hot') = 1, 0)  AS is_hot,
+            CAST(JSON_EXTRACT(pcon.product_data, '$.price_retail') AS DECIMAL(10,2)) AS price_retail,
+            pcon.short_desc,
+            brand.account_name AS brand_name
+     FROM product P
+     INNER JOIN product_category_product PC ON P.product_id = PC.product_id
+     LEFT JOIN product_content pcon ON pcon.product_id = P.product_id
+     LEFT JOIN account brand ON brand.account_id = P.mfg_account_id
+     LEFT JOIN LATERAL (
+       SELECT md_image FROM product_images
+       WHERE product_id = P.product_id
+       ORDER BY product_image_id ASC
+       LIMIT 1
+     ) img ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT md_image FROM product_images
+       WHERE product_id = P.product_id
+       ORDER BY product_image_id ASC
+       LIMIT 1 OFFSET 1
+     ) img2 ON TRUE
      WHERE ${where}
      ORDER BY ${orderBy}`,
     params
@@ -69,16 +86,20 @@ export async function getProductsByCategory(
 
 export async function getProductById(id: number): Promise<ProductRow | null> {
   const rows = await query<ProductRow>(
-    "SELECT * FROM Products WHERE Product_ID = @id AND Display = 1",
+    `SELECT product_id, name, price, price_wholesale, display, priority,
+            account_id AS vendor_id, mfg_account_id AS brand_id, prodtype_id, slug, date_created, last_updated
+     FROM product WHERE product_id = :id AND display = 1`,
     { id }
   );
   return rows[0] ?? null;
 }
 
-export async function getProductByPermalink(permalink: string): Promise<ProductRow | null> {
+export async function getProductBySlug(slug: string): Promise<ProductRow | null> {
   const rows = await query<ProductRow>(
-    "SELECT * FROM Products WHERE (Permalink = @permalink OR Permalink = @permalink_trail) AND Display = 1",
-    { permalink, permalink_trail: permalink.replace(/\/$/, "") + "/" }
+    `SELECT product_id, name, price, price_wholesale, display, priority,
+            account_id AS vendor_id, mfg_account_id AS brand_id, prodtype_id, slug, date_created, last_updated
+     FROM product WHERE (slug = :slug OR slug = :slug_trail) AND display = 1`,
+    { slug, slug_trail: slug.replace(/\/$/, "") + "/" }
   );
   return rows[0] ?? null;
 }
@@ -110,14 +131,14 @@ export function parsePassParam(passparam: string | null): FeaturedProductOptions
 }
 
 export async function getFeaturedProducts(opts: FeaturedProductOptions = {}): Promise<ProductRow[]> {
-  const conditions = ["P.Display = 1"];
+  const conditions = ["P.display = 1"];
   const params: Record<string, string | number | boolean | null> = {};
 
-  if (opts.hot)      conditions.push("P.Hot = 1");
-  if (opts.saleOnly) conditions.push("P.Sale = 1");
-  if (opts.newOnly)  conditions.push("P.DateAdded >= DATEADD(day, -30, GETDATE())");
+  if (opts.hot)      conditions.push("JSON_EXTRACT(pcon.product_data, '$.hot') = 1");
+  if (opts.saleOnly) conditions.push("JSON_EXTRACT(pcon.product_data, '$.sale') = 1");
+  if (opts.newOnly)  conditions.push("P.date_created >= DATE_SUB(NOW(), INTERVAL 30 DAY)");
   if (opts.categoryId !== undefined) {
-    conditions.push("EXISTS (SELECT 1 FROM Product_Category PC WHERE PC.Product_ID = P.Product_ID AND PC.Category_ID = @category_id)");
+    conditions.push("EXISTS (SELECT 1 FROM product_category_product PC WHERE PC.product_id = P.product_id AND PC.category_id = :category_id)");
     params.category_id = opts.categoryId;
   }
 
@@ -125,42 +146,115 @@ export async function getFeaturedProducts(opts: FeaturedProductOptions = {}): Pr
   const where = conditions.join(" AND ");
 
   return query<ProductRow>(
-    `SELECT TOP ${limit} P.*, img.Sm_image
-     FROM Products P
-     OUTER APPLY (
-       SELECT TOP 1 Sm_image FROM Product_Images
-       WHERE Product_ID = P.Product_ID
-       ORDER BY Product_Image_ID ASC
-     ) img
+    `SELECT P.product_id, P.name, P.price, P.price_wholesale, P.display, P.priority,
+            P.account_id AS vendor_id, P.mfg_account_id AS brand_id, P.prodtype_id, P.slug, P.date_created, P.last_updated,
+            img.md_image AS sm_image,
+            img2.md_image AS sm_image_hover,
+            IFNULL(JSON_EXTRACT(pcon.product_data, '$.sale') = 1, 0) AS is_on_sale,
+            IFNULL(JSON_EXTRACT(pcon.product_data, '$.hot') = 1, 0)  AS is_hot,
+            CAST(JSON_EXTRACT(pcon.product_data, '$.price_retail') AS DECIMAL(10,2)) AS price_retail,
+            pcon.short_desc
+     FROM product P
+     LEFT JOIN product_content pcon ON pcon.product_id = P.product_id
+     LEFT JOIN LATERAL (
+       SELECT md_image FROM product_images
+       WHERE product_id = P.product_id
+       ORDER BY product_image_id ASC
+       LIMIT 1
+     ) img ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT md_image FROM product_images
+       WHERE product_id = P.product_id
+       ORDER BY product_image_id ASC
+       LIMIT 1 OFFSET 1
+     ) img2 ON TRUE
      WHERE ${where}
-     ORDER BY P.Priority ASC, P.Popularity DESC`,
+     ORDER BY P.priority ASC
+     LIMIT ${limit}`,
     params
   );
 }
 
 export async function getProductImages(productId: number): Promise<ProductImageRow[]> {
   return query<ProductImageRow>(
-    "SELECT * FROM Product_Images WHERE Product_ID = @product_id ORDER BY Product_Image_ID ASC",
+    "SELECT * FROM product_images WHERE product_id = :product_id ORDER BY product_image_id ASC",
     { product_id: productId }
   );
 }
 
+export interface ProductVideoPublic {
+  video_id: number;
+  product_id: number;
+  name: string | null;
+  caption: string | null;
+  poster: string | null;
+  video_external: string | null;
+  video_mp4: string | null;
+  video_webm: string | null;
+  video_width: number;
+  video_height: number;
+  priority: number;
+}
+
+export async function getProductVideos(productId: number): Promise<ProductVideoPublic[]> {
+  return query<ProductVideoPublic>(
+    `SELECT video_id, product_id, name, caption, poster,
+            video_external, video_mp4, video_webm,
+            video_width, video_height, priority
+     FROM   product_video WHERE product_id = :productId
+     ORDER  BY priority ASC`,
+    { productId }
+  );
+}
+
+export async function getProductContent(productId: number): Promise<ProductContentRow | null> {
+  const rows = await query<ProductContentRow>(
+    "SELECT * FROM product_content WHERE product_id = :product_id",
+    { product_id: productId }
+  );
+  return rows[0] ?? null;
+}
+
+export async function getProductMarketing(productId: number): Promise<ProductContentRow | null> {
+  const rows = await query<ProductContentRow>(
+    "SELECT * FROM product_content WHERE product_id = :product_id",
+    { product_id: productId }
+  );
+  return rows[0] ?? null;
+}
+
 export async function getRelatedProducts(productId: number): Promise<ProductRow[]> {
   return query<ProductRow>(
-    `SELECT TOP 8 P.*, img.Sm_image
-     FROM Products P
-     INNER JOIN Product_Category PC ON P.Product_ID = PC.Product_ID
-     OUTER APPLY (
-       SELECT TOP 1 Sm_image FROM Product_Images
-       WHERE Product_ID = P.Product_ID
-       ORDER BY Product_Image_ID ASC
-     ) img
-     WHERE PC.Category_ID IN (
-       SELECT TOP 1 Category_ID FROM Product_Category WHERE Product_ID = @product_id
+    `SELECT P.product_id, P.name, P.price, P.price_wholesale, P.display, P.priority,
+            P.account_id AS vendor_id, P.mfg_account_id AS brand_id, P.prodtype_id, P.slug, P.date_created, P.last_updated,
+            img.md_image AS sm_image,
+            img2.md_image AS sm_image_hover,
+            IFNULL(JSON_EXTRACT(pcon.product_data, '$.sale') = 1, 0) AS is_on_sale,
+            IFNULL(JSON_EXTRACT(pcon.product_data, '$.hot') = 1, 0)  AS is_hot,
+            CAST(JSON_EXTRACT(pcon.product_data, '$.price_retail') AS DECIMAL(10,2)) AS price_retail,
+            pcon.short_desc
+     FROM product P
+     INNER JOIN product_category_product PC ON P.product_id = PC.product_id
+     LEFT JOIN product_content pcon ON pcon.product_id = P.product_id
+     LEFT JOIN LATERAL (
+       SELECT md_image FROM product_images
+       WHERE product_id = P.product_id
+       ORDER BY product_image_id ASC
+       LIMIT 1
+     ) img ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT md_image FROM product_images
+       WHERE product_id = P.product_id
+       ORDER BY product_image_id ASC
+       LIMIT 1 OFFSET 1
+     ) img2 ON TRUE
+     WHERE PC.category_id = (
+       SELECT category_id FROM product_category_product WHERE product_id = :product_id ORDER BY category_id ASC LIMIT 1
      )
-     AND P.Product_ID != @product_id
-     AND P.Display = 1
-     ORDER BY P.Priority ASC, P.Popularity DESC`,
+     AND P.product_id != :product_id
+     AND P.display = 1
+     ORDER BY P.priority ASC
+     LIMIT 8`,
     { product_id: productId }
   );
 }

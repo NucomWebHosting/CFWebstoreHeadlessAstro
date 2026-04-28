@@ -1,14 +1,15 @@
 ---
 export const prerender = false;
 import BaseLayout from "../../components/layout/BaseLayout.astro";
-import ProductGrid from "../../components/ui/ProductGrid";
+import GridView from "../../components/ui/GridView.astro";
+import ProductFilterGrid from "../../components/ui/ProductFilterGrid";
 import CategoryCard from "../../components/ui/CategoryCard";
 import CategoryHeader from "../../components/ui/CategoryHeader";
 import Breadcrumb from "../../components/ui/Breadcrumb";
-import { getCategoryById, getSubcategories } from "../../lib/queries/categories";
+import { getCategoryById, getSubcategories, getCategoryContent, getCategoryAncestors } from "../../lib/queries/categories";
 import { getProductsByCategory } from "../../lib/queries/products";
 import { getSettings } from "../../lib/queries/settings";
-import { getImageBaseUrl } from "../../lib/types";
+
 import type { ProductListOptions } from "../../lib/queries/products";
 
 const { id } = Astro.params;
@@ -22,109 +23,72 @@ const sort = Astro.url.searchParams.get("sort") as ProductListOptions["sort"] ??
 const search = Astro.url.searchParams.get("q") ?? undefined;
 const saleOnly = Astro.url.searchParams.get("sale") === "1";
 
-const [category, subcategories, products, settings] = await Promise.all([
+const [category, subcategories, products, settings, catContent] = await Promise.all([
   getCategoryById(categoryId),
   getSubcategories(categoryId),
   getProductsByCategory(categoryId, { sort, search, saleOnly }),
   getSettings(),
+  getCategoryContent(categoryId),
 ]);
 
 if (!category) {
   return new Response(null, { status: 404 });
 }
 
-const imageBaseUrl = getImageBaseUrl(settings);
-
-// Build breadcrumb from ParentNames/ParentIDs stored in the DB
-const breadcrumbItems = [{ label: "Home", href: "/" }];
-if (category.ParentNames && category.ParentIDs) {
-  const names = category.ParentNames.split(",");
-  const ids = category.ParentIDs.split(",");
-  names.forEach((name, i) => {
-    if (name.trim()) {
-      breadcrumbItems.push({ label: name.trim(), href: `/category/${ids[i]?.trim()}` });
-    }
-  });
+// Build breadcrumb by walking parent chain
+const breadcrumbItems: { label: string; href?: string }[] = [{ label: "Home", href: "/" }];
+const ancestors = await getCategoryAncestors(category.category_id);
+for (const a of ancestors) {
+  breadcrumbItems.push({ label: a.name, href: `/category/${a.category_id}` });
 }
-breadcrumbItems.push({ label: category.Name });
+breadcrumbItems.push({ label: category.name });
+
+// Parse display_config for grid/card/filter settings
+const dcRaw = catContent?.display_config;
+const dc = dcRaw ? (typeof dcRaw === "string" ? JSON.parse(dcRaw) : dcRaw) : {};
+const cardStyle     = dc.card_style ?? "default";
+const displayFilter = Number(dc.filter_display ?? 0);
+const pcolumns      = dc.pcolumns ? Number(dc.pcolumns) : undefined;
 ---
 
 <BaseLayout
-  title={category.Name}
-  description={category.Metadescription ?? ""}
+  title={catContent?.titletag ?? category.name}
+  description={catContent?.metadescription ?? ""}
   settings={settings}
 >
   <div class="container mx-auto px-4 py-8">
     <Breadcrumb items={breadcrumbItems} />
 
     <div class="mt-4">
-      <CategoryHeader category={category} imageBaseUrl={imageBaseUrl} />
+      <CategoryHeader category={category} />
     </div>
 
-    <!-- Subcategories BEFORE products (ProdFirst = false) -->
-    {subcategories.length > 0 && !category.ProdFirst && (
+    <!-- Subcategories -->
+    {subcategories.length > 0 && (
       <section class="mb-10">
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           {subcategories.map((sub) => (
-            <CategoryCard category={sub} imageBaseUrl={imageBaseUrl} />
+            <CategoryCard category={sub} />
           ))}
         </div>
       </section>
     )}
 
     <!-- Products -->
-    {products.length > 0 && (
-      <section class="mb-10">
-        <div class="flex flex-wrap gap-3 mb-4 items-center justify-between">
-          <form method="get" class="flex gap-2">
-            <input
-              type="text"
-              name="q"
-              value={search ?? ""}
-              placeholder="Search products..."
-              class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button type="submit" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700">
-              Search
-            </button>
-          </form>
-
-          <div class="flex items-center gap-3">
-            <span class="text-sm text-gray-500">
-              {products.length} product{products.length !== 1 ? "s" : ""}
-            </span>
-            <select
-              onchange="window.location.search = '?sort=' + this.value"
-              class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none"
-            >
-              <option value="" selected={!sort}>Sort: Default</option>
-              <option value="price_asc" selected={sort === "price_asc"}>Price: Low → High</option>
-              <option value="price_desc" selected={sort === "price_desc"}>Price: High → Low</option>
-              <option value="name_asc" selected={sort === "name_asc"}>Name A–Z</option>
-              <option value="newest" selected={sort === "newest"}>Newest</option>
-              <option value="popular" selected={sort === "popular"}>Most Popular</option>
-            </select>
-          </div>
-        </div>
-
-        <ProductGrid products={products} imageBaseUrl={imageBaseUrl} />
-      </section>
-    )}
+    {products.length > 0 && displayFilter > 0 ? (
+      <ProductFilterGrid
+        products={products}
+        cardStyle={cardStyle}
+        displayFilter={displayFilter}
+        pcolumns={pcolumns}
+        client:load
+      />
+    ) : products.length > 0 ? (
+      <GridView products={products} cardStyle={cardStyle} />
+    ) : null}
 
     {products.length === 0 && subcategories.length === 0 && (
       <p class="text-gray-400 py-12 text-center">No products found in this category.</p>
-    )}
-
-    <!-- Subcategories AFTER products (ProdFirst = true) -->
-    {subcategories.length > 0 && category.ProdFirst && (
-      <section class="mt-10">
-        <h2 class="text-lg font-semibold mb-4 text-gray-700">Browse subcategories</h2>
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          {subcategories.map((sub) => (
-            <CategoryCard category={sub} imageBaseUrl={imageBaseUrl} />
-          ))}
-        </div>
-      </section>
     )}
   </div>
 </BaseLayout>

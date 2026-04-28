@@ -1,274 +1,92 @@
-// TypeScript interfaces matching MSSQL schema column names exactly (mixed case)
+import { parseJsonColumn } from "./db";
+
+// TypeScript interfaces matching MySQL schema column names (lowercase)
 
 export interface PageRow {
-  Page_ID: number;
-  Page_Name: string;
-  Page_Title: string | null;
-  PageText: string | null;
-  Page_URL: string | null;
-  Short_desc: string | null;
-  Sm_Image: string | null;
-  Lg_Image: string | null;
-  Display: boolean;
-  Display_Menu: boolean;
-  Parent_ID: number | null;
-  AccessKey: number | null;
-  Metadescription: string | null;
-  Keywords: string | null;
-  TitleTag: string | null;
-  Permalink: string | null;
-  CatCore_ID: number | null;
-  Custom_include: string | null;
+  page_id: number;
+  page_url: string | null;
+  theme_id: number | null;
+  passparam: string | null;
+  display: boolean;
+  action: string | null;
+  name: string;
+  title: string | null;
+  sm_image: string | null;
+  sm_image_width: number | null;
+  sm_image_height: number | null;
+  lg_image: string | null;
+  lg_image_width: number | null;
+  lg_image_height: number | null;
+  short_desc: string | null;
+  long_desc: string | null;
+  display_textfirst: boolean | null;
+  system: boolean | null;
+  href_attributes: string | null;
+  accesskey: number | null;
+  priority: number;
+  parent_id: number | null;
+  title_priority: number | null;
+  metadescription: string | null;
+  keywords: string | null;
+  titletag: string | null;
+  slug: string | null;
+  custom_include: string | null;
+  date_created: Date | null;
+  last_updated: Date | null;
 }
 
 export interface CategoryRow {
-  Category_ID: number;
-  Name: string;
-  Parent_ID: number;
-  Short_Desc: string | null;
-  Long_Desc: string | null;
-  Sm_Image: string | null;
-  Lg_image: string | null;
-  Lg_Title: string | null;          // title image (overrides text title when set)
-  Lg_image_position: number;        // 0=left, 1=right, 2=top
-  ShowCatHeader: boolean;           // show/hide the header section
-  ShowSubCats: boolean;             // show/hide subcategory grid
-  ProdFirst: boolean;               // true = products above subcats, false = subcats first
-  ShowProdLeftColumn: boolean;      // sidebar filter column
-  Page_URL: string | null;
-  Display: boolean;
-  Display_Menu: boolean;
-  Priority: number;
-  ParentIDs: string | null;
-  ParentNames: string | null;
-  Permalink: string | null;
-  Metadescription: string | null;
-  Keywords: string | null;
-  TitleTag: string | null;
-  CatCore_ID: number;
-  AccessKey: number | null;
-  Highlight: boolean | null;
-  Sale: boolean | null;
-  Passparam: string | null;
-  Specialty_Content: string | null;
-  Display_Mobile: boolean | null;
-  Text_position: number | null;
-  Gallery_position: number | null;
-  Category_image_height: number | null;
-  CColumns: number | null;
-  PColumns: number | null;
-  Showbrands: boolean | null;
-  Showprodfilter: boolean | null;
-  Showprodtype: boolean | null;
-  All_products: boolean | null;
-  Random: boolean | null;
-  Product_show_Details: number | null;
-  Product_show_shortDesc: number | null;
-  Product_show_orderBox: number | null;
-  Product_show_ratings: number | null;
-  Product_show_Icons: number | null;
-  Product_show_sku: number | null;
-  Product_show_customFields: number | null;
-  Product_image_height: number | null;
-  Dropdownlabel: string | null;
-  SearchCriteria: string | null;
-  MM_tab: boolean | null;
-  MM_width: string | null;
-  MM_flyout_width: string | null;
-  MM_columns: number | null;
-  MM_subcats: boolean | null;
-  MM_percolumn: string | null;
-  MM_productID: number | null;
-  MM_sm_image: string | null;
-  MM_show_sm_image: boolean | null;
-  MM_link: string | null;
-  MM_title: string | null;
-  MM_short_desc: string | null;
-  MM_dummy_title: string | null;
+  category_id: number;
+  name: string;
+  parent_id: number;
+  theme_id: number | null;
+  slug: string | null;
+  display: boolean;
+  priority: number;
+  date_created: Date | null;
+  last_updated: Date | null;
 }
 
 export interface ProductRow {
-  Product_ID: number;
-  Name: string;
-  SKU: string | null;
-  UPC: string | null;
-  ALU: string | null;
-  Short_Desc: string | null;
-  Long_Desc: string | null;
-  Long_Desc2: string | null;
-  Long_Desc3: string | null;
-  Long_Desc4: string | null;
-  Bullet_point1: string | null;
-  Bullet_point2: string | null;
-  Bullet_point3: string | null;
-  Bullet_point4: string | null;
-  Bullet_point5: string | null;
-  Base_Price: number;
-  Retail_Price: number | null;
-  Wholesale: number | null;
-  MAP_Price: number | null;
-  NumInStock: number;
-  Display: boolean;
-  Sale: boolean;
-  Hot: boolean;
-  Priority: number;
-  Popularity: number;
-  DateAdded: Date | null;
-  Weight: number | null;
-  Permalink: string | null;
-  Metadescription: string | null;
-  Keywords: string | null;
-  TitleTag: string | null;
-  Availability: string | null;
-  Sm_image?: string | null;  // joined from Product_Images (first image thumbnail)
-  Prod_Type: string | null;
-  ProdType_ID: number | null;
-  mfg_account_id: number | null;
-  Highlight: boolean | null;
-  POSonly: boolean | null;
-  Reviewable: boolean | null;
-  sell_on_Amazon: boolean | null;
-  Long_Desc_Position: number | null;
-  gallery_image_style: number | null;
-  Content_style: number | null;
-  Hazardous: boolean | null;
-  PackageOnly: boolean | null;
-  Passparam: string | null;
-  Long_Desc_Title: string | null;
-  Long_Desc2_Title: string | null;
-  Long_Desc3_Title: string | null;
-  Long_Desc4_Title: string | null;
-  color_id: number | null;
-  Highlight2: boolean | null;
-  QuickCheckoutOnly: boolean | null;
-  FAQ_list: string | null;
-  RelatedProducts_title: string | null;
+  product_id: number;
+  name: string;
+  price: number;
+  price_wholesale: number;
+  display: boolean;
+  priority: number;
+  vendor_id: number;
+  brand_id: number;
+  prodtype_id: number;
+  slug: string | null;
+  date_created: Date | null;
+  last_updated: Date | null;
+  sm_image?: string | null;       // joined from product_images (first image, md size)
+  sm_image_hover?: string | null;  // 2nd product image for hover effect (md size)
+  is_on_sale?: boolean;            // from product_data.sale JSON
+  is_hot?: boolean;                // from product_data.hot JSON
+  price_retail?: number | null;    // compare/original price from product_data
+  short_desc?: string | null;      // from product_content
+  brand_name?: string | null;      // from account table (mfg_account_id)
+}
+
+export interface ProductContentRow {
+  product_id: number;
+  short_desc: string | null;
+  long_desc: string | null;
+  metadescription: string | null;
+  keywords: string | null;
+  titletag: string | null;
+  product_data: string | null;  // JSON
 }
 
 export interface ProductImageRow {
-  Product_Image_ID: number;
-  Product_ID: number;
-  Th_image: string | null;
-  Sm_image: string | null;
-  Md_image: string | null;
-  Lg_image: string | null;
-}
-
-export interface SettingsRow {
-  SettingID: number;
-  // Site Identity
-  SiteName: string | null;
-  SiteNameAB: string | null;
-  DomainName: string | null;
-  DefaultImages: string | null;  // e.g. "/images" — prepended to image filenames
-  Logo_desktop: string | null;
-  Logo_mobile: string | null;
-  Logo_print: string | null;
-  // Contact
-  Phone: string | null;
-  Phone2: string | null;
-  Phone3: string | null;
-  Phone4: string | null;
-  Phone5: string | null;
-  Address1: string | null;
-  Address2: string | null;
-  City: string | null;
-  State: string | null;
-  Postalcode: string | null;
-  HomeCountry: string | null;
-  Email: string | null;
-  MerchantEmail: string | null;
-  Webmaster: string | null;
-  Merchant: string | null;      // custom text printed on order receipts
-  GoogleMapEmbed: string | null;
-  // SMTP
-  Email_Server: string | null;
-  Email_User: string | null;
-  Email_Pass: string | null;
-  Email_Port: number | null;
-  Email_useSSL: boolean | null;
-  Email_useTLS: boolean | null;
-  // SEO
-  metatitle: string | null;
-  metadescription: string | null;
-  Keywords: string | null;
-  og_image: string | null;
-  // Google
-  googleapikey: string | null;
-  googletrackingcode: string | null;
-  google_site_verification: string | null;
-  // Social / external logins
-  GoogleClientID: string | null;
-  FacebookAppID: string | null;
-  AppleAppID: string | null;
-  // Pinterest
-  pinteresttagid: string | null;
-  pinterest_site_verification: string | null;
-  // Cloudflare Turnstile
-  turnstile_site_key: string | null;
-  turnstile_secret_key: string | null;
-  // Google reCAPTCHA
-  showcaptcha: boolean | null;
-  captchaSiteKey: string | null;
-  captchaSiteSecret: string | null;
-  // Algolia
-  Algolia_ShowInstantSearch: boolean | null;
-  Algolia_ShowAutocomplete: boolean | null;
-  Algolia_Application_ID: string | null;
-  Algolia_Search_API_Key: string | null;
-  Algolia_site_verification: string | null;
-  Algolia_Product_Index: string | null;
-  Algolia_Category_Index: string | null;
-  Algolia_Article_Index: string | null;
-  Algolia_Suggestion_Index: string | null;
-  // Email extras
-  use_mailingList: number | null;   // 0=None, 1=Mailchimp
-  // Logo sticky header dimensions
-  Logo_desktop_stickey_width: number | null;
-  Logo_desktop_stickey_height: number | null;
-  Logo_desktop_stickey_data_width: number | null;
-  Logo_desktop_stickey_data_height: number | null;
-  // Store settings
-  Locale: string | null;
-  MoneyUnit: string | null;         // e.g. "USD^US Dollar"
-  WeightUnit: string | null;        // gm | kg | oz | lbs
-  SizeUnit: string | null;          // cm | in
-  TimeOffset: number | null;
-  ExcludeIP: string | null;
-  // Category images
-  Category_Image_Height: number | null;
-  category_sm_image_width: number | null;
-  category_sm_image_height: number | null;
-  category_lg_image_width: number | null;
-  category_lg_image_height: number | null;
-  Image_quality: number | null;
-  // Features / blog posts
-  Maxfeatures: number | null;
-  DoNotDspFeaturesInOffCats: boolean | null;
-  // Product display
-  InvLevel: string | null;          // None | Store | Admin | Mixed
-  UseInvTab: boolean | null;
-  ShowInStock: boolean | null;
-  OutofStock: boolean | null;
-  ShowRetail: boolean | null;
-  ItemSort: string | null;          // SKU | Name
-  ShowProductSubscriptions: boolean | null;
-  OrderButtonText: string | null;
-  RegistryButtonText: string | null;
-  WishlistButtonText: string | null;
-  RelatedProducts_title: string | null;
-  DoNotDspProdsInOffCats: boolean | null;
-  Maxprods: number | null;
-  // Product teaser display (1=No, 2=Yes, some have additional values)
-  Product_show_Details: number | null;
-  Product_show_shortDesc: number | null;
-  Product_show_orderBox: number | null;   // 1=No, 2=Yes, 3=Price Only
-  Product_show_ratings: number | null;
-  Product_show_Icons: number | null;      // 1=No, 2=Yes, 3=Sale, 4=New, 5=Hot
-  Product_show_sku: number | null;
-  Product_show_customFields: number | null;
-  Product_Image_Height: number | null;
-  // Product image sizes (pixels)
+  product_image_id: number;
+  product_id: number;
+  original: string | null;
+  th_image: string | null;
+  sm_image: string | null;
+  md_image: string | null;
+  lg_image: string | null;
   th_image_width: number | null;
   th_image_height: number | null;
   sm_image_width: number | null;
@@ -277,45 +95,61 @@ export interface SettingsRow {
   md_image_height: number | null;
   lg_image_width: number | null;
   lg_image_height: number | null;
-  // File types
-  Mimetypes: string | null;
-  AllowExtensions: string | null;
-  // Customer logins
-  Login_ShowOneTimeCode: boolean | null;
-  // Sitewide alert
-  Alert_Display: boolean | null;
-  alert_message: string | null;
+  filename: string | null;
+  image_file: string | null;
+  gallery: number | null;
+  caption: string | null;
+  priority: number;
+}
+
+export interface SettingsRow {
+  setting_id: number;
+  display_inventory_tab: boolean | null;
+  allow_edit_slug: boolean | null;
+  display_source: boolean | null;
+  display_dropship: boolean | null;
+  display_amazon: boolean | null;
+  moneyunit: string | null;
+  weightunit: string | null;
+  sizeunit: string | null;
+  invlevel: string | null;
+  locale: string | null;
+  timeoffset: number | null;
+  excludeip: string | null;
+  display_onetimecode: boolean | null;
+  display_wishlists: boolean | null;
+  display_gift_registry: boolean | null;
+  product_data: string | null;       // JSON
+  category_data: string | null;      // JSON
+  blog_data: string | null;          // JSON
+  email_data: string | null;         // JSON
+  google_data: string | null;        // JSON
+  search_data: string | null;        // JSON
+  cloudflare_data: string | null;    // JSON
+  marketing_data: string | null;     // JSON
+  seo_data: string | null;           // JSON
+  tax_provider_id: number | null;    // 1=local, 2=avatax
+  last_updated: Date | null;
 }
 
 /**
  * Root-relative image path for use in browser <img> tags (never includes domain).
  * e.g. "/images"  →  <img src="/images/product.jpg">
  *
- * DefaultImages in Settings is the subfolder (default "/images").
- * DomainName is NOT used here — relative paths work in any browser context
- * and avoid breakage when the domain changes.
+ * DefaultImages is now stored in store.address_data JSON or env var.
  */
-export function getImagePath(settings: SettingsRow | null): string {
-  // IMAGE_BASE_URL env var: strip domain portion if present, keep path only
-  const envVal = (import.meta.env.IMAGE_BASE_URL as string | undefined) ?? "";
-  if (envVal) return envVal.replace(/^https?:\/\/[^/]+/, "").replace(/\/$/, "") || "/images";
-  const folder = settings?.DefaultImages?.replace(/\/$/, "") ?? "";
-  return folder || "/images";
-}
+// Re-export from client-safe module (no server dependencies)
+export { resolveImg } from "./image-utils";
 
 /**
  * Absolute image URL for email templates, OG tags, and sitemaps.
- * Combines DomainName + the image path (which may already include DefaultImages).
  * Pass the full relative path including subfolder, e.g. "/images/product.jpg".
  */
 export function getAbsoluteImageUrl(settings: SettingsRow | null, path: string): string {
-  const domain = settings?.DomainName?.replace(/\/$/, "") ?? "";
+  const domain = (import.meta.env.SITE_DOMAIN as string | undefined) ?? "";
   const file   = path.startsWith("/") ? path : `/${path}`;
   return domain ? `${domain}${file}` : file;
 }
-
-// Backward-compatible alias — existing call sites get relative paths automatically
-export const getImageBaseUrl = getImagePath;
 
 export interface NavItem {
   id: number;
@@ -324,109 +158,121 @@ export interface NavItem {
   children: NavItem[];
 }
 
-// Homepage table — one row per site (keyed by ID, matched to Settings.SettingID)
-export interface HomepageRow {
-  ID: number;
+// Homepage table — one row per site
+// Store table — one row per site
+export interface StoreRow {
+  store_id: number;
+  name: string;
+  domainname: string | null;
+  setting_id: number;
+  cart_setting_id: number;
+  location_id: number;
+  homepage_id: number;
+  theme_id: number;
+  footer_id: number;
+  address_data: string | null;   // JSON
+  logo_data: string | null;      // JSON
+  date_created: Date | null;
+  last_updated: Date | null;
+}
 
-  // Alert banner
-  Alert_display: boolean;
-  Alert_text: string | null;
-  Alert_priority: number;
+export interface AddressData {
+  address1?: string | null;
+  address2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalcode?: string | null;
+  county?: string | null;
+  country?: string | null;
+  merchant_message?: string | null;
+  phone1?: string | null;
+  phone2?: string | null;
+  phone3?: string | null;
+}
 
-  // Hero image section
-  Hero_display: boolean;
-  Hero_image: string | null;
-  Hero_text: string | null;      // free-form HTML overlay
-  Hero_text1: string | null;     // preset animation line 1
-  Hero_text2: string | null;
-  Hero_text3: string | null;
-  Hero_text4: string | null;
-  Hero_button: string | null;    // CTA button label
-  Hero_button_color: string | null;
-  Hero_link: string | null;
-  Hero_height: number | null;    // px; 0 = 80vh
-  Hero_text_position: number;    // 0=left, 1=center, 2=right
-  Hero_priority: number;
-  Hero_over_menu: boolean;
+export function getAddressData(store: StoreRow | null): AddressData {
+  if (!store?.address_data) return {};
+  return parseJsonColumn<AddressData>(store.address_data, {});
+}
 
-  // Slider / Gallery (Bootstrap carousel driven by Gallery table)
-  Gallery_display: boolean;
-  Gallery_id: number | null;
-  Gallery_title: string | null;
-  Gallery_max: number | null;
-  Gallery_fullwidth: boolean;
-  Gallery_height: number | null;
-  Gallery_priority: number;
-  Carousel_altImage1: string | null;
-  Carousel_altImage1_link: string | null;
-  Carousel_altImage1_altText: string | null;
-  Carousel_altImage1_button: string | null;
-  Carousel_altImage2: string | null;
-  Carousel_altImage2_link: string | null;
-  Carousel_altImage2_altText: string | null;
-  Carousel_altImage2_button: string | null;
+export interface LogoData {
+  logo_desktop?: string | null;
+  logo_mobile?: string | null;
+  logo_print?: string | null;
+  logo_desktop_width?: number | null;
+  logo_desktop_height?: number | null;
+  logo_mobile_width?: number | null;
+  logo_mobile_height?: number | null;
+  logo_print_width?: number | null;
+  logo_print_height?: number | null;
+  logo_desktop_stickey_width?: number | null;
+  logo_desktop_stickey_height?: number | null;
+  logo_desktop_stickey_data_width?: number | null;
+  logo_desktop_stickey_data_height?: number | null;
+}
 
-  // Gallery 2
-  Gallery2_display: boolean;
-  Gallery2_id: number | null;
-  Gallery2_priority: number;
+export function getLogoData(store: StoreRow | null): LogoData {
+  if (!store?.logo_data) return {};
+  return parseJsonColumn<LogoData>(store.logo_data, {});
+}
 
-  // Custom HTML text blocks (1–3)
-  Custom_text_1_display: boolean;
-  Custom_text_1: string | null;
-  Custom_text_1_fullwidth: boolean;
-  Custom_text_1_priority: number;
+// Category content table (descriptions, images, SEO)
+export interface CategoryContentRow {
+  category_id: number;
+  short_desc: string | null;
+  long_desc: string | null;
+  metadescription: string | null;
+  keywords: string | null;
+  titletag: string | null;
+  searchheader: string | null;
+  sm_image: string | null;
+  lg_image: string | null;
+  menu_config: string | null;
+  display_config: string | null;
+}
 
-  Custom_text_2_display: boolean;
-  Custom_text_2: string | null;
-  Custom_text_2_fullwidth: boolean;
-  Custom_text_2_priority: number;
-
-  Custom_text_3_display: boolean;
-  Custom_text_3: string | null;
-  Custom_text_3_fullwidth: boolean;
-  Custom_text_3_priority: number;
-
-  // Top Categories grid
-  Topcats_Display: boolean;
-  Topcats_Allcats: boolean;       // true = all top-level cats; false = use Topcats_categories
-  Topcats_cols: number | null;
-  Topcats_categories: string | null; // comma-separated Category_IDs
-  Topcats_catstyle: number | null;
-  Topcats_title: string | null;
-  Topcats_priority: number;
-
-  // Product carousel / featured products
-  Product_display: boolean;
-  Product_priority: number;
-  Product_style: number | null;   // 1=carousel, 2=masonry, 3=single, 4=quick table, 5=team table
-  Product_title: string | null;
-  Product_passparam: string | null; // comma-separated key=value pairs
-  Product_fullwidth: boolean;
-
-  // Testimonials
-  Testimonial_display: boolean;
-  Testimonial_priority: number;
-  Testimonial_fullwidth: boolean;
-  Testimonial_product_id: number | null;
-  Testimonial_list_id: number | null;
-
-  // Contact form
-  Contact_display: boolean;
-  Contact_priority: number;
-
-  // Custom code block
-  Custom_code_1_display: boolean;
-  Custom_code_1_priority: number;
+// Category settings table (layout/menu JSON)
+export interface CategorySettingsRow {
+  category_id: number;
+  menu_data: string | null;   // JSON
+  layout_data: string | null; // JSON
 }
 
 // Testimonials table
 export interface TestimonialRow {
-  ReviewID: number;
-  Title: string | null;
-  Comment: string | null;
-  Anon_name: string | null;
-  Rating: number | null;
-  Posted: Date | null;
-  Display: boolean;
+  testimony_id: number;
+  name: string | null;
+  description: string | null;
+  image: string | null;
+  priority: number;
+  display: boolean;
+}
+
+// ── Navigation Menu System ────────────────────────────────────────────────────
+
+export interface NavMenuRow {
+  menu_id: number;
+  name: string;
+  auto_add: boolean;
+  date_created: Date | null;
+  last_updated: Date | null;
+}
+
+export type NavMenuItemType = 'page' | 'category' | 'custom' | 'post' | 'store';
+
+export interface NavMenuItemRow {
+  item_id: number;
+  menu_id: number;
+  parent_id: number;   // 0 = root
+  sort_order: number;
+  label: string;
+  item_type: NavMenuItemType;
+  target_id: number | null;
+  custom_url: string | null;
+  target_blank: boolean;
+}
+
+export interface NavMenuLocationRow {
+  location_key: string;
+  menu_id: number | null;
 }

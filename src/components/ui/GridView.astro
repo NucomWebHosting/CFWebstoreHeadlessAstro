@@ -1,0 +1,27 @@
+---
+import type { ProductRow } from "../../lib/types";
+import ProductCard from "./ProductCard.tsx";
+import ProductCard1 from "./ProductCard1.astro";
+import ProductCard11 from "./ProductCard11.astro";
+
+interface Props {
+  products: ProductRow[];
+  cardStyle?: string;  // from display_config.card_style
+}
+
+const { products, cardStyle } = Astro.props;
+---
+
+{products.length === 0 ? (
+  <div class="text-center py-16 text-gray-400">
+    <p class="text-lg">No products found.</p>
+  </div>
+) : (
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+    {products.map((p) =>
+      cardStyle === "ProductCard1"  ? <ProductCard1 product={p} /> :
+      cardStyle === "ProductCard11" ? <ProductCard11 product={p} /> :
+      <ProductCard product={p} />
+    )}
+  </div>
+)}
